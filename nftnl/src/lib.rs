@@ -34,6 +34,8 @@
 //! [`nftables`]: https://netfilter.org/projects/nftables/
 //! [`nftnl-sys`]: https://crates.io/crates/nftnl-sys
 
+use thiserror::Error;
+
 #[macro_use]
 extern crate log;
 
@@ -100,7 +102,8 @@ pub enum ProtoFamily {
     Ipv6 = libc::NFPROTO_IPV6 as u16,
     DecNet = libc::NFPROTO_DECNET as u16,
 }
-
+#[derive(Error, Debug)]
+#[error("Couldn't find a matching protocol")]
 pub struct InvalidProtocolFamily;
 
 impl TryFrom<i32> for ProtoFamily {

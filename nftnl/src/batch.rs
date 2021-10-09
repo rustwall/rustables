@@ -3,10 +3,11 @@ use nftnl_sys::{self as sys, libc};
 use std::ffi::c_void;
 use std::os::raw::c_char;
 use std::ptr;
+use thiserror::Error;
 
 /// Error while communicating with netlink
-#[derive(err_derive::Error, Debug)]
-#[error(display = "Error while communicating with netlink")]
+#[derive(Error, Debug)]
+#[error("Error while communicating with netlink")]
 pub struct NetlinkError(());
 
 /// Check if the kernel supports batched netlink messages to netfilter.
