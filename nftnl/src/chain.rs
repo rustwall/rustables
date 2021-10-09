@@ -166,7 +166,7 @@ impl<'a> fmt::Debug for Chain<'a> {
         unsafe {
             sys::nftnl_chain_snprintf(
                 buffer.as_mut_ptr() as *mut c_char,
-                buffer.len(),
+                buffer.len() as u64,
                 self.chain,
                 sys::NFTNL_OUTPUT_DEFAULT,
                 0,

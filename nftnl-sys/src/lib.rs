@@ -45,7 +45,10 @@
 pub use libc;
 
 cfg_if::cfg_if! {
-    if #[cfg(feature = "nftnl-1-1-2")] {
+    if #[cfg(feature = "nftnl-1-2-0")] {
+        mod nftnl_1_2_0;
+        pub use self::nftnl_1_2_0::*;
+    } else if #[cfg(feature = "nftnl-1-1-2")] {
         mod nftnl_1_1_2;
         pub use self::nftnl_1_1_2::*;
     } else if #[cfg(feature = "nftnl-1-1-1")] {

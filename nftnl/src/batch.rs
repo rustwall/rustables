@@ -138,7 +138,7 @@ impl FinalizedBatch {
             };
             num_pages
         ];
-        let iovecs_ptr = iovecs.as_mut_ptr() as *mut sys::libc::iovec;
+        let iovecs_ptr = iovecs.as_mut_ptr() as *mut [u8; 0];
         unsafe {
             sys::nftnl_batch_iovec(self.batch.as_mut_ptr(), iovecs_ptr, num_pages as u32);
         }
