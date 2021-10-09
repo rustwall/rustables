@@ -1,6 +1,6 @@
 use crate::{chain::Chain, expr::Expression, MsgType};
 use nftnl_sys::{self as sys, libc};
-use std::ffi::c_void;
+use std::ffi::{c_void, CStr, CString};
 use std::os::raw::c_char;
 
 /// A nftables firewall rule.
@@ -67,6 +67,21 @@ impl<'a> Rule<'a> {
     /// [`Chain`]: struct.Chain.html
     pub fn get_chain(&self) -> &Chain<'_> {
         self.chain
+    }
+
+    /// Returns a textual description of the rule.
+    pub fn get_str(&self) -> CString {
+        let mut descr_buf = vec![0i8; 4096];
+        unsafe {
+            sys::nftnl_rule_snprintf(
+                descr_buf.as_mut_ptr(),
+                (descr_buf.len() - 1) as u64,
+                self.rule,
+                sys::NFTNL_OUTPUT_DEFAULT,
+                0,
+            );
+            CStr::from_ptr(descr_buf.as_ptr()).to_owned()
+        }
     }
 
     /// Returns the raw handle.
