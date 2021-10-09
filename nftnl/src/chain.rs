@@ -99,6 +99,10 @@ impl<'a> Chain<'a> {
         }
     }
 
+    pub unsafe fn from_raw(chain: *mut sys::nftnl_chain, table: &'a Table) -> Self {
+        Chain { chain, table }
+    }
+
     /// Sets the hook and priority for this chain. Without calling this method the chain well
     /// become a "regular chain" without any hook and will thus not receive any traffic unless
     /// some rule forward packets to it via goto or jump verdicts.

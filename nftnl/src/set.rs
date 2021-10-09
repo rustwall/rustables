@@ -62,6 +62,18 @@ impl<'a, K> Set<'a, K> {
         }
     }
 
+    pub unsafe fn from_raw(set: *mut sys::nftnl_set, table: &'a Table, family: ProtoFamily) -> Self
+    where
+        K: SetKey,
+    {
+        Set {
+            set,
+            table,
+            family,
+            _marker: ::std::marker::PhantomData,
+        }
+    }
+
     pub fn add(&mut self, key: &K)
     where
         K: SetKey,

@@ -33,6 +33,10 @@ impl Table {
         }
     }
 
+    pub unsafe fn from_raw(table: *mut sys::nftnl_table, family: ProtoFamily) -> Self {
+        Table { table, family }
+    }
+
     /// Returns the name of this table.
     pub fn get_name(&self) -> &CStr {
         unsafe {

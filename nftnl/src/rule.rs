@@ -41,6 +41,10 @@ impl<'a> Rule<'a> {
         }
     }
 
+    pub unsafe fn from_raw(rule: *mut sys::nftnl_rule, chain: &'a Chain<'a>) -> Self {
+        Rule { rule, chain }
+    }
+
     /// Sets the position of this rule within the chain it lives in. By default a new rule is added
     /// to the end of the chain.
     pub fn set_position(&mut self, position: u64) {

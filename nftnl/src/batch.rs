@@ -38,6 +38,10 @@ impl Batch {
         Self::with_page_size(default_batch_page_size())
     }
 
+    pub unsafe fn from_raw(batch: *mut sys::nftnl_batch, seq: u32) -> Self {
+        Batch { batch, seq }
+    }
+
     /// Creates a new nftnl batch with the given batch size.
     pub fn with_page_size(batch_page_size: u32) -> Self {
         let batch = try_alloc!(unsafe {
