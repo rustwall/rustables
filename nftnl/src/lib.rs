@@ -66,6 +66,8 @@ pub use table::Table;
 mod chain;
 pub use chain::{Chain, ChainType, Hook, Policy, Priority};
 
+pub mod query;
+
 mod rule;
 pub use rule::Rule;
 

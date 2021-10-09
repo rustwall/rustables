@@ -87,17 +87,7 @@ impl Drop for Table {
 /// Returns a buffer containing a netlink message which requests a list of all the netfilter
 /// tables that are currently set.
 pub fn get_tables_nlmsg(seq: u32) -> Vec<u8> {
-    let mut buffer = vec![0; crate::nft_nlmsg_maxsize() as usize];
-    let _ = unsafe {
-        sys::nftnl_nlmsg_build_hdr(
-            buffer.as_mut_ptr() as *mut c_char,
-            libc::NFT_MSG_GETTABLE as u16,
-            ProtoFamily::Unspec as u16,
-            (libc::NLM_F_ROOT | libc::NLM_F_MATCH) as u16,
-            seq,
-        )
-    };
-    buffer
+    crate::query::get_list_of_objects::<()>(seq, libc::NFT_MSG_GETTABLE as u16, None).unwrap()
 }
 
 /// A callback to parse the response for messages created with `get_tables_nlmsg`. This callback
