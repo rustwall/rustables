@@ -1,6 +1,7 @@
 use crate::{MsgType, Table};
 use nftnl_sys::{self as sys, libc};
 use std::{
+    convert::TryFrom,
     ffi::{c_void, CStr},
     fmt,
     os::raw::c_char,
@@ -206,4 +207,55 @@ impl<'a> Drop for Chain<'a> {
     fn drop(&mut self) {
         unsafe { sys::nftnl_chain_free(self.chain) };
     }
+}
+
+#[cfg(feature = "query")]
+pub fn get_chains_cb<'a>(
+    header: &libc::nlmsghdr,
+    (table, chains): &mut (&'a Table, &mut Vec<Chain<'a>>),
+) -> libc::c_int {
+    unsafe {
+        let chain = sys::nftnl_chain_alloc();
+        if chain as usize == 0 {
+            return mnl::mnl_sys::MNL_CB_ERROR;
+        }
+        let err = sys::nftnl_chain_nlmsg_parse(header, chain);
+        if err < 0 {
+            error!("Failed to parse nelink chain message - {}", err);
+            sys::nftnl_chain_free(chain);
+            return err;
+        }
+
+        let table_name = CStr::from_ptr(sys::nftnl_chain_get_str(
+            chain,
+            sys::NFTNL_CHAIN_TABLE as u16,
+        ));
+        let family = sys::nftnl_chain_get_u32(chain, sys::NFTNL_CHAIN_FAMILY as u16);
+        let family = match crate::ProtoFamily::try_from(family as i32) {
+            Ok(family) => family,
+            Err(crate::InvalidProtocolFamily) => {
+                error!("The netlink table didn't have a valid protocol family !?");
+                sys::nftnl_chain_free(chain);
+                return mnl::mnl_sys::MNL_CB_ERROR;
+            }
+        };
+
+        if table_name != table.get_name() {
+            sys::nftnl_chain_free(chain);
+            return mnl::mnl_sys::MNL_CB_OK;
+        }
+
+        if family != crate::ProtoFamily::Unspec && family != table.get_family() {
+            sys::nftnl_chain_free(chain);
+            return mnl::mnl_sys::MNL_CB_OK;
+        }
+
+        chains.push(Chain::from_raw(chain, table));
+    }
+    mnl::mnl_sys::MNL_CB_OK
+}
+
+#[cfg(feature = "query")]
+pub fn list_chains_for_table<'a>(table: &'a Table) -> Result<Vec<Chain<'a>>, crate::query::Error> {
+    crate::query::list_objects_with_data(libc::NFT_MSG_GETCHAIN as u16, get_chains_cb, &table, None)
 }

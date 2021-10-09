@@ -125,3 +125,61 @@ impl<'a> Drop for Rule<'a> {
         unsafe { sys::nftnl_rule_free(self.rule) };
     }
 }
+
+#[cfg(feature = "query")]
+pub fn get_rules_cb<'a>(
+    header: &libc::nlmsghdr,
+    (chain, rules): &mut (&'a Chain<'a>, &mut Vec<Rule<'a>>),
+) -> libc::c_int {
+    unsafe {
+        let rule = sys::nftnl_rule_alloc();
+        let err = sys::nftnl_rule_nlmsg_parse(header, rule);
+        if err < 0 {
+            error!("Failed to parse nelink rule message - {}", err);
+            sys::nftnl_rule_free(rule);
+            return err;
+        }
+
+        rules.push(Rule::from_raw(rule, chain));
+    }
+    mnl::mnl_sys::MNL_CB_OK
+}
+
+#[cfg(feature = "query")]
+pub fn list_rules_for_chain<'a>(
+    chain: &'a Chain<'a>,
+) -> Result<Vec<Rule<'a>>, crate::query::Error> {
+    crate::query::list_objects_with_data(
+        libc::NFT_MSG_GETRULE as u16,
+        get_rules_cb,
+        &chain,
+        // only retrieve rules from the currently targetted chain
+        Some(&|hdr| unsafe {
+            let rule = sys::nftnl_rule_alloc();
+            if rule as usize == 0 {
+                return Err(crate::query::Error::NetlinkAllocationFailed);
+            }
+
+            sys::nftnl_rule_set_str(
+                rule,
+                sys::NFTNL_RULE_TABLE as u16,
+                chain.get_table().get_name().as_ptr(),
+            );
+            sys::nftnl_rule_set_u32(
+                rule,
+                sys::NFTNL_RULE_FAMILY as u16,
+                chain.get_table().get_family() as u32,
+            );
+            sys::nftnl_rule_set_str(
+                rule,
+                sys::NFTNL_RULE_CHAIN as u16,
+                chain.get_name().as_ptr(),
+            );
+
+            sys::nftnl_rule_nlmsg_build_payload(hdr, rule);
+
+            sys::nftnl_rule_free(rule);
+            Ok(())
+        }),
+    )
+}

@@ -61,15 +61,15 @@ pub use batch::{batch_is_supported, default_batch_page_size, Batch, FinalizedBat
 pub mod expr;
 
 pub mod table;
-pub use table::Table;
+pub use table::{get_tables_cb, list_tables, Table};
 
 mod chain;
-pub use chain::{Chain, ChainType, Hook, Policy, Priority};
+pub use chain::{get_chains_cb, list_chains_for_table, Chain, ChainType, Hook, Policy, Priority};
 
 pub mod query;
 
 mod rule;
-pub use rule::Rule;
+pub use rule::{get_rules_cb, list_rules_for_chain, Rule};
 
 pub mod set;
 

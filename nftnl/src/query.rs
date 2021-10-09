@@ -47,6 +47,9 @@ mod inner {
 
         #[error("Custom error when customizing the query")]
         InitError(#[from] Box<dyn std::error::Error>),
+
+        #[error("Couldn't allocate a netlink object, out of memory ?")]
+        NetlinkAllocationFailed,
     }
 
     /// List objects of a certain type (e.g. libc::NFT_MSG_GETTABLE) with the help of an helper
