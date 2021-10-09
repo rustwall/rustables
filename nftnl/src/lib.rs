@@ -39,7 +39,7 @@ extern crate log;
 
 pub use nftnl_sys;
 use nftnl_sys::libc;
-use std::ffi::c_void;
+use std::{convert::TryFrom, ffi::c_void};
 
 macro_rules! try_alloc {
     ($e:expr) => {{
@@ -99,6 +99,25 @@ pub enum ProtoFamily {
     Bridge = libc::NFPROTO_BRIDGE as u16,
     Ipv6 = libc::NFPROTO_IPV6 as u16,
     DecNet = libc::NFPROTO_DECNET as u16,
+}
+
+pub struct InvalidProtocolFamily;
+
+impl TryFrom<i32> for ProtoFamily {
+    type Error = InvalidProtocolFamily;
+    fn try_from(value: i32) -> Result<Self, Self::Error> {
+        match value {
+            libc::NFPROTO_UNSPEC => Ok(ProtoFamily::Unspec),
+            libc::NFPROTO_INET => Ok(ProtoFamily::Inet),
+            libc::NFPROTO_IPV4 => Ok(ProtoFamily::Ipv4),
+            libc::NFPROTO_ARP => Ok(ProtoFamily::Arp),
+            libc::NFPROTO_NETDEV => Ok(ProtoFamily::NetDev),
+            libc::NFPROTO_BRIDGE => Ok(ProtoFamily::Bridge),
+            libc::NFPROTO_IPV6 => Ok(ProtoFamily::Ipv6),
+            libc::NFPROTO_DECNET => Ok(ProtoFamily::DecNet),
+            _ => Err(InvalidProtocolFamily),
+        }
+    }
 }
 
 /// Trait for all types in this crate that can serialize to a Netlink message.
