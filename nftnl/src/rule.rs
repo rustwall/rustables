@@ -68,6 +68,16 @@ impl<'a> Rule<'a> {
     pub fn get_chain(&self) -> &Chain<'_> {
         self.chain
     }
+
+    /// Returns the raw handle.
+    pub fn as_ptr(&self) -> *const sys::nftnl_rule {
+        self.rule as *const sys::nftnl_rule
+    }
+
+    /// Returns a mutable version of the raw handle.
+    pub fn as_mut_ptr(&mut self) -> *mut sys::nftnl_rule {
+        self.rule
+    }
 }
 
 unsafe impl<'a> crate::NlMsg for Rule<'a> {

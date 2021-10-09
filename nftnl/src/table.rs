@@ -45,6 +45,16 @@ impl Table {
     pub fn get_family(&self) -> ProtoFamily {
         self.family
     }
+
+    /// Returns the raw handle.
+    pub fn as_ptr(&self) -> *const sys::nftnl_table {
+        self.table as *const sys::nftnl_table
+    }
+
+    /// Returns a mutable version of the raw handle.
+    pub fn as_mut_ptr(&self) -> *mut sys::nftnl_table {
+        self.table
+    }
 }
 
 unsafe impl crate::NlMsg for Table {

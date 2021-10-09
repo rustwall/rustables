@@ -86,7 +86,13 @@ impl<'a, K> Set<'a, K> {
         SetElemsIter::new(self)
     }
 
-    pub fn as_ptr(&self) -> *mut sys::nftnl_set {
+    /// Returns the raw handle.
+    pub fn as_ptr(&self) -> *const sys::nftnl_set {
+        self.set as *const sys::nftnl_set
+    }
+
+    /// Returns a mutable version of the raw handle.
+    pub fn as_mut_ptr(&self) -> *mut sys::nftnl_set {
         self.set
     }
 

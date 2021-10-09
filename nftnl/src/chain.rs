@@ -147,6 +147,16 @@ impl<'a> Chain<'a> {
     pub fn get_table(&self) -> &Table {
         self.table
     }
+
+    /// Returns the raw handle.
+    pub fn as_ptr(&self) -> *const sys::nftnl_chain {
+        self.chain as *const sys::nftnl_chain
+    }
+
+    /// Returns a mutable version of the raw handle.
+    pub fn as_mut_ptr(&mut self) -> *mut sys::nftnl_chain {
+        self.chain
+    }
 }
 
 impl<'a> fmt::Debug for Chain<'a> {

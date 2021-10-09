@@ -99,8 +99,13 @@ impl Batch {
         self.next();
     }
 
-    /// Returns the underlying `nftnl_batch` instance.
-    pub fn as_raw_batch(&self) -> *mut sys::nftnl_batch {
+    /// Returns the raw handle.
+    pub fn as_ptr(&self) -> *const sys::nftnl_batch {
+        self.batch as *const sys::nftnl_batch
+    }
+
+    /// Returns a mutable version of the raw handle.
+    pub fn as_mut_ptr(&mut self) -> *mut sys::nftnl_batch {
         self.batch
     }
 }
@@ -124,8 +129,8 @@ pub struct FinalizedBatch {
 
 impl FinalizedBatch {
     /// Returns the iterator over byte buffers to send to netlink.
-    pub fn iter(&self) -> Iter<'_> {
-        let num_pages = unsafe { sys::nftnl_batch_iovec_len(self.batch.as_raw_batch()) as usize };
+    pub fn iter(&mut self) -> Iter<'_> {
+        let num_pages = unsafe { sys::nftnl_batch_iovec_len(self.batch.as_mut_ptr()) as usize };
         let mut iovecs = vec![
             libc::iovec {
                 iov_base: ptr::null_mut(),
@@ -135,7 +140,7 @@ impl FinalizedBatch {
         ];
         let iovecs_ptr = iovecs.as_mut_ptr() as *mut sys::libc::iovec;
         unsafe {
-            sys::nftnl_batch_iovec(self.batch.as_raw_batch(), iovecs_ptr, num_pages as u32);
+            sys::nftnl_batch_iovec(self.batch.as_mut_ptr(), iovecs_ptr, num_pages as u32);
         }
         Iter {
             iovecs: iovecs.into_iter(),
@@ -144,7 +149,7 @@ impl FinalizedBatch {
     }
 }
 
-impl<'a> IntoIterator for &'a FinalizedBatch {
+impl<'a> IntoIterator for &'a mut FinalizedBatch {
     type Item = &'a [u8];
     type IntoIter = Iter<'a>;
 
