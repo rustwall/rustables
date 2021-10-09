@@ -46,7 +46,7 @@ mod inner {
         ProcessNetlinkError(#[source] std::io::Error),
 
         #[error("Custom error when customizing the query")]
-        InitError(#[from] Box<dyn std::error::Error>),
+        InitError(#[from] Box<dyn std::error::Error + 'static>),
 
         #[error("Couldn't allocate a netlink object, out of memory ?")]
         NetlinkAllocationFailed,

@@ -1,24 +1,26 @@
 use crate::{chain::Chain, expr::Expression, MsgType};
 use nftnl_sys::{self as sys, libc};
 use std::ffi::{c_void, CStr, CString};
+use std::fmt::Debug;
 use std::os::raw::c_char;
+use std::sync::Arc;
 
 /// A nftables firewall rule.
-pub struct Rule<'a> {
+pub struct Rule {
     rule: *mut sys::nftnl_rule,
-    chain: &'a Chain<'a>,
+    chain: Arc<Chain>,
 }
 
 // Safety: It should be safe to pass this around and *read* from it
 // from multiple threads
-unsafe impl<'a> Send for Rule<'a> {}
-unsafe impl<'a> Sync for Rule<'a> {}
+unsafe impl Send for Rule {}
+unsafe impl Sync for Rule {}
 
-impl<'a> Rule<'a> {
+impl Rule {
     /// Creates a new rule object in the given [`Chain`].
     ///
     /// [`Chain`]: struct.Chain.html
-    pub fn new(chain: &'a Chain<'_>) -> Rule<'a> {
+    pub fn new(chain: Arc<Chain>) -> Rule {
         unsafe {
             let rule = try_alloc!(sys::nftnl_rule_alloc());
             sys::nftnl_rule_set_u32(
@@ -41,7 +43,7 @@ impl<'a> Rule<'a> {
         }
     }
 
-    pub unsafe fn from_raw(rule: *mut sys::nftnl_rule, chain: &'a Chain<'a>) -> Self {
+    pub unsafe fn from_raw(rule: *mut sys::nftnl_rule, chain: Arc<Chain>) -> Self {
         Rule { rule, chain }
     }
 
@@ -69,8 +71,8 @@ impl<'a> Rule<'a> {
     /// Returns a reference to the [`Chain`] this rule lives in.
     ///
     /// [`Chain`]: struct.Chain.html
-    pub fn get_chain(&self) -> &Chain<'_> {
-        self.chain
+    pub fn get_chain(&self) -> Arc<Chain> {
+        self.chain.clone()
     }
 
     /// Returns a textual description of the rule.
@@ -99,7 +101,13 @@ impl<'a> Rule<'a> {
     }
 }
 
-unsafe impl<'a> crate::NlMsg for Rule<'a> {
+impl Debug for Rule {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{:?}", self.get_str())
+    }
+}
+
+unsafe impl crate::NlMsg for Rule {
     unsafe fn write(&self, buf: *mut c_void, seq: u32, msg_type: MsgType) {
         let type_ = match msg_type {
             MsgType::Add => libc::NFT_MSG_NEWRULE,
@@ -120,16 +128,16 @@ unsafe impl<'a> crate::NlMsg for Rule<'a> {
     }
 }
 
-impl<'a> Drop for Rule<'a> {
+impl Drop for Rule {
     fn drop(&mut self) {
         unsafe { sys::nftnl_rule_free(self.rule) };
     }
 }
 
 #[cfg(feature = "query")]
-pub fn get_rules_cb<'a>(
+pub fn get_rules_cb(
     header: &libc::nlmsghdr,
-    (chain, rules): &mut (&'a Chain<'a>, &mut Vec<Rule<'a>>),
+    (chain, rules): &mut (&Arc<Chain>, &mut Vec<Rule>),
 ) -> libc::c_int {
     unsafe {
         let rule = sys::nftnl_rule_alloc();
@@ -140,15 +148,13 @@ pub fn get_rules_cb<'a>(
             return err;
         }
 
-        rules.push(Rule::from_raw(rule, chain));
+        rules.push(Rule::from_raw(rule, chain.clone()));
     }
     mnl::mnl_sys::MNL_CB_OK
 }
 
 #[cfg(feature = "query")]
-pub fn list_rules_for_chain<'a>(
-    chain: &'a Chain<'a>,
-) -> Result<Vec<Rule<'a>>, crate::query::Error> {
+pub fn list_rules_for_chain(chain: &Arc<Chain>) -> Result<Vec<Rule>, crate::query::Error> {
     crate::query::list_objects_with_data(
         libc::NFT_MSG_GETRULE as u16,
         get_rules_cb,

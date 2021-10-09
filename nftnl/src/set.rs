@@ -2,7 +2,8 @@ use crate::{table::Table, MsgType, ProtoFamily};
 use nftnl_sys::{self as sys, libc};
 use std::{
     cell::Cell,
-    ffi::{c_void, CStr},
+    ffi::{c_void, CStr, CString},
+    fmt::Debug,
     net::{Ipv4Addr, Ipv6Addr},
     os::raw::c_char,
     rc::Rc,
@@ -112,6 +113,21 @@ impl<'a, K> Set<'a, K> {
         self.family
     }
 
+    /// Returns a textual description of the set.
+    pub fn get_str(&self) -> CString {
+        let mut descr_buf = vec![0i8; 4096];
+        unsafe {
+            sys::nftnl_set_snprintf(
+                descr_buf.as_mut_ptr(),
+                (descr_buf.len() - 1) as u64,
+                self.set,
+                sys::NFTNL_OUTPUT_DEFAULT,
+                0,
+            );
+            CStr::from_ptr(descr_buf.as_ptr()).to_owned()
+        }
+    }
+
     pub fn get_name(&self) -> &CStr {
         unsafe {
             let ptr = sys::nftnl_set_get_str(self.set, sys::NFTNL_SET_NAME as u16);
@@ -121,6 +137,12 @@ impl<'a, K> Set<'a, K> {
 
     pub fn get_id(&self) -> u32 {
         unsafe { sys::nftnl_set_get_u32(self.set, sys::NFTNL_SET_ID as u16) }
+    }
+}
+
+impl<'a, K> Debug for Set<'a, K> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{:?}", self.get_str())
     }
 }
 

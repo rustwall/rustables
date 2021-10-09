@@ -1,9 +1,9 @@
 use crate::{MsgType, ProtoFamily};
 use nftnl_sys::{self as sys, libc};
 use std::{
-    collections::HashSet,
     convert::TryFrom,
     ffi::{c_void, CStr, CString},
+    fmt::Debug,
     os::raw::c_char,
 };
 
@@ -46,6 +46,21 @@ impl Table {
         }
     }
 
+    /// Returns a textual description of the table.
+    pub fn get_str(&self) -> CString {
+        let mut descr_buf = vec![0i8; 4096];
+        unsafe {
+            sys::nftnl_table_snprintf(
+                descr_buf.as_mut_ptr(),
+                (descr_buf.len() - 1) as u64,
+                self.table,
+                sys::NFTNL_OUTPUT_DEFAULT,
+                0,
+            );
+            CStr::from_ptr(descr_buf.as_ptr()).to_owned()
+        }
+    }
+
     /// Returns the protocol family for this table.
     pub fn get_family(&self) -> ProtoFamily {
         self.family
@@ -59,6 +74,12 @@ impl Table {
     /// Returns a mutable version of the raw handle.
     pub fn as_mut_ptr(&self) -> *mut sys::nftnl_table {
         self.table
+    }
+}
+
+impl Debug for Table {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{:?}", self.get_str())
     }
 }
 

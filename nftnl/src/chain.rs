@@ -1,8 +1,10 @@
 use crate::{MsgType, Table};
 use nftnl_sys::{self as sys, libc};
+#[cfg(feature = "query")]
+use std::sync::Arc;
 use std::{
     convert::TryFrom,
-    ffi::{c_void, CStr},
+    ffi::{c_void, CStr, CString},
     fmt,
     os::raw::c_char,
 };
@@ -68,21 +70,21 @@ impl ChainType {
 /// [`Table`]: struct.Table.html
 /// [`Rule`]: struct.Rule.html
 /// [`set_hook`]: #method.set_hook
-pub struct Chain<'a> {
+pub struct Chain {
     chain: *mut sys::nftnl_chain,
-    table: &'a Table,
+    table: Arc<Table>,
 }
 
 // Safety: It should be safe to pass this around and *read* from it
 // from multiple threads
-unsafe impl<'a> Send for Chain<'a> {}
-unsafe impl<'a> Sync for Chain<'a> {}
+unsafe impl Send for Chain {}
+unsafe impl Sync for Chain {}
 
-impl<'a> Chain<'a> {
+impl Chain {
     /// Creates a new chain instance inside the given [`Table`] and with the given name.
     ///
     /// [`Table`]: struct.Table.html
-    pub fn new<T: AsRef<CStr>>(name: &T, table: &'a Table) -> Chain<'a> {
+    pub fn new<T: AsRef<CStr>>(name: &T, table: Arc<Table>) -> Chain {
         unsafe {
             let chain = try_alloc!(sys::nftnl_chain_alloc());
             sys::nftnl_chain_set_u32(
@@ -100,7 +102,7 @@ impl<'a> Chain<'a> {
         }
     }
 
-    pub unsafe fn from_raw(chain: *mut sys::nftnl_chain, table: &'a Table) -> Self {
+    pub unsafe fn from_raw(chain: *mut sys::nftnl_chain, table: Arc<Table>) -> Self {
         Chain { chain, table }
     }
 
@@ -146,11 +148,26 @@ impl<'a> Chain<'a> {
         }
     }
 
+    /// Returns a textual description of the chain.
+    pub fn get_str(&self) -> CString {
+        let mut descr_buf = vec![0i8; 4096];
+        unsafe {
+            sys::nftnl_chain_snprintf(
+                descr_buf.as_mut_ptr(),
+                (descr_buf.len() - 1) as u64,
+                self.chain,
+                sys::NFTNL_OUTPUT_DEFAULT,
+                0,
+            );
+            CStr::from_ptr(descr_buf.as_ptr()).to_owned()
+        }
+    }
+
     /// Returns a reference to the [`Table`] this chain belongs to
     ///
     /// [`Table`]: struct.Table.html
-    pub fn get_table(&self) -> &Table {
-        self.table
+    pub fn get_table(&self) -> Arc<Table> {
+        self.table.clone()
     }
 
     /// Returns the raw handle.
@@ -164,25 +181,14 @@ impl<'a> Chain<'a> {
     }
 }
 
-impl<'a> fmt::Debug for Chain<'a> {
+impl fmt::Debug for Chain {
     /// Return a string representation of the chain.
     fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let mut buffer: [u8; 4096] = [0; 4096];
-        unsafe {
-            sys::nftnl_chain_snprintf(
-                buffer.as_mut_ptr() as *mut c_char,
-                buffer.len() as u64,
-                self.chain,
-                sys::NFTNL_OUTPUT_DEFAULT,
-                0,
-            );
-        }
-        let s = unsafe { CStr::from_ptr(buffer.as_ptr() as *const c_char) };
-        write!(fmt, "{:?}", s)
+        write!(fmt, "{:?}", self.get_str())
     }
 }
 
-unsafe impl<'a> crate::NlMsg for Chain<'a> {
+unsafe impl crate::NlMsg for Chain {
     unsafe fn write(&self, buf: *mut c_void, seq: u32, msg_type: MsgType) {
         let raw_msg_type = match msg_type {
             MsgType::Add => libc::NFT_MSG_NEWCHAIN,
@@ -203,7 +209,7 @@ unsafe impl<'a> crate::NlMsg for Chain<'a> {
     }
 }
 
-impl<'a> Drop for Chain<'a> {
+impl Drop for Chain {
     fn drop(&mut self) {
         unsafe { sys::nftnl_chain_free(self.chain) };
     }
@@ -212,7 +218,7 @@ impl<'a> Drop for Chain<'a> {
 #[cfg(feature = "query")]
 pub fn get_chains_cb<'a>(
     header: &libc::nlmsghdr,
-    (table, chains): &mut (&'a Table, &mut Vec<Chain<'a>>),
+    (table, chains): &mut (&Arc<Table>, &mut Vec<Chain>),
 ) -> libc::c_int {
     unsafe {
         let chain = sys::nftnl_chain_alloc();
@@ -250,12 +256,12 @@ pub fn get_chains_cb<'a>(
             return mnl::mnl_sys::MNL_CB_OK;
         }
 
-        chains.push(Chain::from_raw(chain, table));
+        chains.push(Chain::from_raw(chain, table.clone()));
     }
     mnl::mnl_sys::MNL_CB_OK
 }
 
 #[cfg(feature = "query")]
-pub fn list_chains_for_table<'a>(table: &'a Table) -> Result<Vec<Chain<'a>>, crate::query::Error> {
+pub fn list_chains_for_table(table: Arc<Table>) -> Result<Vec<Chain>, crate::query::Error> {
     crate::query::list_objects_with_data(libc::NFT_MSG_GETCHAIN as u16, get_chains_cb, &table, None)
 }
