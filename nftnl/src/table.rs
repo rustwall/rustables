@@ -66,6 +66,24 @@ impl Table {
         self.family
     }
 
+    /// Returns the userdata of this chain.
+    pub fn get_userdata(&self) -> Option<&CStr> {
+        unsafe {
+            let ptr = sys::nftnl_table_get_str(self.table, sys::NFTNL_TABLE_USERDATA as u16);
+            if ptr == std::ptr::null() {
+                return None;
+            }
+            Some(CStr::from_ptr(ptr))
+        }
+    }
+
+    /// Update the userdata of this chain.
+    pub fn set_userdata(&self, data: &CStr) {
+        unsafe {
+            sys::nftnl_table_set_str(self.table, sys::NFTNL_TABLE_USERDATA as u16, data.as_ptr());
+        }
+    }
+
     /// Returns the raw handle.
     pub fn as_ptr(&self) -> *const sys::nftnl_table {
         self.table as *const sys::nftnl_table
@@ -120,7 +138,7 @@ pub fn get_tables_cb(
 ) -> libc::c_int {
     unsafe {
         let table = sys::nftnl_table_alloc();
-        if table as usize == 0 {
+        if table as *const _ == std::ptr::null() {
             return mnl::mnl_sys::MNL_CB_ERROR;
         }
         let err = sys::nftnl_table_nlmsg_parse(header, table);

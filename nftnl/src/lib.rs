@@ -41,7 +41,7 @@ extern crate log;
 
 pub use nftnl_sys;
 use nftnl_sys::libc;
-use std::{convert::TryFrom, ffi::c_void};
+use std::{convert::TryFrom, ffi::c_void, ops::Deref};
 
 macro_rules! try_alloc {
     ($e:expr) => {{
@@ -138,6 +138,16 @@ pub unsafe trait NlMsg {
     /// `nft_nlmsg_maxsize()` bytes. This is not checked by the compiler, which is why this method
     /// is unsafe.
     unsafe fn write(&self, buf: *mut c_void, seq: u32, msg_type: MsgType);
+}
+
+unsafe impl<T, R> NlMsg for T
+where
+    T: Deref<Target = R>,
+    R: NlMsg,
+{
+    unsafe fn write(&self, buf: *mut c_void, seq: u32, msg_type: MsgType) {
+        self.deref().write(buf, seq, msg_type);
+    }
 }
 
 /// The largest nf_tables netlink message is the set element message, which

@@ -140,6 +140,24 @@ impl Chain {
         }
     }
 
+    /// Returns the userdata of this chain.
+    pub fn get_userdata(&self) -> Option<&CStr> {
+        unsafe {
+            let ptr = sys::nftnl_chain_get_str(self.chain, sys::NFTNL_CHAIN_USERDATA as u16);
+            if ptr == std::ptr::null() {
+                return None;
+            }
+            Some(CStr::from_ptr(ptr))
+        }
+    }
+
+    /// Update the userdata of this chain.
+    pub fn set_userdata(&self, data: &CStr) {
+        unsafe {
+            sys::nftnl_chain_set_str(self.chain, sys::NFTNL_CHAIN_USERDATA as u16, data.as_ptr());
+        }
+    }
+
     /// Returns the name of this chain.
     pub fn get_name(&self) -> &CStr {
         unsafe {
@@ -228,7 +246,7 @@ pub fn get_chains_cb<'a>(
 ) -> libc::c_int {
     unsafe {
         let chain = sys::nftnl_chain_alloc();
-        if chain as usize == 0 {
+        if chain as *const _ == std::ptr::null() {
             return mnl::mnl_sys::MNL_CB_ERROR;
         }
         let err = sys::nftnl_chain_nlmsg_parse(header, chain);

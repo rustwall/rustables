@@ -83,6 +83,24 @@ impl Rule {
         self.chain.clone()
     }
 
+    /// Returns the userdata of this chain.
+    pub fn get_userdata(&self) -> Option<&CStr> {
+        unsafe {
+            let ptr = sys::nftnl_rule_get_str(self.rule, sys::NFTNL_RULE_USERDATA as u16);
+            if ptr == std::ptr::null() {
+                return None;
+            }
+            Some(CStr::from_ptr(ptr))
+        }
+    }
+
+    /// Update the userdata of this chain.
+    pub fn set_userdata(&self, data: &CStr) {
+        unsafe {
+            sys::nftnl_rule_set_str(self.rule, sys::NFTNL_RULE_USERDATA as u16, data.as_ptr());
+        }
+    }
+
     /// Returns a textual description of the rule.
     pub fn get_str(&self) -> CString {
         let mut descr_buf = vec![0i8; 4096];
@@ -176,7 +194,7 @@ pub fn list_rules_for_chain(chain: &Arc<Chain>) -> Result<Vec<Rule>, crate::quer
         // only retrieve rules from the currently targetted chain
         Some(&|hdr| unsafe {
             let rule = sys::nftnl_rule_alloc();
-            if rule as usize == 0 {
+            if rule as *const _ == std::ptr::null() {
                 return Err(crate::query::Error::NetlinkAllocationFailed);
             }
 
