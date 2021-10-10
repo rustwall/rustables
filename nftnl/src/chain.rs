@@ -188,6 +188,12 @@ impl fmt::Debug for Chain {
     }
 }
 
+impl PartialEq for Chain {
+    fn eq(&self, other: &Self) -> bool {
+        self.get_table() == other.get_table() && self.get_name() == other.get_name()
+    }
+}
+
 unsafe impl crate::NlMsg for Chain {
     unsafe fn write(&self, buf: *mut c_void, seq: u32, msg_type: MsgType) {
         let raw_msg_type = match msg_type {

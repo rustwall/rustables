@@ -77,6 +77,12 @@ impl Table {
     }
 }
 
+impl PartialEq for Table {
+    fn eq(&self, other: &Self) -> bool {
+        self.get_name() == other.get_name() && self.get_family() == other.get_family()
+    }
+}
+
 impl Debug for Table {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{:?}", self.get_str())

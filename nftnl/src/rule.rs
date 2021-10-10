@@ -47,12 +47,20 @@ impl Rule {
         Rule { rule, chain }
     }
 
+    pub fn get_position(&self) -> u64 {
+        unsafe { sys::nftnl_rule_get_u64(self.rule, sys::NFTNL_RULE_POSITION as u16) }
+    }
+
     /// Sets the position of this rule within the chain it lives in. By default a new rule is added
     /// to the end of the chain.
     pub fn set_position(&mut self, position: u64) {
         unsafe {
             sys::nftnl_rule_set_u64(self.rule, sys::NFTNL_RULE_POSITION as u16, position);
         }
+    }
+
+    pub fn get_handle(&self) -> u64 {
+        unsafe { sys::nftnl_rule_get_u64(self.rule, sys::NFTNL_RULE_HANDLE as u16) }
     }
 
     pub fn set_handle(&mut self, handle: u64) {
@@ -104,6 +112,12 @@ impl Rule {
 impl Debug for Rule {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{:?}", self.get_str())
+    }
+}
+
+impl PartialEq for Rule {
+    fn eq(&self, other: &Self) -> bool {
+        self.get_chain() == other.get_chain() && self.get_handle() == other.get_handle()
     }
 }
 
