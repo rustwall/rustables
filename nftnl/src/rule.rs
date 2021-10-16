@@ -4,6 +4,7 @@ use std::ffi::{c_void, CStr, CString};
 use std::fmt::Debug;
 use std::os::raw::c_char;
 use std::sync::Arc;
+use tracing::error;
 
 /// A nftables firewall rule.
 pub struct Rule {
@@ -148,7 +149,7 @@ unsafe impl crate::NlMsg for Rule {
         let flags: u16 = match msg_type {
             MsgType::Add => (libc::NLM_F_CREATE | libc::NLM_F_APPEND | libc::NLM_F_EXCL) as u16,
             MsgType::Del => 0u16,
-        };
+        } | libc::NLM_F_ACK as u16;
         let header = sys::nftnl_nlmsg_build_hdr(
             buf as *mut c_char,
             type_ as u16,
@@ -173,6 +174,9 @@ pub fn get_rules_cb(
 ) -> libc::c_int {
     unsafe {
         let rule = sys::nftnl_rule_alloc();
+        if rule == std::ptr::null_mut() {
+            return mnl::mnl_sys::MNL_CB_ERROR;
+        }
         let err = sys::nftnl_rule_nlmsg_parse(header, rule);
         if err < 0 {
             error!("Failed to parse nelink rule message - {}", err);

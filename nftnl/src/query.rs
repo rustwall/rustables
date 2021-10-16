@@ -29,6 +29,10 @@ pub fn get_list_of_objects<Error>(
 
 #[cfg(feature = "query")]
 mod inner {
+    use crate::FinalizedBatch;
+
+    use tracing::debug;
+
     use super::*;
 
     #[derive(thiserror::Error, Debug)]
@@ -66,10 +70,11 @@ mod inner {
     where
         T: 'a,
     {
+        debug!("listing objects of kind {}", data_type);
         let socket = mnl::Socket::new(mnl::Bus::Netfilter).map_err(Error::NetlinkOpenError)?;
 
         let seq = 0;
-        let portid = socket.portid();
+        let portid = 0;
 
         let chains_buf = get_list_of_objects(seq, data_type, req_hdr_customize)?;
         socket.send(&chains_buf).map_err(Error::NetlinkSendError)?;
@@ -96,6 +101,31 @@ mod inner {
         }
 
         Ok(res)
+    }
+
+    pub fn send_batch(batch: &mut FinalizedBatch) -> Result<(), Error> {
+        let socket = mnl::Socket::new(mnl::Bus::Netfilter).map_err(Error::NetlinkOpenError)?;
+
+        let seq = 0;
+        let portid = socket.portid();
+
+        socket.send_all(batch).map_err(Error::NetlinkSendError)?;
+        debug!("sent");
+
+        let mut msg_buffer = vec![0; nft_nlmsg_maxsize() as usize];
+        while socket
+            .recv(&mut msg_buffer)
+            .map_err(Error::NetlinkRecvError)?
+            > 0
+        {
+            println!("loooping");
+            if let mnl::CbResult::Stop =
+                mnl::cb_run(&msg_buffer, seq, portid).map_err(Error::ProcessNetlinkError)?
+            {
+                break;
+            }
+        }
+        Ok(())
     }
 }
 

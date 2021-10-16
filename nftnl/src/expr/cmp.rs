@@ -7,6 +7,7 @@ use std::{
     os::raw::c_char,
     slice,
 };
+use tracing::trace;
 
 /// Comparison operator.
 #[derive(Copy, Clone, Eq, PartialEq)]

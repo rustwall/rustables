@@ -6,6 +6,7 @@ use std::{
     fmt::Debug,
     os::raw::c_char,
 };
+use tracing::error;
 
 /// Abstraction of `nftnl_table`. The top level container in netfilter. A table has a protocol
 /// family and contain [`Chain`]s that in turn hold the rules.
@@ -138,7 +139,7 @@ pub fn get_tables_cb(
 ) -> libc::c_int {
     unsafe {
         let table = sys::nftnl_table_alloc();
-        if table as *const _ == std::ptr::null() {
+        if table == std::ptr::null_mut() {
             return mnl::mnl_sys::MNL_CB_ERROR;
         }
         let err = sys::nftnl_table_nlmsg_parse(header, table);

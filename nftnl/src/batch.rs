@@ -4,6 +4,7 @@ use std::ffi::c_void;
 use std::os::raw::c_char;
 use std::ptr;
 use thiserror::Error;
+use tracing::trace;
 
 /// Error while communicating with netlink
 #[derive(Error, Debug)]
@@ -24,6 +25,7 @@ pub fn batch_is_supported() -> std::result::Result<bool, NetlinkError> {
 pub struct Batch {
     batch: *mut sys::nftnl_batch,
     seq: u32,
+    is_empty: bool,
 }
 
 // Safety: It should be safe to pass this around and *read* from it
@@ -40,7 +42,12 @@ impl Batch {
     }
 
     pub unsafe fn from_raw(batch: *mut sys::nftnl_batch, seq: u32) -> Self {
-        Batch { batch, seq }
+        Batch {
+            batch,
+            seq,
+            // we assume this batch is not empty by default
+            is_empty: false,
+        }
     }
 
     /// Creates a new nftnl batch with the given batch size.
@@ -48,7 +55,11 @@ impl Batch {
         let batch = try_alloc!(unsafe {
             sys::nftnl_batch_alloc(batch_page_size, crate::nft_nlmsg_maxsize())
         });
-        let mut this = Batch { batch, seq: 1 };
+        let mut this = Batch {
+            batch,
+            seq: 0,
+            is_empty: true,
+        };
         this.write_begin_msg();
         this
     }
@@ -57,6 +68,7 @@ impl Batch {
     pub fn add<T: NlMsg>(&mut self, msg: &T, msg_type: MsgType) {
         trace!("Writing NlMsg with seq {} to batch", self.seq);
         unsafe { msg.write(self.current(), self.seq, msg_type) };
+        self.is_empty = false;
         self.next()
     }
 
@@ -76,10 +88,15 @@ impl Batch {
     /// Adds the final end message to the batch and returns a [`FinalizedBatch`] that can be used
     /// to send the messages to netfilter.
     ///
+    /// Return None if there is no object in the batch (this could block forever).
+    ///
     /// [`FinalizedBatch`]: struct.FinalizedBatch.html
-    pub fn finalize(mut self) -> FinalizedBatch {
+    pub fn finalize(mut self) -> Option<FinalizedBatch> {
         self.write_end_msg();
-        FinalizedBatch { batch: self }
+        if self.is_empty {
+            return None;
+        }
+        Some(FinalizedBatch { batch: self })
     }
 
     fn current(&self) -> *mut c_void {

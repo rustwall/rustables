@@ -36,9 +36,6 @@
 
 use thiserror::Error;
 
-#[macro_use]
-extern crate log;
-
 pub use nftnl_sys;
 use nftnl_sys::libc;
 use std::{convert::TryFrom, ffi::c_void, ops::Deref};
@@ -56,20 +53,28 @@ macro_rules! try_alloc {
 }
 
 mod batch;
-pub use batch::{batch_is_supported, default_batch_page_size, Batch, FinalizedBatch, NetlinkError};
+#[cfg(feature = "query")]
+pub use batch::{batch_is_supported, default_batch_page_size};
+pub use batch::{Batch, FinalizedBatch, NetlinkError};
 
 pub mod expr;
 
 pub mod table;
-pub use table::{get_tables_cb, list_tables, Table};
+pub use table::Table;
+#[cfg(feature = "query")]
+pub use table::{get_tables_cb, list_tables};
 
 mod chain;
-pub use chain::{get_chains_cb, list_chains_for_table, Chain, ChainType, Hook, Policy, Priority};
+#[cfg(feature = "query")]
+pub use chain::{get_chains_cb, list_chains_for_table};
+pub use chain::{Chain, ChainType, Hook, Policy, Priority};
 
 pub mod query;
 
 mod rule;
-pub use rule::{get_rules_cb, list_rules_for_chain, Rule};
+pub use rule::Rule;
+#[cfg(feature = "query")]
+pub use rule::{get_rules_cb, list_rules_for_chain};
 
 pub mod set;
 

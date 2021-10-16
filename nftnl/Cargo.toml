@@ -11,7 +11,7 @@ categories = ["network-programming", "os::unix-apis", "api-bindings"]
 edition = "2018"
 
 [features]
-query = ["mnl"]
+query = []
 nftnl-1-0-7 = ["nftnl-sys/nftnl-1-0-7"]
 nftnl-1-0-8 = ["nftnl-sys/nftnl-1-0-8"]
 nftnl-1-0-9 = ["nftnl-sys/nftnl-1-0-9"]
@@ -24,10 +24,9 @@ default = ["nftnl-1-2-0"]
 [dependencies]
 bitflags = "1.0"
 thiserror = "1.0"
-log = "0.4"
+tracing = "0.1"
 nftnl-sys = { path = "../nftnl-sys", version = "0.7" }
-mnl = { version = "0.2", optional = true }
+mnl = "0.2"
 
 [dev-dependencies]
 ipnetwork = "0.16"
-mnl = "0.2"

@@ -1,6 +1,5 @@
 use crate::{MsgType, Table};
 use nftnl_sys::{self as sys, libc};
-#[cfg(feature = "query")]
 use std::sync::Arc;
 use std::{
     convert::TryFrom,
@@ -8,6 +7,7 @@ use std::{
     fmt,
     os::raw::c_char,
 };
+use tracing::error;
 
 pub type Priority = i32;
 
@@ -221,7 +221,7 @@ unsafe impl crate::NlMsg for Chain {
         let flags: u16 = match msg_type {
             MsgType::Add => (libc::NLM_F_ACK | libc::NLM_F_CREATE) as u16,
             MsgType::Del => libc::NLM_F_ACK as u16,
-        };
+        } | libc::NLM_F_ACK as u16;
         let header = sys::nftnl_nlmsg_build_hdr(
             buf as *mut c_char,
             raw_msg_type as u16,
@@ -246,7 +246,7 @@ pub fn get_chains_cb<'a>(
 ) -> libc::c_int {
     unsafe {
         let chain = sys::nftnl_chain_alloc();
-        if chain as *const _ == std::ptr::null() {
+        if chain == std::ptr::null_mut() {
             return mnl::mnl_sys::MNL_CB_ERROR;
         }
         let err = sys::nftnl_chain_nlmsg_parse(header, chain);
