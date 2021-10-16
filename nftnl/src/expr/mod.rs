@@ -83,11 +83,11 @@ macro_rules! nft_expr {
     (ct $key:ident) => {
         nft_expr_ct!($key)
     };
-    (verdict $verdict:ident) => {
-        nft_expr_verdict!($verdict)
+    (immediate $expr:ident $value:expr) => {
+        nft_expr_immediate!($expr $value)
     };
-    (verdict $verdict:ident $chain:expr) => {
-        nft_expr_verdict!($verdict $chain)
+    (log) => {
+        nft_expr_log!()
     };
     (lookup $set:expr) => {
         nft_expr_lookup!($set)
@@ -104,7 +104,10 @@ macro_rules! nft_expr {
     (payload $proto:ident $field:ident) => {
         nft_expr_payload!($proto $field)
     };
-    (immediate $expr:ident $value:expr) => {
-        nft_expr_immediate!($expr $value)
+    (verdict $verdict:ident) => {
+        nft_expr_verdict!($verdict)
+    };
+    (verdict $verdict:ident $chain:expr) => {
+        nft_expr_verdict!($verdict $chain)
     };
 }

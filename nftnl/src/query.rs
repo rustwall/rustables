@@ -118,7 +118,6 @@ mod inner {
             .map_err(Error::NetlinkRecvError)?
             > 0
         {
-            println!("loooping");
             if let mnl::CbResult::Stop =
                 mnl::cb_run(&msg_buffer, seq, portid).map_err(Error::ProcessNetlinkError)?
             {
