@@ -1,4 +1,4 @@
-# nftnl
+# nftables
 
 Safe abstraction for [`libnftnl`]. Provides low-level userspace access to the in-kernel
 nf_tables subsystem. See [`nftnl-sys`] for the low level FFI bindings to the C library.
@@ -28,4 +28,10 @@ This crate has the same features as the sys crate, and selecting version works t
 [`nftables`]: https://netfilter.org/projects/nftables/
 [`nftnl-sys`]: https://crates.io/crates/nftnl-sys
 
-License: MIT/Apache-2.0
+License: GNU GPLv3
+Original work licensed by Amagicom AB under MIT/Apache-2.0
+
+Since the GNU GPLv3 applies to parts of this software, you may use the original
+software if you wish to use the more permissive MIT/Apache-2.0 licenses :
+[nftnl-rs](https://github.com/mullvad/nftnl-rs).
+
