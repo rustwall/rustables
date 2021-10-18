@@ -1,6 +1,6 @@
 use super::{Expression, Rule};
 use crate::expr::cmp::ToSlice;
-use nftnl_sys::{self as sys, libc};
+use rustables_sys::{self as sys, libc};
 use std::ffi::c_void;
 use std::os::raw::c_char;
 

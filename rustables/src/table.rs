@@ -1,5 +1,5 @@
 use crate::{MsgType, ProtoFamily};
-use nftnl_sys::{self as sys, libc};
+use rustables_sys::{self as sys, libc};
 use std::{
     convert::TryFrom,
     ffi::{c_void, CStr, CString},

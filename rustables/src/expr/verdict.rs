@@ -1,6 +1,6 @@
 use super::{Expression, Rule};
 use crate::ProtoFamily;
-use nftnl_sys::{
+use rustables_sys::{
     self as sys,
     libc::{self, c_char},
 };

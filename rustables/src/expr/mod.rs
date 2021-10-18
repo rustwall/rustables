@@ -4,7 +4,7 @@
 //! [`Rule`]: struct.Rule.html
 
 use super::rule::Rule;
-use nftnl_sys::{self as sys, libc};
+use rustables_sys::{self as sys, libc};
 
 /// Trait for every safe wrapper of an nftables expression.
 pub trait Expression {

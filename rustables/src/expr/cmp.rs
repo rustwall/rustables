@@ -1,5 +1,5 @@
 use super::{Expression, Rule};
-use nftnl_sys::{self as sys, libc};
+use rustables_sys::{self as sys, libc};
 use std::{
     borrow::Cow,
     ffi::{c_void, CString},

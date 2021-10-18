@@ -1,5 +1,5 @@
 use crate::{MsgType, Table};
-use nftnl_sys::{self as sys, libc};
+use rustables_sys::{self as sys, libc};
 use std::sync::Arc;
 use std::{
     convert::TryFrom,

@@ -1,15 +1,33 @@
-// Copyright 2018 Amagicom AB.
+// Copyryght (c) 2021 GPL lafleur@boum.org and Simon Thoby
 //
-// Licensed under the Apache License, Version 2.0 <LICENSE-APACHE or
-// http://www.apache.org/licenses/LICENSE-2.0> or the MIT license
-// <LICENSE-MIT or http://opensource.org/licenses/MIT>, at your
-// option. This file may not be copied, modified, or distributed
-// except according to those terms.
+// This file is free software: you may copy, redistribute and/or modify it
+// under the terms of the GNU General Public License as published by the
+// Free Software Foundation, either version 3 of the License, or (at your
+// option) any later version.
+//
+// This file is distributed in the hope that it will be useful, but
+// WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+// General Public License for more details.
+//
+// You should have received a copy of the GNU General Public License
+// along with this program. If not, see the LICENSE file.
+//
+// This file incorporates work covered by the following copyright and
+// permission notice:
+//
+//     Copyright 2018 Amagicom AB.
+//
+//     Licensed under the Apache License, Version 2.0 <LICENSE-APACHE or
+//     http://www.apache.org/licenses/LICENSE-2.0> or the MIT license
+//     <LICENSE-MIT or http://opensource.org/licenses/MIT>, at your
+//     option. This file may not be copied, modified, or distributed
+//     except according to those terms.
 
 //! Low level FFI bindings to [`libnftnl`], a userspace library providing a low-level netlink
 //! programming interface (API) to the in-kernel nf_tables subsystem.
 //!
-//! See [`nftnl`] for a higher level safe abstraction.
+//! See [`rustables`] for a higher level safe abstraction.
 //!
 //! # Linking to libmnl and libnftnl
 //!
@@ -30,12 +48,12 @@
 //! So for example, to get bindings to `libnftnl-1.0.9` depend on this crate like this:
 //! ```toml
 //! [dependencies]
-//! nftnl-sys = { version = "0.1", features = ["nftnl-1-0-9"] }
+//! rustables-sys = { version = "0.1", features = ["nftnl-1-0-9"] }
 //! ```
 //!
 //! [`libnftnl`]: https://netfilter.org/projects/libnftnl/
 //! [`libmnl`]: https://netfilter.org/projects/libmnl/
-//! [`nftnl`]: https://crates.io/crates/nftnl
+//! [`rustables`]: https://crates.io/crates/rustables
 //! [`bindgen`]: https://crates.io/crates/bindgen
 
 #![no_std]

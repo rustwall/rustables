@@ -1,5 +1,5 @@
 use super::{Expression, Rule};
-use nftnl_sys::{self as sys, libc};
+use rustables_sys::{self as sys, libc};
 use std::os::raw::c_char;
 
 /// A meta expression refers to meta data associated with a packet.

@@ -1,13 +1,31 @@
-// Copyright 2018 Amagicom AB.
+// Copyryght (c) 2021 GPL lafleur@boum.org and Simon Thoby
 //
-// Licensed under the Apache License, Version 2.0 <LICENSE-APACHE or
-// http://www.apache.org/licenses/LICENSE-2.0> or the MIT license
-// <LICENSE-MIT or http://opensource.org/licenses/MIT>, at your
-// option. This file may not be copied, modified, or distributed
-// except according to those terms.
+// This file is free software: you may copy, redistribute and/or modify it
+// under the terms of the GNU General Public License as published by the
+// Free Software Foundation, either version 3 of the License, or (at your
+// option) any later version.
+//
+// This file is distributed in the hope that it will be useful, but
+// WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+// General Public License for more details.
+//
+// You should have received a copy of the GNU General Public License
+// along with this program. If not, see the LICENSE file.
+//
+// This file incorporates work covered by the following copyright and
+// permission notice:
+//
+//     Copyright 2018 Amagicom AB.
+//
+//     Licensed under the Apache License, Version 2.0 <LICENSE-APACHE or
+//     http://www.apache.org/licenses/LICENSE-2.0> or the MIT license
+//     <LICENSE-MIT or http://opensource.org/licenses/MIT>, at your
+//     option. This file may not be copied, modified, or distributed
+//     except according to those terms.
 
 //! Safe abstraction for [`libnftnl`]. Provides low-level userspace access to the in-kernel
-//! nf_tables subsystem. See [`nftnl-sys`] for the low level FFI bindings to the C library.
+//! nf_tables subsystem. See [`rustables-sys`] for the low level FFI bindings to the C library.
 //!
 //! Can be used to create and remove tables, chains, sets and rules from the nftables firewall,
 //! the successor to iptables.
@@ -27,17 +45,17 @@
 //!
 //! # Selecting version of `libnftnl`
 //!
-//! See the documentation for the corresponding sys crate for details: [`nftnl-sys`]
+//! See the documentation for the corresponding sys crate for details: [`rustables-sys`].
 //! This crate has the same features as the sys crate, and selecting version works the same.
 //!
 //! [`libnftnl`]: https://netfilter.org/projects/libnftnl/
 //! [`nftables`]: https://netfilter.org/projects/nftables/
-//! [`nftnl-sys`]: https://crates.io/crates/nftnl-sys
+//! [`rustables-sys`]: https://crates.io/crates/rustables-sys
 
 use thiserror::Error;
 
-pub use nftnl_sys;
-use nftnl_sys::libc;
+pub use rustables_sys;
+use rustables_sys::libc;
 use std::{convert::TryFrom, ffi::c_void, ops::Deref};
 
 macro_rules! try_alloc {

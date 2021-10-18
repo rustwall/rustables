@@ -1,5 +1,5 @@
 use crate::{table::Table, MsgType, ProtoFamily};
-use nftnl_sys::{self as sys, libc};
+use rustables_sys::{self as sys, libc};
 use std::{
     cell::Cell,
     ffi::{c_void, CStr, CString},

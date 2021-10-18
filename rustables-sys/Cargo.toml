@@ -1,10 +1,10 @@
 [package]
-name = "nftnl-sys"
+name = "rustables-sys"
 version = "0.7.0"
-authors = ["Mullvad VPN"]
-license = "MIT OR Apache-2.0"
+authors = ["lafleur@boum.org, Simon Thoby, Mullvad VPN"]
+license = "GPL-3.0-or-later"
 description = "Low level FFI bindings to libnftnl. Provides low-level userspace access to the in-kernel nf_tables subsystem"
-repository = "https://github.com/mullvad/nftnl-rs"
+repository = "https://gitlab.com/rustwall/rustables"
 readme = "README.md"
 keywords = ["nftables", "nft", "firewall", "iptables", "netfilter"]
 categories = ["network-programming", "os::unix-apis", "external-ffi-bindings", "no-std"]

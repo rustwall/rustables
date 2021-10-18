@@ -1,5 +1,5 @@
 use super::{Expression, Register, Rule};
-use nftnl_sys as sys;
+use rustables_sys as sys;
 use std::ffi::c_void;
 use std::mem::size_of_val;
 use std::os::raw::c_char;

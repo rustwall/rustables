@@ -1,6 +1,6 @@
 use super::{Expression, Rule};
 use crate::set::Set;
-use nftnl_sys::{self as sys, libc};
+use rustables_sys::{self as sys, libc};
 use std::ffi::CString;
 use std::os::raw::c_char;
 

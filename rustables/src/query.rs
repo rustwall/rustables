@@ -1,4 +1,4 @@
-use crate::{nft_nlmsg_maxsize, nftnl_sys as sys, ProtoFamily};
+use crate::{nft_nlmsg_maxsize, rustables_sys as sys, ProtoFamily};
 use sys::libc;
 
 /// Returns a buffer containing a netlink message which requests a list of all the netfilter

@@ -1,5 +1,5 @@
 use super::{Expression, Rule};
-use nftnl_sys as sys;
+use rustables_sys as sys;
 use std::os::raw::c_char;
 
 /// A Log expression will log all packets that match the rule.

@@ -1,2 +1,2 @@
 [workspace]
-members = ["nftnl-sys", "nftnl"]
+members = ["rustables-sys", "rustables"]

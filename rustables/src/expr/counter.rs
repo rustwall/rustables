@@ -1,5 +1,5 @@
 use super::{Expression, Rule};
-use nftnl_sys as sys;
+use rustables_sys as sys;
 use std::os::raw::c_char;
 
 /// A counter expression adds a counter to the rule that is incremented to count number of packets

@@ -1,6 +1,6 @@
 use super::{Expression, Register, Rule};
 use crate::ProtoFamily;
-use nftnl_sys::{self as sys, libc};
+use rustables_sys::{self as sys, libc};
 use std::os::raw::c_char;
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Hash)]

@@ -1,5 +1,5 @@
 use crate::{chain::Chain, expr::Expression, MsgType};
-use nftnl_sys::{self as sys, libc};
+use rustables_sys::{self as sys, libc};
 use std::ffi::{c_void, CStr, CString};
 use std::fmt::Debug;
 use std::os::raw::c_char;
