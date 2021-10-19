@@ -1,7 +1,8 @@
 use crate::{MsgType, ProtoFamily};
 use rustables_sys::{self as sys, libc};
+#[cfg(feature = "query")]
+use std::convert::TryFrom;
 use std::{
-    convert::TryFrom,
     ffi::{c_void, CStr, CString},
     fmt::Debug,
     os::raw::c_char,
@@ -15,11 +16,6 @@ pub struct Table {
     table: *mut sys::nftnl_table,
     family: ProtoFamily,
 }
-
-// Safety: It should be safe to pass this around and *read* from it
-// from multiple threads
-unsafe impl Send for Table {}
-unsafe impl Sync for Table {}
 
 impl Table {
     /// Creates a new table instance with the given name and protocol family.
@@ -84,11 +80,13 @@ impl Table {
         }
     }
 
+    #[cfg(feature = "unsafe-raw-handles")]
     /// Returns the raw handle.
     pub fn as_ptr(&self) -> *const sys::nftnl_table {
         self.table as *const sys::nftnl_table
     }
 
+    #[cfg(feature = "unsafe-raw-handles")]
     /// Returns a mutable version of the raw handle.
     pub fn as_mut_ptr(&self) -> *mut sys::nftnl_table {
         self.table

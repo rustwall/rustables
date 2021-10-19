@@ -99,11 +99,13 @@ impl<'a, K> Set<'a, K> {
         SetElemsIter::new(self)
     }
 
+    #[cfg(feature = "unsafe-raw-handles")]
     /// Returns the raw handle.
     pub fn as_ptr(&self) -> *const sys::nftnl_set {
         self.set as *const sys::nftnl_set
     }
 
+    #[cfg(feature = "unsafe-raw-handles")]
     /// Returns a mutable version of the raw handle.
     pub fn as_mut_ptr(&self) -> *mut sys::nftnl_set {
         self.set
@@ -177,7 +179,9 @@ pub struct SetElemsIter<'a, K> {
 
 impl<'a, K> SetElemsIter<'a, K> {
     fn new(set: &'a Set<'a, K>) -> Self {
-        let iter = try_alloc!(unsafe { sys::nftnl_set_elems_iter_create(set.as_ptr()) });
+        let iter = try_alloc!(unsafe {
+            sys::nftnl_set_elems_iter_create(set.set as *const sys::nftnl_set)
+        });
         SetElemsIter {
             set,
             iter,

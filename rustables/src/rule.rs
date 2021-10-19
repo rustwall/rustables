@@ -3,24 +3,19 @@ use rustables_sys::{self as sys, libc};
 use std::ffi::{c_void, CStr, CString};
 use std::fmt::Debug;
 use std::os::raw::c_char;
-use std::sync::Arc;
+use std::rc::Rc;
 
 /// A nftables firewall rule.
 pub struct Rule {
     rule: *mut sys::nftnl_rule,
-    chain: Arc<Chain>,
+    chain: Rc<Chain>,
 }
-
-// Safety: It should be safe to pass this around and *read* from it
-// from multiple threads
-unsafe impl Send for Rule {}
-unsafe impl Sync for Rule {}
 
 impl Rule {
     /// Creates a new rule object in the given [`Chain`].
     ///
     /// [`Chain`]: struct.Chain.html
-    pub fn new(chain: Arc<Chain>) -> Rule {
+    pub fn new(chain: Rc<Chain>) -> Rule {
         unsafe {
             let rule = try_alloc!(sys::nftnl_rule_alloc());
             sys::nftnl_rule_set_u32(
@@ -43,7 +38,7 @@ impl Rule {
         }
     }
 
-    pub unsafe fn from_raw(rule: *mut sys::nftnl_rule, chain: Arc<Chain>) -> Self {
+    pub unsafe fn from_raw(rule: *mut sys::nftnl_rule, chain: Rc<Chain>) -> Self {
         Rule { rule, chain }
     }
 
@@ -79,7 +74,7 @@ impl Rule {
     /// Returns a reference to the [`Chain`] this rule lives in.
     ///
     /// [`Chain`]: struct.Chain.html
-    pub fn get_chain(&self) -> Arc<Chain> {
+    pub fn get_chain(&self) -> Rc<Chain> {
         self.chain.clone()
     }
 
@@ -116,11 +111,13 @@ impl Rule {
         }
     }
 
+    #[cfg(feature = "unsafe-raw-handles")]
     /// Returns the raw handle.
     pub fn as_ptr(&self) -> *const sys::nftnl_rule {
         self.rule as *const sys::nftnl_rule
     }
 
+    #[cfg(feature = "unsafe-raw-handles")]
     /// Returns a mutable version of the raw handle.
     pub fn as_mut_ptr(&mut self) -> *mut sys::nftnl_rule {
         self.rule
@@ -169,7 +166,7 @@ impl Drop for Rule {
 #[cfg(feature = "query")]
 pub fn get_rules_cb(
     header: &libc::nlmsghdr,
-    (chain, rules): &mut (&Arc<Chain>, &mut Vec<Rule>),
+    (chain, rules): &mut (&Rc<Chain>, &mut Vec<Rule>),
 ) -> libc::c_int {
     unsafe {
         let rule = sys::nftnl_rule_alloc();
@@ -189,7 +186,7 @@ pub fn get_rules_cb(
 }
 
 #[cfg(feature = "query")]
-pub fn list_rules_for_chain(chain: &Arc<Chain>) -> Result<Vec<Rule>, crate::query::Error> {
+pub fn list_rules_for_chain(chain: &Rc<Chain>) -> Result<Vec<Rule>, crate::query::Error> {
     crate::query::list_objects_with_data(
         libc::NFT_MSG_GETRULE as u16,
         get_rules_cb,

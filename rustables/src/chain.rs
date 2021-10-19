@@ -1,11 +1,11 @@
 use crate::{MsgType, Table};
 use rustables_sys::{self as sys, libc};
-use std::sync::Arc;
 use std::{
     convert::TryFrom,
     ffi::{c_void, CStr, CString},
     fmt,
     os::raw::c_char,
+    rc::Rc,
 };
 
 pub type Priority = i32;
@@ -71,19 +71,14 @@ impl ChainType {
 /// [`set_hook`]: #method.set_hook
 pub struct Chain {
     chain: *mut sys::nftnl_chain,
-    table: Arc<Table>,
+    table: Rc<Table>,
 }
-
-// Safety: It should be safe to pass this around and *read* from it
-// from multiple threads
-unsafe impl Send for Chain {}
-unsafe impl Sync for Chain {}
 
 impl Chain {
     /// Creates a new chain instance inside the given [`Table`] and with the given name.
     ///
     /// [`Table`]: struct.Table.html
-    pub fn new<T: AsRef<CStr>>(name: &T, table: Arc<Table>) -> Chain {
+    pub fn new<T: AsRef<CStr>>(name: &T, table: Rc<Table>) -> Chain {
         unsafe {
             let chain = try_alloc!(sys::nftnl_chain_alloc());
             sys::nftnl_chain_set_u32(
@@ -101,7 +96,7 @@ impl Chain {
         }
     }
 
-    pub unsafe fn from_raw(chain: *mut sys::nftnl_chain, table: Arc<Table>) -> Self {
+    pub unsafe fn from_raw(chain: *mut sys::nftnl_chain, table: Rc<Table>) -> Self {
         Chain { chain, table }
     }
 
@@ -183,15 +178,17 @@ impl Chain {
     /// Returns a reference to the [`Table`] this chain belongs to
     ///
     /// [`Table`]: struct.Table.html
-    pub fn get_table(&self) -> Arc<Table> {
+    pub fn get_table(&self) -> Rc<Table> {
         self.table.clone()
     }
 
+    #[cfg(feature = "unsafe-raw-handles")]
     /// Returns the raw handle.
     pub fn as_ptr(&self) -> *const sys::nftnl_chain {
         self.chain as *const sys::nftnl_chain
     }
 
+    #[cfg(feature = "unsafe-raw-handles")]
     /// Returns a mutable version of the raw handle.
     pub fn as_mut_ptr(&mut self) -> *mut sys::nftnl_chain {
         self.chain
@@ -241,7 +238,7 @@ impl Drop for Chain {
 #[cfg(feature = "query")]
 pub fn get_chains_cb<'a>(
     header: &libc::nlmsghdr,
-    (table, chains): &mut (&Arc<Table>, &mut Vec<Chain>),
+    (table, chains): &mut (&Rc<Table>, &mut Vec<Chain>),
 ) -> libc::c_int {
     unsafe {
         let chain = sys::nftnl_chain_alloc();
@@ -285,6 +282,6 @@ pub fn get_chains_cb<'a>(
 }
 
 #[cfg(feature = "query")]
-pub fn list_chains_for_table(table: Arc<Table>) -> Result<Vec<Chain>, crate::query::Error> {
+pub fn list_chains_for_table(table: Rc<Table>) -> Result<Vec<Chain>, crate::query::Error> {
     crate::query::list_objects_with_data(libc::NFT_MSG_GETCHAIN as u16, get_chains_cb, &table, None)
 }
