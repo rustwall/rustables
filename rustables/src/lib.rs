@@ -54,6 +54,9 @@
 
 use thiserror::Error;
 
+#[macro_use]
+extern crate log;
+
 pub use rustables_sys;
 use rustables_sys::libc;
 use std::{convert::TryFrom, ffi::c_void, ops::Deref};

@@ -31,8 +31,6 @@ pub fn get_list_of_objects<Error>(
 mod inner {
     use crate::FinalizedBatch;
 
-    use tracing::debug;
-
     use super::*;
 
     #[derive(thiserror::Error, Debug)]

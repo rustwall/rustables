@@ -24,7 +24,7 @@ default = ["nftnl-1-2-0"]
 [dependencies]
 bitflags = "1.0"
 thiserror = "1.0"
-tracing = "0.1"
+log = "0.4"
 rustables-sys = { path = "../rustables-sys", version = "0.7" }
 mnl = "0.2"
 

@@ -4,7 +4,6 @@ use std::ffi::{c_void, CStr, CString};
 use std::fmt::Debug;
 use std::os::raw::c_char;
 use std::sync::Arc;
-use tracing::error;
 
 /// A nftables firewall rule.
 pub struct Rule {

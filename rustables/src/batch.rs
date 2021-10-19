@@ -4,7 +4,6 @@ use std::ffi::c_void;
 use std::os::raw::c_char;
 use std::ptr;
 use thiserror::Error;
-use tracing::trace;
 
 /// Error while communicating with netlink
 #[derive(Error, Debug)]
