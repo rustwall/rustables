@@ -24,16 +24,12 @@ impl Rule {
                 sys::NFTNL_RULE_FAMILY as u16,
                 chain.get_table().get_family() as u32,
             );
-            sys::nftnl_rule_set_str(
-                rule,
-                sys::NFTNL_RULE_TABLE as u16,
-                chain.get_table().get_name().as_ptr(),
-            );
-            sys::nftnl_rule_set_str(
-                rule,
-                sys::NFTNL_RULE_CHAIN as u16,
-                chain.get_name().as_ptr(),
-            );
+            if let Some(table_name) = chain.get_table().get_name() {
+                sys::nftnl_rule_set_str(rule, sys::NFTNL_RULE_TABLE as u16, table_name.as_ptr());
+            }
+            if let Some(chain_name) = chain.get_name() {
+                sys::nftnl_rule_set_str(rule, sys::NFTNL_RULE_CHAIN as u16, chain_name.as_ptr());
+            }
 
             Rule { rule, chain }
         }
@@ -83,10 +79,11 @@ impl Rule {
     pub fn get_userdata(&self) -> Option<&CStr> {
         unsafe {
             let ptr = sys::nftnl_rule_get_str(self.rule, sys::NFTNL_RULE_USERDATA as u16);
-            if ptr == std::ptr::null() {
-                return None;
+            if !ptr.is_null() {
+                Some(CStr::from_ptr(ptr))
+            } else {
+                None
             }
-            Some(CStr::from_ptr(ptr))
         }
     }
 
@@ -241,21 +238,17 @@ pub fn list_rules_for_chain(chain: &Rc<Chain>) -> Result<Vec<Rule>, crate::query
                 return Err(crate::query::Error::NetlinkAllocationFailed);
             }
 
-            sys::nftnl_rule_set_str(
-                rule,
-                sys::NFTNL_RULE_TABLE as u16,
-                chain.get_table().get_name().as_ptr(),
-            );
+            if let Some(table_name) = chain.get_table().get_name() {
+                sys::nftnl_rule_set_str(rule, sys::NFTNL_RULE_TABLE as u16, table_name.as_ptr());
+            }
             sys::nftnl_rule_set_u32(
                 rule,
                 sys::NFTNL_RULE_FAMILY as u16,
                 chain.get_table().get_family() as u32,
             );
-            sys::nftnl_rule_set_str(
-                rule,
-                sys::NFTNL_RULE_CHAIN as u16,
-                chain.get_name().as_ptr(),
-            );
+            if let Some(chain_name) = chain.get_name() {
+                sys::nftnl_rule_set_str(rule, sys::NFTNL_RULE_CHAIN as u16, chain_name.as_ptr());
+            }
 
             sys::nftnl_rule_nlmsg_build_payload(hdr, rule);
 

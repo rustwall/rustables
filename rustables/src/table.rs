@@ -35,10 +35,14 @@ impl Table {
     }
 
     /// Returns the name of this table.
-    pub fn get_name(&self) -> &CStr {
+    pub fn get_name(&self) -> Option<&CStr> {
         unsafe {
             let ptr = sys::nftnl_table_get_str(self.table, sys::NFTNL_TABLE_NAME as u16);
-            CStr::from_ptr(ptr)
+            if !ptr.is_null() {
+                Some(CStr::from_ptr(ptr))
+            } else {
+                None
+            }
         }
     }
 
@@ -66,10 +70,11 @@ impl Table {
     pub fn get_userdata(&self) -> Option<&CStr> {
         unsafe {
             let ptr = sys::nftnl_table_get_str(self.table, sys::NFTNL_TABLE_USERDATA as u16);
-            if ptr == std::ptr::null() {
-                return None;
+            if !ptr.is_null() {
+                Some(CStr::from_ptr(ptr))
+            } else {
+                None
             }
-            Some(CStr::from_ptr(ptr))
         }
     }
 
