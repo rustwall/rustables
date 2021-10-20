@@ -120,7 +120,7 @@ macro_rules! nft_expr {
         nft_expr_cmp!($op $data)
     };
     (counter) => {
-        $crate::expr::Counter
+        $crate::expr::Counter { nb_bytes: 0, nb_packets: 0}
     };
     (ct $key:ident set) => {
         nft_expr_ct!($key set)
