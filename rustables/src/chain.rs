@@ -7,7 +7,6 @@ use std::{
     fmt,
     os::raw::c_char,
 };
-use tracing::error;
 
 pub type Priority = i32;
 

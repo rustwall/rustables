@@ -8,7 +8,6 @@ use std::{
     os::raw::c_char,
     rc::Rc,
 };
-use tracing::trace;
 
 #[macro_export]
 macro_rules! nft_set {

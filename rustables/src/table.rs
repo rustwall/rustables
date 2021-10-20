@@ -6,7 +6,6 @@ use std::{
     fmt::Debug,
     os::raw::c_char,
 };
-use tracing::error;
 
 /// Abstraction of `nftnl_table`. The top level container in netfilter. A table has a protocol
 /// family and contain [`Chain`]s that in turn hold the rules.
