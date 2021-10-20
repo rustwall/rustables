@@ -22,8 +22,8 @@
 //! # nft delete table inet example-filter-ethernet
 //! ```
 
-use nftnl::{nft_expr, nftnl_sys::libc, Batch, Chain, FinalizedBatch, ProtoFamily, Rule, Table};
-use std::{ffi::CString, io};
+use rustables::{nft_expr, rustables_sys::libc, Batch, Chain, FinalizedBatch, ProtoFamily, Rule, Table};
+use std::{ffi::CString, io, rc::Rc};
 
 const TABLE_NAME: &str = "example-filter-ethernet";
 const OUT_CHAIN_NAME: &str = "chain-for-outgoing-packets";
@@ -34,17 +34,18 @@ fn main() -> Result<(), Error> {
     // For verbose explanations of what all these lines up until the rule creation does, see the
     // `add-rules` example.
     let mut batch = Batch::new();
-    let table = Table::new(&CString::new(TABLE_NAME).unwrap(), ProtoFamily::Inet);
-    batch.add(&table, nftnl::MsgType::Add);
+    let table = Rc::new(Table::new(&CString::new(TABLE_NAME).unwrap(), ProtoFamily::Inet));
+    batch.add(&Rc::clone(&table), rustables::MsgType::Add);
 
-    let mut out_chain = Chain::new(&CString::new(OUT_CHAIN_NAME).unwrap(), &table);
-    out_chain.set_hook(nftnl::Hook::Out, 3);
-    out_chain.set_policy(nftnl::Policy::Accept);
-    batch.add(&out_chain, nftnl::MsgType::Add);
+    let mut out_chain = Chain::new(&CString::new(OUT_CHAIN_NAME).unwrap(), Rc::clone(&table));
+    out_chain.set_hook(rustables::Hook::Out, 3);
+    out_chain.set_policy(rustables::Policy::Accept);
+    let out_chain = Rc::new(out_chain);
+    batch.add(&Rc::clone(&out_chain), rustables::MsgType::Add);
 
     // === ADD RULE DROPPING ALL TRAFFIC TO THE MAC ADDRESS IN `BLOCK_THIS_MAC` ===
 
-    let mut block_ethernet_rule = Rule::new(&out_chain);
+    let mut block_ethernet_rule = Rule::new(Rc::clone(&out_chain));
 
     // Check that the interface type is an ethernet interface. Must be done before we can check
     // payload values in the ethernet header.
@@ -58,7 +59,7 @@ fn main() -> Result<(), Error> {
     // Drop the matching packets.
     block_ethernet_rule.add_expr(&nft_expr!(verdict drop));
 
-    batch.add(&block_ethernet_rule, nftnl::MsgType::Add);
+    batch.add(&block_ethernet_rule, rustables::MsgType::Add);
 
     // === FOR FUN, ADD A PACKET THAT MATCHES 50% OF ALL PACKETS ===
 
@@ -66,7 +67,7 @@ fn main() -> Result<(), Error> {
     // So after a number of packets has passed through this rule, the first counter should have a
     // value approximately double that of the second counter. This rule has no verdict, so it never
     // does anything with the matching packets.
-    let mut random_rule = Rule::new(&out_chain);
+    let mut random_rule = Rule::new(Rc::clone(&out_chain));
     // This counter expression will be evaluated (and increment the counter) for all packets coming
     // through.
     random_rule.add_expr(&nft_expr!(counter));
@@ -79,24 +80,28 @@ fn main() -> Result<(), Error> {
     // Add a second counter. This will only be incremented for the packets passing the random check.
     random_rule.add_expr(&nft_expr!(counter));
 
-    batch.add(&random_rule, nftnl::MsgType::Add);
+    batch.add(&random_rule, rustables::MsgType::Add);
 
     // === FINALIZE THE TRANSACTION AND SEND THE DATA TO NETFILTER ===
 
-    let finalized_batch = batch.finalize();
-    send_and_process(&finalized_batch)?;
-    Ok(())
+    match batch.finalize() {
+        Some(mut finalized_batch) => {
+            send_and_process(&mut finalized_batch)?;
+            Ok(())
+        },
+        None => todo!()
+    }
 }
 
-fn send_and_process(batch: &FinalizedBatch) -> Result<(), Error> {
+fn send_and_process(batch: &mut FinalizedBatch) -> Result<(), Error> {
     // Create a netlink socket to netfilter.
     let socket = mnl::Socket::new(mnl::Bus::Netfilter)?;
     // Send all the bytes in the batch.
-    socket.send_all(batch)?;
+    socket.send_all(&mut *batch)?;
 
     // Try to parse the messages coming back from netfilter. This part is still very unclear.
     let portid = socket.portid();
-    let mut buffer = vec![0; nftnl::nft_nlmsg_maxsize() as usize];
+    let mut buffer = vec![0; rustables::nft_nlmsg_maxsize() as usize];
     let very_unclear_what_this_is_for = 2;
     while let Some(message) = socket_recv(&socket, &mut buffer[..])? {
         match mnl::cb_run(message, very_unclear_what_this_is_for, portid)? {
