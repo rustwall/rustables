@@ -27,9 +27,9 @@ macro_rules! nft_set {
 }
 
 pub struct Set<'a, K> {
-    set: *mut sys::nftnl_set,
-    table: &'a Table,
-    family: ProtoFamily,
+    pub(crate) set: *mut sys::nftnl_set,
+    pub(crate) table: &'a Table,
+    pub(crate) family: ProtoFamily,
     _marker: ::std::marker::PhantomData<K>,
 }
 

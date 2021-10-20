@@ -70,8 +70,8 @@ impl ChainType {
 /// [`Rule`]: struct.Rule.html
 /// [`set_hook`]: #method.set_hook
 pub struct Chain {
-    chain: *mut sys::nftnl_chain,
-    table: Rc<Table>,
+    pub(crate) chain: *mut sys::nftnl_chain,
+    pub(crate) table: Rc<Table>,
 }
 
 impl Chain {

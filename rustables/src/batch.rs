@@ -22,9 +22,9 @@ pub fn batch_is_supported() -> std::result::Result<bool, NetlinkError> {
 /// A batch of netfilter messages to be performed in one atomic operation. Corresponds to
 /// `nftnl_batch` in libnftnl.
 pub struct Batch {
-    batch: *mut sys::nftnl_batch,
-    seq: u32,
-    is_empty: bool,
+    pub(crate) batch: *mut sys::nftnl_batch,
+    pub(crate) seq: u32,
+    pub(crate) is_empty: bool,
 }
 
 impl Batch {

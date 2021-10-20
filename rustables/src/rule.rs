@@ -1,3 +1,4 @@
+use crate::expr::ExpressionWrapper;
 use crate::{chain::Chain, expr::Expression, MsgType};
 use rustables_sys::{self as sys, libc};
 use std::ffi::{c_void, CStr, CString};
@@ -7,8 +8,8 @@ use std::rc::Rc;
 
 /// A nftables firewall rule.
 pub struct Rule {
-    rule: *mut sys::nftnl_rule,
-    chain: Rc<Chain>,
+    pub(crate) rule: *mut sys::nftnl_rule,
+    pub(crate) chain: Rc<Chain>,
 }
 
 impl Rule {
@@ -89,7 +90,7 @@ impl Rule {
         }
     }
 
-    /// Update the userdata of this chain.
+    /// Updates the userdata of this chain.
     pub fn set_userdata(&self, data: &CStr) {
         unsafe {
             sys::nftnl_rule_set_str(self.rule, sys::NFTNL_RULE_USERDATA as u16, data.as_ptr());
@@ -109,6 +110,11 @@ impl Rule {
             );
             CStr::from_ptr(descr_buf.as_ptr()).to_owned()
         }
+    }
+
+    /// Retrieves an iterator to loop over the expressions of the rule
+    pub fn get_exprs(self: &Rc<Self>) -> RuleExprsIter {
+        RuleExprsIter::new(self.clone())
     }
 
     #[cfg(feature = "unsafe-raw-handles")]
@@ -160,6 +166,43 @@ unsafe impl crate::NlMsg for Rule {
 impl Drop for Rule {
     fn drop(&mut self) {
         unsafe { sys::nftnl_rule_free(self.rule) };
+    }
+}
+
+pub struct RuleExprsIter {
+    rule: Rc<Rule>,
+    iter: *mut sys::nftnl_expr_iter,
+}
+
+impl RuleExprsIter {
+    fn new(rule: Rc<Rule>) -> Self {
+        let iter =
+            try_alloc!(unsafe { sys::nftnl_expr_iter_create(rule.rule as *const sys::nftnl_rule) });
+        RuleExprsIter { rule, iter }
+    }
+}
+
+impl Iterator for RuleExprsIter {
+    type Item = ExpressionWrapper;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let next = unsafe { sys::nftnl_expr_iter_next(self.iter) };
+        if next.is_null() {
+            trace!("RulesExprsIter iterator ending");
+            None
+        } else {
+            trace!("RulesExprsIter returning new expression");
+            Some(ExpressionWrapper {
+                expr: next,
+                rule: self.rule.clone(),
+            })
+        }
+    }
+}
+
+impl Drop for RuleExprsIter {
+    fn drop(&mut self) {
+        unsafe { sys::nftnl_expr_iter_destroy(self.iter) };
     }
 }
 
