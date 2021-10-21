@@ -86,6 +86,15 @@ macro_rules! nft_expr {
     (immediate $expr:ident $value:expr) => {
         nft_expr_immediate!($expr $value)
     };
+    (log group $group:ident prefix $prefix:expr) => {
+        nft_expr_log!(group $group prefix $prefix)
+    };
+    (log group $group:ident) => {
+        nft_expr_log!(group $group)
+    };
+    (log prefix $prefix:expr) => {
+        nft_expr_log!(prefix $prefix)
+    };
     (log) => {
         nft_expr_log!()
     };
