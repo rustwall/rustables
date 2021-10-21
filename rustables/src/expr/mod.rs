@@ -25,6 +25,7 @@ impl Debug for ExpressionWrapper {
 }
 
 impl ExpressionWrapper {
+    /// Retrieves a textual description of the expression.
     pub fn get_str(&self) -> CString {
         let mut descr_buf = vec![0i8; 4096];
         unsafe {
@@ -39,7 +40,8 @@ impl ExpressionWrapper {
         }
     }
 
-    pub fn get_expr_kind(&self) -> Option<&CStr> {
+    /// Retrieves the type of expression ("log", "counter", ...).
+    pub fn get_kind(&self) -> Option<&CStr> {
         unsafe {
             let ptr = sys::nftnl_expr_get_str(self.expr, sys::NFTNL_EXPR_NAME as u16);
             if !ptr.is_null() {
@@ -48,6 +50,18 @@ impl ExpressionWrapper {
                 None
             }
         }
+    }
+
+    /// Attempt to decode the expression as the type T, returning None if such
+    /// conversion is not possible or failed.
+    pub fn decode_expr<T: Expression>(&self) -> Option<T> {
+        if let Some(kind) = self.get_kind() {
+            let raw_name = unsafe { CStr::from_ptr(T::get_raw_name()) };
+            if kind == raw_name {
+                return T::from_expr(self.expr);
+            }
+        }
+        None
     }
 }
 
