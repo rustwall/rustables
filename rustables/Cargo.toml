@@ -12,6 +12,7 @@ edition = "2018"
 
 [features]
 query = []
+unsafe-raw-handles = []
 nftnl-1-0-7 = ["rustables-sys/nftnl-1-0-7"]
 nftnl-1-0-8 = ["rustables-sys/nftnl-1-0-8"]
 nftnl-1-0-9 = ["rustables-sys/nftnl-1-0-9"]

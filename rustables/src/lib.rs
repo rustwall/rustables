@@ -48,6 +48,25 @@
 //! See the documentation for the corresponding sys crate for details: [`rustables-sys`].
 //! This crate has the same features as the sys crate, and selecting version works the same.
 //!
+//! # Access to raw handles
+//!
+//! Retrieving raw handles is considered unsafe and should only ever be enabled if you absoluetely
+//! need it. It is disabled by default and hidden behind the feature gate `unsafe-raw-handles`.
+//! The reason for that special treatment is we cannot guarantee the lack of aliasing. For example,
+//! a program using a const handle to a object in a thread and writing through a mutable handle
+//! in another could reach all kind of undefined (and dangerous!) behaviors.
+//! By enabling that feature flag, you acknowledge that guaranteeing the respect of safety
+//! invariants is now your responsibility!
+//! Despite these shortcomings, that feature is still available because it may allow you to perform
+//! manipulations that this library doesn't currently expose. If that is your case, we would
+//! be very happy to hear from you and maybe help you get the necessary functionality upstream.
+//!
+//! Our current lack of confidence in our availability to provide a safe abstraction over the
+//! use of raw handles in the face of concurrency is the reason we decided to settly on `Rc`
+//! pointers instead of `Arc` (besides, this should gives us some nice performance boost, not
+//! that it matters much of course) and why we do not declare the types exposes by the library
+//! as `Send` nor `Sync`.
+//!
 //! [`libnftnl`]: https://netfilter.org/projects/libnftnl/
 //! [`nftables`]: https://netfilter.org/projects/nftables/
 //! [`rustables-sys`]: https://crates.io/crates/rustables-sys

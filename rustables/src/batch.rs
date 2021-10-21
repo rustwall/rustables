@@ -27,11 +27,6 @@ pub struct Batch {
     is_empty: bool,
 }
 
-// Safety: It should be safe to pass this around and *read* from it
-// from multiple threads
-unsafe impl Send for Batch {}
-unsafe impl Sync for Batch {}
-
 impl Batch {
     /// Creates a new nftnl batch with the [default page size].
     ///
@@ -120,11 +115,13 @@ impl Batch {
         self.next();
     }
 
+    #[cfg(feature = "unsafe-raw-handles")]
     /// Returns the raw handle.
     pub fn as_ptr(&self) -> *const sys::nftnl_batch {
         self.batch as *const sys::nftnl_batch
     }
 
+    #[cfg(feature = "unsafe-raw-handles")]
     /// Returns a mutable version of the raw handle.
     pub fn as_mut_ptr(&mut self) -> *mut sys::nftnl_batch {
         self.batch
@@ -151,7 +148,7 @@ pub struct FinalizedBatch {
 impl FinalizedBatch {
     /// Returns the iterator over byte buffers to send to netlink.
     pub fn iter(&mut self) -> Iter<'_> {
-        let num_pages = unsafe { sys::nftnl_batch_iovec_len(self.batch.as_mut_ptr()) as usize };
+        let num_pages = unsafe { sys::nftnl_batch_iovec_len(self.batch.batch) as usize };
         let mut iovecs = vec![
             libc::iovec {
                 iov_base: ptr::null_mut(),
@@ -161,7 +158,7 @@ impl FinalizedBatch {
         ];
         let iovecs_ptr = iovecs.as_mut_ptr() as *mut [u8; 0];
         unsafe {
-            sys::nftnl_batch_iovec(self.batch.as_mut_ptr(), iovecs_ptr, num_pages as u32);
+            sys::nftnl_batch_iovec(self.batch.batch, iovecs_ptr, num_pages as u32);
         }
         Iter {
             iovecs: iovecs.into_iter(),
@@ -183,11 +180,6 @@ pub struct Iter<'a> {
     iovecs: ::std::vec::IntoIter<libc::iovec>,
     _marker: ::std::marker::PhantomData<&'a ()>,
 }
-
-// Safety: It should be safe to pass this around and *read* from it
-// from multiple threads.
-unsafe impl<'a> Send for Iter<'a> {}
-unsafe impl<'a> Sync for Iter<'a> {}
 
 impl<'a> Iterator for Iter<'a> {
     type Item = &'a [u8];
