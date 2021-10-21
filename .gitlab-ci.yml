@@ -1,0 +1,29 @@
+# Official language image. Look for the different tagged releases at:
+# https://hub.docker.com/r/library/rust/tags/
+image: "rust:alpine"
+
+# Optional: Install a C compiler, cmake and git into the container.
+# You will often need this when you (or any of your dependencies) depends on C code.
+before_script:
+  - apk update
+  - apk add build-base pkgconf libmnl-dev libmnl-static libnftnl-dev
+
+cache:
+  paths:
+    - target/
+    - cargo/
+
+# Set CARGO_HOME inside the CI directory, otherwise cargo won't use the cache.
+variables:
+  CARGO_HOME: $CI_PROJECT_DIR/cargo
+
+test:cargo:
+  script:
+    # Copy the libnftnl-static lib file that is stored in LFS. Workaround to
+    # be able to compile under alpine musl.
+    - cp ci-fix/libnftnl.a /usr/lib
+    - mkdir -p target cargo
+    - du -sh target cargo
+    - rustc --version && cargo --version
+    - cargo test --workspace --verbose --release
+
