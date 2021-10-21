@@ -19,11 +19,13 @@ impl Counter {
 }
 
 impl Expression for Counter {
+    fn get_raw_name() -> *const c_char {
+        b"counter\0" as *const _ as *const c_char
+    }
+
     fn to_expr(&self, _rule: &Rule) -> *mut sys::nftnl_expr {
         unsafe {
-            let expr = try_alloc!(sys::nftnl_expr_alloc(
-                b"counter\0" as *const _ as *const c_char
-            ));
+            let expr = try_alloc!(sys::nftnl_expr_alloc(Self::get_raw_name()));
             sys::nftnl_expr_set_u64(expr, sys::NFTNL_EXPR_CTR_BYTES as u16, self.nb_bytes);
             sys::nftnl_expr_set_u64(expr, sys::NFTNL_EXPR_CTR_PACKETS as u16, self.nb_packets);
             expr

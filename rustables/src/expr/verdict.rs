@@ -90,9 +90,7 @@ impl Verdict {
         reject_type: RejectionType,
         family: ProtoFamily,
     ) -> *mut sys::nftnl_expr {
-        let expr = try_alloc!(sys::nftnl_expr_alloc(
-            b"reject\0" as *const _ as *const c_char
-        ));
+        let expr = try_alloc!(sys::nftnl_expr_alloc(Self::get_raw_name()));
 
         sys::nftnl_expr_set_u32(
             expr,
@@ -120,6 +118,10 @@ impl Verdict {
 }
 
 impl Expression for Verdict {
+    fn get_raw_name() -> *const libc::c_char {
+        b"reject\0" as *const _ as *const c_char
+    }
+
     fn to_expr(&self, rule: &Rule) -> *mut sys::nftnl_expr {
         let immediate_const = match *self {
             Verdict::Drop => libc::NF_DROP,

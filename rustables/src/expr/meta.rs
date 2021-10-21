@@ -59,11 +59,13 @@ impl Meta {
 }
 
 impl Expression for Meta {
+    fn get_raw_name() -> *const libc::c_char {
+        b"meta\0" as *const _ as *const c_char
+    }
+
     fn to_expr(&self, _rule: &Rule) -> *mut sys::nftnl_expr {
         unsafe {
-            let expr = try_alloc!(sys::nftnl_expr_alloc(
-                b"meta\0" as *const _ as *const c_char
-            ));
+            let expr = try_alloc!(sys::nftnl_expr_alloc(Self::get_raw_name()));
 
             if let Meta::Mark { set: true } = self {
                 sys::nftnl_expr_set_u32(

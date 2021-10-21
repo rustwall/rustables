@@ -21,11 +21,13 @@ impl Lookup {
 }
 
 impl Expression for Lookup {
+    fn get_raw_name() -> *const libc::c_char {
+        b"lookup\0" as *const _ as *const c_char
+    }
+
     fn to_expr(&self, _rule: &Rule) -> *mut sys::nftnl_expr {
         unsafe {
-            let expr = try_alloc!(sys::nftnl_expr_alloc(
-                b"lookup\0" as *const _ as *const c_char
-            ));
+            let expr = try_alloc!(sys::nftnl_expr_alloc(Self::get_raw_name()));
 
             sys::nftnl_expr_set_u32(
                 expr,

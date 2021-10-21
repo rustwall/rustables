@@ -22,9 +22,12 @@ pub struct Nat {
 }
 
 impl Expression for Nat {
+    fn get_raw_name() -> *const libc::c_char {
+        b"nat\0" as *const _ as *const c_char
+    }
+
     fn to_expr(&self, _rule: &Rule) -> *mut sys::nftnl_expr {
-        let expr =
-            try_alloc!(unsafe { sys::nftnl_expr_alloc(b"nat\0" as *const _ as *const c_char) });
+        let expr = try_alloc!(unsafe { sys::nftnl_expr_alloc(Self::get_raw_name()) });
 
         unsafe {
             sys::nftnl_expr_set_u32(expr, sys::NFTNL_EXPR_NAT_TYPE as u16, self.nat_type as u32);

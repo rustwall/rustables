@@ -19,11 +19,13 @@ impl<T> Immediate<T> {
 }
 
 impl<T> Expression for Immediate<T> {
+    fn get_raw_name() -> *const c_char {
+        b"immediate\0" as *const _ as *const c_char
+    }
+
     fn to_expr(&self, _rule: &Rule) -> *mut sys::nftnl_expr {
         unsafe {
-            let expr = try_alloc!(sys::nftnl_expr_alloc(
-                b"immediate\0" as *const _ as *const c_char
-            ));
+            let expr = try_alloc!(sys::nftnl_expr_alloc(Self::get_raw_name()));
 
             sys::nftnl_expr_set_u32(
                 expr,

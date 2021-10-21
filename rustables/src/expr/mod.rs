@@ -53,6 +53,18 @@ impl ExpressionWrapper {
 
 /// Trait for every safe wrapper of an nftables expression.
 pub trait Expression {
+    /// Returns the raw name used by nftables to identify the rule.
+    fn get_raw_name() -> *const libc::c_char;
+
+    /// Try to parse the expression from a raw nftables expression,
+    /// returning None if the attempted parsing failed.
+    fn from_expr(_expr: *const sys::nftnl_expr) -> Option<Self>
+    where
+        Self: Sized,
+    {
+        None
+    }
+
     /// Allocates and returns the low level `nftnl_expr` representation of this expression.
     /// The caller to this method is responsible for freeing the expression.
     fn to_expr(&self, rule: &Rule) -> *mut sys::nftnl_expr;

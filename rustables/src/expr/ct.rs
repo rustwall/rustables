@@ -27,9 +27,13 @@ impl Conntrack {
 }
 
 impl Expression for Conntrack {
+    fn get_raw_name() -> *const c_char {
+        b"ct\0" as *const _ as *const c_char
+    }
+
     fn to_expr(&self, _rule: &Rule) -> *mut sys::nftnl_expr {
         unsafe {
-            let expr = try_alloc!(sys::nftnl_expr_alloc(b"ct\0" as *const _ as *const c_char));
+            let expr = try_alloc!(sys::nftnl_expr_alloc(Self::get_raw_name()));
 
             if let Conntrack::Mark { set: true } = self {
                 sys::nftnl_expr_set_u32(

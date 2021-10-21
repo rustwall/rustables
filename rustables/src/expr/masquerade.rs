@@ -6,7 +6,11 @@ use std::os::raw::c_char;
 pub struct Masquerade;
 
 impl Expression for Masquerade {
+    fn get_raw_name() -> *const sys::libc::c_char {
+        b"masq\0" as *const _ as *const c_char
+    }
+
     fn to_expr(&self, _rule: &Rule) -> *mut sys::nftnl_expr {
-        try_alloc!(unsafe { sys::nftnl_expr_alloc(b"masq\0" as *const _ as *const c_char) })
+        try_alloc!(unsafe { sys::nftnl_expr_alloc(Self::get_raw_name()) })
     }
 }

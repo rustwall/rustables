@@ -55,9 +55,13 @@ impl<T: ToSlice> Cmp<T> {
 }
 
 impl<T: ToSlice> Expression for Cmp<T> {
+    fn get_raw_name() -> *const c_char {
+        b"cmp\0" as *const _ as *const c_char
+    }
+
     fn to_expr(&self, _rule: &Rule) -> *mut sys::nftnl_expr {
         unsafe {
-            let expr = try_alloc!(sys::nftnl_expr_alloc(b"cmp\0" as *const _ as *const c_char));
+            let expr = try_alloc!(sys::nftnl_expr_alloc(Self::get_raw_name()));
 
             let data = self.data.to_slice();
             trace!("Creating a cmp expr comparing with data {:?}", data);
