@@ -2,6 +2,7 @@ use super::{Expression, Rule};
 use rustables_sys as sys;
 use std::os::raw::c_char;
 use std::ffi::CString;
+use thiserror::Error;
 
 /// A Log expression will log all packets that match the rule.
 pub struct Log {
@@ -35,6 +36,12 @@ impl Expression for Log {
     }
 }
 
+#[derive(Error, Debug)]
+pub enum LogPrefixError {
+    #[error("The log prefix string is more than 128 characters long")]
+    TooLongPrefix,
+    #[error("The log prefix string contains an invalid Nul character.")]
+    PrefixContainsANul(#[from] std::ffi::NulError)
 
 }
 
@@ -47,13 +54,13 @@ pub struct LogGroup(pub u16);
 pub struct LogPrefix(pub CString);
 
 impl LogPrefix {
-    /// Create a new LogPrefix from a String. Converts it to CString as needed by nftables.
-    pub fn new(prefix: &str) -> Result<Self, std::ffi::NulError> {
-        // TODO check for prefix size constraints.
-        match CString::new(prefix) {
-            Ok(string) => Ok(LogPrefix(string)),
-            Err(error)=> Err(error)
+    /// Create a new LogPrefix from a String. Converts it to CString as needed by nftnl. Note
+    /// that LogPrefix should not be more than 127 characters long.
+    pub fn new(prefix: &str) -> Result<Self, LogPrefixError> {
+        if prefix.chars().count() > 127 {
+            return Err(LogPrefixError::TooLongPrefix)
         }
+        Ok(LogPrefix(CString::new(prefix)?))
     }
 }
 
