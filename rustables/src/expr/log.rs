@@ -15,11 +15,11 @@ impl Expression for Log {
             let expr = try_alloc!(sys::nftnl_expr_alloc(
                 b"log\0" as *const _ as *const c_char
             ));
-            if let Some(group) = self.group {
+            if let Some(log_group) = self.group {
                 sys::nftnl_expr_set_u32(
                     expr,
                     sys::NFTNL_EXPR_LOG_GROUP as u16,
-                    group as u32,
+                    log_group.0 as u32,
                 );
             };
             if let Some(LogPrefix(prefix)) = &self.prefix {
@@ -36,18 +36,11 @@ impl Expression for Log {
 }
 
 
-/// Enumeration of possible NFLOG groups.
-#[derive(Debug, Clone, Copy, Eq, PartialEq, Hash)]
-pub enum LogGroup {
-    LogGroupZero,
-    LogGroupOne,
-    LogGroupTwo,
-    LogGroupThree,
-    LogGroupFour,
-    LogGroupFive,
-    LogGroupSix,
-    LogGroupSeven,
 }
+
+/// The NFLOG group that will be assigned to each log line.
+#[derive(Debug, Clone, Copy, Eq, PartialEq, Hash)]
+pub struct LogGroup(pub u16);
 
 /// A prefix that will get prepended to each log line.
 #[derive(Clone)]
