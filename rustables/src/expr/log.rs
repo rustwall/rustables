@@ -1,10 +1,11 @@
 use super::{Expression, Rule};
 use rustables_sys as sys;
-use std::ffi::CString;
+use std::ffi::{CStr, CString};
 use std::os::raw::c_char;
 use thiserror::Error;
 
 /// A Log expression will log all packets that match the rule.
+#[derive(Debug, PartialEq)]
 pub struct Log {
     pub group: Option<LogGroup>,
     pub prefix: Option<LogPrefix>,
@@ -13,6 +14,31 @@ pub struct Log {
 impl Expression for Log {
     fn get_raw_name() -> *const sys::libc::c_char {
         b"log\0" as *const _ as *const c_char
+    }
+
+    fn from_expr(expr: *const sys::nftnl_expr) -> Option<Self>
+    where
+        Self: Sized,
+    {
+        unsafe {
+            let mut group = None;
+            if sys::nftnl_expr_is_set(expr, sys::NFTNL_EXPR_LOG_GROUP as u16) {
+                group = Some(LogGroup(sys::nftnl_expr_get_u32(
+                    expr,
+                    sys::NFTNL_EXPR_LOG_GROUP as u16,
+                ) as u16));
+            }
+            let mut prefix = None;
+            if sys::nftnl_expr_is_set(expr, sys::NFTNL_EXPR_LOG_PREFIX as u16) {
+                let raw_prefix = sys::nftnl_expr_get_str(expr, sys::NFTNL_EXPR_LOG_PREFIX as u16);
+                if raw_prefix.is_null() {
+                    trace!("Unexpected empty prefix in a 'log' expression");
+                } else {
+                    prefix = Some(LogPrefix(CStr::from_ptr(raw_prefix).to_owned()));
+                }
+            }
+            Some(Log { group, prefix })
+        }
     }
 
     fn to_expr(&self, _rule: &Rule) -> *mut sys::nftnl_expr {

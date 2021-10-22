@@ -1,9 +1,10 @@
 use super::{Expression, Rule};
 use crate::set::Set;
 use rustables_sys::{self as sys, libc};
-use std::ffi::CString;
+use std::ffi::{CStr, CString};
 use std::os::raw::c_char;
 
+#[derive(Debug, PartialEq)]
 pub struct Lookup {
     set_name: CString,
     set_id: u32,
@@ -23,6 +24,24 @@ impl Lookup {
 impl Expression for Lookup {
     fn get_raw_name() -> *const libc::c_char {
         b"lookup\0" as *const _ as *const c_char
+    }
+
+    fn from_expr(expr: *const sys::nftnl_expr) -> Option<Self>
+    where
+        Self: Sized,
+    {
+        unsafe {
+            let set_name = sys::nftnl_expr_get_str(expr, sys::NFTNL_EXPR_LOOKUP_SET as u16);
+            let set_id = sys::nftnl_expr_get_u32(expr, sys::NFTNL_EXPR_LOOKUP_SET_ID as u16);
+
+            if set_name.is_null() {
+                return None;
+            }
+
+            let set_name = CStr::from_ptr(set_name).to_owned();
+
+            Some(Lookup { set_id, set_name })
+        }
     }
 
     fn to_expr(&self, _rule: &Rule) -> *mut sys::nftnl_expr {

@@ -10,6 +10,7 @@ use thiserror::Error;
 #[error("Error while communicating with netlink")]
 pub struct NetlinkError(());
 
+#[cfg(feature = "query")]
 /// Check if the kernel supports batched netlink messages to netfilter.
 pub fn batch_is_supported() -> std::result::Result<bool, NetlinkError> {
     match unsafe { sys::nftnl_batch_is_supported() } {

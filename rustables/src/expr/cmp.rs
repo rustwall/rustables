@@ -9,7 +9,7 @@ use std::{
 };
 
 /// Comparison operator.
-#[derive(Copy, Clone, Eq, PartialEq)]
+#[derive(Debug, Copy, Clone, Eq, PartialEq)]
 pub enum CmpOp {
     /// Equals.
     Eq,
@@ -38,9 +38,23 @@ impl CmpOp {
             Gte => libc::NFT_CMP_GTE as u32,
         }
     }
+
+    pub fn from_raw(val: u32) -> Option<Self> {
+        use self::CmpOp::*;
+        match val as i32 {
+            libc::NFT_CMP_EQ => Some(Eq),
+            libc::NFT_CMP_NEQ => Some(Neq),
+            libc::NFT_CMP_LT => Some(Lt),
+            libc::NFT_CMP_LTE => Some(Lte),
+            libc::NFT_CMP_GT => Some(Gt),
+            libc::NFT_CMP_GTE => Some(Gte),
+            _ => None,
+        }
+    }
 }
 
 /// Comparator expression. Allows comparing the content of the netfilter register with any value.
+#[derive(Debug, PartialEq)]
 pub struct Cmp<T: ToSlice> {
     op: CmpOp,
     data: T,
@@ -54,9 +68,40 @@ impl<T: ToSlice> Cmp<T> {
     }
 }
 
-impl<T: ToSlice> Expression for Cmp<T> {
+impl<T: ToSlice + Copy> Expression for Cmp<T> {
     fn get_raw_name() -> *const c_char {
         b"cmp\0" as *const _ as *const c_char
+    }
+
+    fn from_expr(expr: *const sys::nftnl_expr) -> Option<Self>
+    where
+        Self: Sized,
+    {
+        unsafe {
+            let ref_len = std::mem::size_of::<T>() as u32;
+            let mut data_len = 0;
+            let data = sys::nftnl_expr_get(
+                expr,
+                sys::NFTNL_EXPR_CMP_DATA as u16,
+                &mut data_len as *mut u32,
+            );
+
+            if data.is_null() {
+                return None;
+            } else if data_len != ref_len {
+                debug!("Invalid size requested for deserializing a 'cmp' expression: expected {} bytes, got {}", ref_len, data_len);
+                return None;
+            }
+
+            // Warning: this is *very* dangerous safety wise if the user supply us with
+            // a type that have the same size as T but a different memory layout.
+            // Is there a better way? And if there isn't, shouldn't we gate this behind
+            // an "unsafe" boundary?
+            let data = *(data as *const T);
+
+            let op = CmpOp::from_raw(sys::nftnl_expr_get_u32(expr, sys::NFTNL_EXPR_CMP_OP as u16));
+            op.map(|op| Cmp { op, data })
+        }
     }
 
     fn to_expr(&self, _rule: &Rule) -> *mut sys::nftnl_expr {

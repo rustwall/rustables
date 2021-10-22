@@ -1,7 +1,8 @@
 use crate::{MsgType, Table};
 use rustables_sys::{self as sys, libc};
+#[cfg(feature = "query")]
+use std::convert::TryFrom;
 use std::{
-    convert::TryFrom,
     ffi::{c_void, CStr, CString},
     fmt,
     os::raw::c_char,

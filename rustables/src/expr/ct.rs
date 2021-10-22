@@ -31,6 +31,24 @@ impl Expression for Conntrack {
         b"ct\0" as *const _ as *const c_char
     }
 
+    fn from_expr(expr: *const sys::nftnl_expr) -> Option<Self>
+    where
+        Self: Sized,
+    {
+        unsafe {
+            let ct_key = sys::nftnl_expr_get_u32(expr, sys::NFTNL_EXPR_CT_KEY as u16);
+            let ct_sreg_is_set = sys::nftnl_expr_is_set(expr, sys::NFTNL_EXPR_CT_SREG as u16);
+
+            match ct_key as i32 {
+                libc::NFT_CT_STATE => Some(Conntrack::State),
+                libc::NFT_CT_MARK => Some(Conntrack::Mark {
+                    set: ct_sreg_is_set,
+                }),
+                _ => None,
+            }
+        }
+    }
+
     fn to_expr(&self, _rule: &Rule) -> *mut sys::nftnl_expr {
         unsafe {
             let expr = try_alloc!(sys::nftnl_expr_alloc(Self::get_raw_name()));
