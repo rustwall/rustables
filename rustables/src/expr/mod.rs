@@ -39,11 +39,14 @@ pub use self::nat::*;
 mod payload;
 pub use self::payload::*;
 
-mod verdict;
-pub use self::verdict::*;
+mod reject;
+pub use self::reject::{IcmpCode, Reject};
 
 mod register;
 pub use self::register::Register;
+
+mod verdict;
+pub use self::verdict::*;
 
 mod wrapper;
 pub use self::wrapper::ExpressionWrapper;
