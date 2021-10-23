@@ -1,4 +1,4 @@
-use super::{Expression, Register, Rule};
+use super::{Expression, Register, Rule, ToSlice};
 use rustables_sys as sys;
 use std::ffi::c_void;
 use std::mem::size_of_val;
@@ -18,45 +18,9 @@ impl<T> Immediate<T> {
     }
 }
 
-// The Copy requirement is present to allow us to dereference the newly created raw pointer in `from_expr`
-impl<T: Copy> Expression for Immediate<T> {
+impl<T: ToSlice> Expression for Immediate<T> {
     fn get_raw_name() -> *const c_char {
         b"immediate\0" as *const _ as *const c_char
-    }
-
-    fn from_expr(expr: *const sys::nftnl_expr) -> Option<Self>
-    where
-        Self: Sized,
-    {
-        unsafe {
-            let ref_len = std::mem::size_of::<T>() as u32;
-            let mut data_len = 0;
-            let data = sys::nftnl_expr_get(
-                expr,
-                sys::NFTNL_EXPR_IMM_DATA as u16,
-                &mut data_len as *mut u32,
-            );
-
-            if data.is_null() {
-                return None;
-            } else if data_len != ref_len {
-                debug!("Invalid size requested for deserializing an 'immediate' expression: expected {} bytes, got {}", ref_len, data_len);
-                return None;
-            }
-
-            // Warning: this is *very* dangerous safety wise if the user supply us with
-            // a type that have the same size as T but a different memory layout.
-            // Is there a better way? And if there isn't, shouldn't we gate this behind
-            // an "unsafe" boundary?
-            let data = *(data as *const T);
-
-            let register = Register::from_raw(sys::nftnl_expr_get_u32(
-                expr,
-                sys::NFTNL_EXPR_IMM_DREG as u16,
-            ));
-
-            register.map(|register| Immediate { data, register })
-        }
     }
 
     fn to_expr(&self, _rule: &Rule) -> *mut sys::nftnl_expr {
@@ -72,11 +36,91 @@ impl<T: Copy> Expression for Immediate<T> {
             sys::nftnl_expr_set(
                 expr,
                 sys::NFTNL_EXPR_IMM_DATA as u16,
-                &self.data as *const _ as *const c_void,
+                &self.data.to_slice() as *const _ as *const c_void,
                 size_of_val(&self.data) as u32,
             );
 
             expr
+        }
+    }
+}
+
+impl<const N: usize> Expression for Immediate<[u8; N]> {
+    fn get_raw_name() -> *const c_char {
+        Immediate::<u8>::get_raw_name()
+    }
+
+    // As casting bytes to any type of the same size as the input would
+    // be *extremely* dangerous in terms of memory safety,
+    // rustables only accept to deserialize expressions with variable-size data
+    // to arrays of bytes, so that the memory layout cannot be invalid.
+    fn from_expr(expr: *const sys::nftnl_expr) -> Option<Self> {
+        unsafe {
+            let ref_len = std::mem::size_of::<[u8; N]>() as u32;
+            let mut data_len = 0;
+            let data = sys::nftnl_expr_get(
+                expr,
+                sys::NFTNL_EXPR_IMM_DATA as u16,
+                &mut data_len as *mut u32,
+            );
+
+            if data.is_null() {
+                return None;
+            } else if data_len != ref_len {
+                debug!("Invalid size requested for deserializing an 'immediate' expression: expected {} bytes, got {}", ref_len, data_len);
+                return None;
+            }
+
+            let data = *(data as *const [u8; N]);
+
+            let register = Register::from_raw(sys::nftnl_expr_get_u32(
+                expr,
+                sys::NFTNL_EXPR_IMM_DREG as u16,
+            ));
+
+            register.map(|register| Immediate { data, register })
+        }
+    }
+
+    // call to the other implementation to generate the expression
+    fn to_expr(&self, rule: &Rule) -> *mut sys::nftnl_expr {
+        Immediate {
+            register: self.register,
+            data: self.data.as_ref(),
+        }
+        .to_expr(rule)
+    }
+}
+// As casting bytes to any type of the same size as the input would
+// be *extremely* dangerous in terms of memory safety,
+// rustables only accept to deserialize expressions with variable-size data
+// to arrays of bytes, so that the memory layout cannot be invalid.
+impl<const N: usize> Immediate<[u8; N]> {
+    pub fn from_expr(expr: *const sys::nftnl_expr) -> Option<Self> {
+        unsafe {
+            let ref_len = std::mem::size_of::<[u8; N]>() as u32;
+            let mut data_len = 0;
+            let data = sys::nftnl_expr_get(
+                expr,
+                sys::NFTNL_EXPR_IMM_DATA as u16,
+                &mut data_len as *mut u32,
+            );
+
+            if data.is_null() {
+                return None;
+            } else if data_len != ref_len {
+                debug!("Invalid size requested for deserializing an 'immediate' expression: expected {} bytes, got {}", ref_len, data_len);
+                return None;
+            }
+
+            let data = *(data as *const [u8; N]);
+
+            let register = Register::from_raw(sys::nftnl_expr_get_u32(
+                expr,
+                sys::NFTNL_EXPR_IMM_DREG as u16,
+            ));
+
+            register.map(|register| Immediate { data, register })
         }
     }
 }

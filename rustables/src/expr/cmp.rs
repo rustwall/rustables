@@ -55,7 +55,7 @@ impl CmpOp {
 
 /// Comparator expression. Allows comparing the content of the netfilter register with any value.
 #[derive(Debug, PartialEq)]
-pub struct Cmp<T: ToSlice> {
+pub struct Cmp<T> {
     op: CmpOp,
     data: T,
 }
@@ -68,40 +68,9 @@ impl<T: ToSlice> Cmp<T> {
     }
 }
 
-impl<T: ToSlice + Copy> Expression for Cmp<T> {
+impl<T: ToSlice> Expression for Cmp<T> {
     fn get_raw_name() -> *const c_char {
         b"cmp\0" as *const _ as *const c_char
-    }
-
-    fn from_expr(expr: *const sys::nftnl_expr) -> Option<Self>
-    where
-        Self: Sized,
-    {
-        unsafe {
-            let ref_len = std::mem::size_of::<T>() as u32;
-            let mut data_len = 0;
-            let data = sys::nftnl_expr_get(
-                expr,
-                sys::NFTNL_EXPR_CMP_DATA as u16,
-                &mut data_len as *mut u32,
-            );
-
-            if data.is_null() {
-                return None;
-            } else if data_len != ref_len {
-                debug!("Invalid size requested for deserializing a 'cmp' expression: expected {} bytes, got {}", ref_len, data_len);
-                return None;
-            }
-
-            // Warning: this is *very* dangerous safety wise if the user supply us with
-            // a type that have the same size as T but a different memory layout.
-            // Is there a better way? And if there isn't, shouldn't we gate this behind
-            // an "unsafe" boundary?
-            let data = *(data as *const T);
-
-            let op = CmpOp::from_raw(sys::nftnl_expr_get_u32(expr, sys::NFTNL_EXPR_CMP_OP as u16));
-            op.map(|op| Cmp { op, data })
-        }
     }
 
     fn to_expr(&self, _rule: &Rule) -> *mut sys::nftnl_expr {
@@ -126,6 +95,49 @@ impl<T: ToSlice + Copy> Expression for Cmp<T> {
 
             expr
         }
+    }
+}
+
+impl<const N: usize> Expression for Cmp<[u8; N]> {
+    fn get_raw_name() -> *const c_char {
+        Cmp::<u8>::get_raw_name()
+    }
+
+    // As casting bytes to any type of the same size as the input would
+    // be *extremely* dangerous in terms of memory safety,
+    // rustables only accept to deserialize expressions with variable-size data
+    // to arrays of bytes, so that the memory layout cannot be invalid.
+    fn from_expr(expr: *const sys::nftnl_expr) -> Option<Self> {
+        unsafe {
+            let ref_len = std::mem::size_of::<[u8; N]>() as u32;
+            let mut data_len = 0;
+            let data = sys::nftnl_expr_get(
+                expr,
+                sys::NFTNL_EXPR_CMP_DATA as u16,
+                &mut data_len as *mut u32,
+            );
+
+            if data.is_null() {
+                return None;
+            } else if data_len != ref_len {
+                debug!("Invalid size requested for deserializing a 'cmp' expression: expected {} bytes, got {}", ref_len, data_len);
+                return None;
+            }
+
+            let data = *(data as *const [u8; N]);
+
+            let op = CmpOp::from_raw(sys::nftnl_expr_get_u32(expr, sys::NFTNL_EXPR_CMP_OP as u16));
+            op.map(|op| Cmp { op, data })
+        }
+    }
+
+    // call to the other implementation to generate the expression
+    fn to_expr(&self, rule: &Rule) -> *mut sys::nftnl_expr {
+        Cmp {
+            data: self.data.as_ref(),
+            op: self.op,
+        }
+        .to_expr(rule)
     }
 }
 
@@ -158,12 +170,6 @@ macro_rules! nft_expr_cmp {
 pub trait ToSlice {
     /// Returns the data this type represents.
     fn to_slice(&self) -> Cow<'_, [u8]>;
-}
-
-impl<'a> ToSlice for [u8; 0] {
-    fn to_slice(&self) -> Cow<'_, [u8]> {
-        Cow::Borrowed(&[])
-    }
 }
 
 impl<'a> ToSlice for &'a [u8] {
