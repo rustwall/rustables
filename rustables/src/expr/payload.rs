@@ -8,7 +8,7 @@ trait HeaderField {
 }
 
 /// Payload expressions refer to data from the packet's payload.
-#[derive(Copy, Clone, Eq, PartialEq)]
+#[derive(Debug, Copy, Clone, Eq, PartialEq)]
 pub enum Payload {
     LinkLayer(LLHeaderField),
     Network(NetworkHeaderField),
@@ -16,38 +16,97 @@ pub enum Payload {
 }
 
 impl Payload {
-    fn base(self) -> u32 {
-        match self {
-            Payload::LinkLayer(_) => libc::NFT_PAYLOAD_LL_HEADER as u32,
-            Payload::Network(_) => libc::NFT_PAYLOAD_NETWORK_HEADER as u32,
-            Payload::Transport(_) => libc::NFT_PAYLOAD_TRANSPORT_HEADER as u32,
-        }
-    }
-}
-
-impl HeaderField for Payload {
-    fn offset(&self) -> u32 {
-        use self::Payload::*;
+    pub fn build(&self) -> RawPayload {
         match *self {
-            LinkLayer(ref f) => f.offset(),
-            Network(ref f) => f.offset(),
-            Transport(ref f) => f.offset(),
-        }
-    }
-
-    fn len(&self) -> u32 {
-        use self::Payload::*;
-        match *self {
-            LinkLayer(ref f) => f.len(),
-            Network(ref f) => f.len(),
-            Transport(ref f) => f.len(),
+            Payload::LinkLayer(ref f) => RawPayload::LinkLayer(RawPayloadData {
+                offset: f.offset(),
+                len: f.len(),
+            }),
+            Payload::Network(ref f) => RawPayload::LinkLayer(RawPayloadData {
+                offset: f.offset(),
+                len: f.len(),
+            }),
+            Payload::Transport(ref f) => RawPayload::LinkLayer(RawPayloadData {
+                offset: f.offset(),
+                len: f.offset(),
+            }),
         }
     }
 }
 
 impl Expression for Payload {
     fn get_raw_name() -> *const libc::c_char {
+        RawPayload::get_raw_name()
+    }
+
+    fn to_expr(&self, rule: &Rule) -> *mut sys::nftnl_expr {
+        self.build().to_expr(rule)
+    }
+}
+
+#[derive(Debug, Copy, Clone, Eq, PartialEq)]
+pub struct RawPayloadData {
+    offset: u32,
+    len: u32,
+}
+
+/// Because deserializing a `Payload` expression is not possible (there is not enough information
+/// in the expression itself, this enum should be used to deserialize payloads.
+#[derive(Debug, Copy, Clone, Eq, PartialEq)]
+pub enum RawPayload {
+    LinkLayer(RawPayloadData),
+    Network(RawPayloadData),
+    Transport(RawPayloadData),
+}
+
+impl RawPayload {
+    fn base(&self) -> u32 {
+        match self {
+            Self::LinkLayer(_) => libc::NFT_PAYLOAD_LL_HEADER as u32,
+            Self::Network(_) => libc::NFT_PAYLOAD_NETWORK_HEADER as u32,
+            Self::Transport(_) => libc::NFT_PAYLOAD_TRANSPORT_HEADER as u32,
+        }
+    }
+}
+
+impl HeaderField for RawPayload {
+    fn offset(&self) -> u32 {
+        match self {
+            Self::LinkLayer(ref f) | Self::Network(ref f) | Self::Transport(ref f) => f.offset,
+        }
+    }
+
+    fn len(&self) -> u32 {
+        match self {
+            Self::LinkLayer(ref f) | Self::Network(ref f) | Self::Transport(ref f) => f.len,
+        }
+    }
+}
+
+impl Expression for RawPayload {
+    fn get_raw_name() -> *const libc::c_char {
         b"payload\0" as *const _ as *const c_char
+    }
+
+    fn from_expr(expr: *const sys::nftnl_expr) -> Option<Self> {
+        unsafe {
+            let base = sys::nftnl_expr_get_u32(expr, sys::NFTNL_EXPR_PAYLOAD_BASE as u16);
+            let offset = sys::nftnl_expr_get_u32(expr, sys::NFTNL_EXPR_PAYLOAD_OFFSET as u16);
+            let len = sys::nftnl_expr_get_u32(expr, sys::NFTNL_EXPR_PAYLOAD_LEN as u16);
+            match base as i32 {
+                libc::NFT_PAYLOAD_LL_HEADER => {
+                    Some(Self::LinkLayer(RawPayloadData { offset, len }))
+                }
+                libc::NFT_PAYLOAD_NETWORK_HEADER => {
+                    Some(Self::Network(RawPayloadData { offset, len }))
+                }
+                libc::NFT_PAYLOAD_TRANSPORT_HEADER => {
+                    Some(Self::Transport(RawPayloadData { offset, len }))
+                }
+
+                _ => return None,
+            }
+        }
     }
 
     fn to_expr(&self, _rule: &Rule) -> *mut sys::nftnl_expr {
@@ -68,7 +127,7 @@ impl Expression for Payload {
     }
 }
 
-#[derive(Copy, Clone, Eq, PartialEq)]
+#[derive(Debug, Copy, Clone, Eq, PartialEq)]
 #[non_exhaustive]
 pub enum LLHeaderField {
     Daddr,
@@ -96,7 +155,24 @@ impl HeaderField for LLHeaderField {
     }
 }
 
-#[derive(Copy, Clone, Eq, PartialEq)]
+impl LLHeaderField {
+    pub fn from_raw_data(data: &RawPayloadData) -> Option<Self> {
+        let off = data.offset;
+        let len = data.len;
+
+        if off == 0 && len == 6 {
+            Some(Self::Daddr)
+        } else if off == 6 && len == 6 {
+            Some(Self::Saddr)
+        } else if off == 12 && len == 2 {
+            Some(Self::EtherType)
+        } else {
+            None
+        }
+    }
+}
+
+#[derive(Debug, Copy, Clone, Eq, PartialEq)]
 pub enum NetworkHeaderField {
     Ipv4(Ipv4HeaderField),
     Ipv6(Ipv6HeaderField),
@@ -120,7 +196,7 @@ impl HeaderField for NetworkHeaderField {
     }
 }
 
-#[derive(Copy, Clone, Eq, PartialEq)]
+#[derive(Debug, Copy, Clone, Eq, PartialEq)]
 #[non_exhaustive]
 pub enum Ipv4HeaderField {
     Ttl,
@@ -151,7 +227,26 @@ impl HeaderField for Ipv4HeaderField {
     }
 }
 
-#[derive(Copy, Clone, Eq, PartialEq)]
+impl Ipv4HeaderField {
+    pub fn from_raw_data(data: &RawPayloadData) -> Option<Self> {
+        let off = data.offset;
+        let len = data.len;
+
+        if off == 8 && len == 1 {
+            Some(Self::Ttl)
+        } else if off == 9 && len == 1 {
+            Some(Self::Protocol)
+        } else if off == 12 && len == 4 {
+            Some(Self::Saddr)
+        } else if off == 16 && len == 4 {
+            Some(Self::Daddr)
+        } else {
+            None
+        }
+    }
+}
+
+#[derive(Debug, Copy, Clone, Eq, PartialEq)]
 #[non_exhaustive]
 pub enum Ipv6HeaderField {
     NextHeader,
@@ -182,7 +277,26 @@ impl HeaderField for Ipv6HeaderField {
     }
 }
 
-#[derive(Copy, Clone, Eq, PartialEq)]
+impl Ipv6HeaderField {
+    pub fn from_raw_data(data: &RawPayloadData) -> Option<Self> {
+        let off = data.offset;
+        let len = data.len;
+
+        if off == 6 && len == 1 {
+            Some(Self::NextHeader)
+        } else if off == 7 && len == 1 {
+            Some(Self::HopLimit)
+        } else if off == 8 && len == 16 {
+            Some(Self::Saddr)
+        } else if off == 24 && len == 16 {
+            Some(Self::Daddr)
+        } else {
+            None
+        }
+    }
+}
+
+#[derive(Debug, Copy, Clone, Eq, PartialEq)]
 #[non_exhaustive]
 pub enum TransportHeaderField {
     Tcp(TcpHeaderField),
@@ -210,7 +324,7 @@ impl HeaderField for TransportHeaderField {
     }
 }
 
-#[derive(Copy, Clone, Eq, PartialEq)]
+#[derive(Debug, Copy, Clone, Eq, PartialEq)]
 #[non_exhaustive]
 pub enum TcpHeaderField {
     Sport,
@@ -235,7 +349,22 @@ impl HeaderField for TcpHeaderField {
     }
 }
 
-#[derive(Copy, Clone, Eq, PartialEq)]
+impl TcpHeaderField {
+    pub fn from_raw_data(data: &RawPayloadData) -> Option<Self> {
+        let off = data.offset;
+        let len = data.len;
+
+        if off == 0 && len == 2 {
+            Some(Self::Sport)
+        } else if off == 2 && len == 2 {
+            Some(Self::Dport)
+        } else {
+            None
+        }
+    }
+}
+
+#[derive(Debug, Copy, Clone, Eq, PartialEq)]
 #[non_exhaustive]
 pub enum UdpHeaderField {
     Sport,
@@ -263,7 +392,24 @@ impl HeaderField for UdpHeaderField {
     }
 }
 
-#[derive(Copy, Clone, Eq, PartialEq)]
+impl UdpHeaderField {
+    pub fn from_raw_data(data: &RawPayloadData) -> Option<Self> {
+        let off = data.offset;
+        let len = data.len;
+
+        if off == 0 && len == 2 {
+            Some(Self::Sport)
+        } else if off == 2 && len == 2 {
+            Some(Self::Dport)
+        } else if off == 4 && len == 2 {
+            Some(Self::Len)
+        } else {
+            None
+        }
+    }
+}
+
+#[derive(Debug, Copy, Clone, Eq, PartialEq)]
 #[non_exhaustive]
 pub enum Icmpv6HeaderField {
     Type,
@@ -287,6 +433,23 @@ impl HeaderField for Icmpv6HeaderField {
             Type => 1,
             Code => 1,
             Checksum => 2,
+        }
+    }
+}
+
+impl Icmpv6HeaderField {
+    pub fn from_raw_data(data: &RawPayloadData) -> Option<Self> {
+        let off = data.offset;
+        let len = data.len;
+
+        if off == 0 && len == 1 {
+            Some(Self::Type)
+        } else if off == 1 && len == 1 {
+            Some(Self::Code)
+        } else if off == 2 && len == 2 {
+            Some(Self::Checksum)
+        } else {
+            None
         }
     }
 }
