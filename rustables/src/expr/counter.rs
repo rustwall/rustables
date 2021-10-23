@@ -1,4 +1,4 @@
-use super::{Expression, Rule};
+use super::{DeserializationError, Expression, Rule};
 use rustables_sys as sys;
 use std::os::raw::c_char;
 
@@ -24,11 +24,11 @@ impl Expression for Counter {
         b"counter\0" as *const _ as *const c_char
     }
 
-    fn from_expr(expr: *const sys::nftnl_expr) -> Option<Self> {
+    fn from_expr(expr: *const sys::nftnl_expr) -> Result<Self, DeserializationError> {
         unsafe {
             let nb_bytes = sys::nftnl_expr_get_u64(expr, sys::NFTNL_EXPR_CTR_BYTES as u16);
             let nb_packets = sys::nftnl_expr_get_u64(expr, sys::NFTNL_EXPR_CTR_PACKETS as u16);
-            Some(Counter {
+            Ok(Counter {
                 nb_bytes,
                 nb_packets,
             })

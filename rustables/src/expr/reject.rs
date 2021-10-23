@@ -1,4 +1,4 @@
-use super::{Expression, Rule};
+use super::{DeserializationError, Expression, Rule};
 use crate::ProtoFamily;
 use rustables_sys::{
     self as sys,
@@ -34,7 +34,7 @@ impl Expression for Reject {
         b"reject\0" as *const _ as *const c_char
     }
 
-    fn from_expr(expr: *const sys::nftnl_expr) -> Option<Self>
+    fn from_expr(expr: *const sys::nftnl_expr) -> Result<Self, DeserializationError>
     where
         Self: Sized,
     {
@@ -42,13 +42,12 @@ impl Expression for Reject {
             if sys::nftnl_expr_get_u32(expr, sys::NFTNL_EXPR_REJECT_TYPE as u16)
                 == libc::NFT_REJECT_TCP_RST as u32
             {
-                Some(Self::TcpRst)
+                Ok(Self::TcpRst)
             } else {
-                IcmpCode::from_raw(sys::nftnl_expr_get_u8(
+                Ok(Self::Icmp(IcmpCode::from_raw(sys::nftnl_expr_get_u8(
                     expr,
                     sys::NFTNL_EXPR_REJECT_CODE as u16,
-                ))
-                .map(Self::Icmp)
+                ))?))
             }
         }
     }
@@ -88,13 +87,13 @@ pub enum IcmpCode {
 }
 
 impl IcmpCode {
-    fn from_raw(code: u8) -> Option<Self> {
+    fn from_raw(code: u8) -> Result<Self, DeserializationError> {
         match code as i32 {
-            libc::NFT_REJECT_ICMPX_NO_ROUTE => Some(Self::NoRoute),
-            libc::NFT_REJECT_ICMPX_PORT_UNREACH => Some(Self::PortUnreach),
-            libc::NFT_REJECT_ICMPX_HOST_UNREACH => Some(Self::HostUnreach),
-            libc::NFT_REJECT_ICMPX_ADMIN_PROHIBITED => Some(Self::AdminProhibited),
-            _ => None,
+            libc::NFT_REJECT_ICMPX_NO_ROUTE => Ok(Self::NoRoute),
+            libc::NFT_REJECT_ICMPX_PORT_UNREACH => Ok(Self::PortUnreach),
+            libc::NFT_REJECT_ICMPX_HOST_UNREACH => Ok(Self::HostUnreach),
+            libc::NFT_REJECT_ICMPX_ADMIN_PROHIBITED => Ok(Self::AdminProhibited),
+            _ => Err(DeserializationError::InvalidValue),
         }
     }
 }

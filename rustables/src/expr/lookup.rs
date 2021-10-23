@@ -1,4 +1,4 @@
-use super::{Expression, Rule};
+use super::{DeserializationError, Expression, Rule};
 use crate::set::Set;
 use rustables_sys::{self as sys, libc};
 use std::ffi::{CStr, CString};
@@ -26,7 +26,7 @@ impl Expression for Lookup {
         b"lookup\0" as *const _ as *const c_char
     }
 
-    fn from_expr(expr: *const sys::nftnl_expr) -> Option<Self>
+    fn from_expr(expr: *const sys::nftnl_expr) -> Result<Self, DeserializationError>
     where
         Self: Sized,
     {
@@ -35,12 +35,12 @@ impl Expression for Lookup {
             let set_id = sys::nftnl_expr_get_u32(expr, sys::NFTNL_EXPR_LOOKUP_SET_ID as u16);
 
             if set_name.is_null() {
-                return None;
+                return Err(DeserializationError::NullPointer);
             }
 
             let set_name = CStr::from_ptr(set_name).to_owned();
 
-            Some(Lookup { set_id, set_name })
+            Ok(Lookup { set_id, set_name })
         }
     }
 

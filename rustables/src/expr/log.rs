@@ -1,4 +1,4 @@
-use super::{Expression, Rule};
+use super::{DeserializationError, Expression, Rule};
 use rustables_sys as sys;
 use std::ffi::{CStr, CString};
 use std::os::raw::c_char;
@@ -16,7 +16,7 @@ impl Expression for Log {
         b"log\0" as *const _ as *const c_char
     }
 
-    fn from_expr(expr: *const sys::nftnl_expr) -> Option<Self>
+    fn from_expr(expr: *const sys::nftnl_expr) -> Result<Self, DeserializationError>
     where
         Self: Sized,
     {
@@ -32,12 +32,12 @@ impl Expression for Log {
             if sys::nftnl_expr_is_set(expr, sys::NFTNL_EXPR_LOG_PREFIX as u16) {
                 let raw_prefix = sys::nftnl_expr_get_str(expr, sys::NFTNL_EXPR_LOG_PREFIX as u16);
                 if raw_prefix.is_null() {
-                    trace!("Unexpected empty prefix in a 'log' expression");
+                    return Err(DeserializationError::NullPointer);
                 } else {
                     prefix = Some(LogPrefix(CStr::from_ptr(raw_prefix).to_owned()));
                 }
             }
-            Some(Log { group, prefix })
+            Ok(Log { group, prefix })
         }
     }
 

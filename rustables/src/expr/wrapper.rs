@@ -3,6 +3,7 @@ use std::ffi::CString;
 use std::fmt::Debug;
 use std::rc::Rc;
 
+use super::DeserializationError;
 use super::Expression;
 use crate::Rule;
 use rustables_sys as sys;
@@ -48,15 +49,14 @@ impl ExpressionWrapper {
         }
     }
 
-    /// Attempt to decode the expression as the type T, returning None if such
-    /// conversion is not possible or failed.
-    pub fn decode_expr<T: Expression>(&self) -> Option<T> {
+    /// Attempt to decode the expression as the type T.
+    pub fn decode_expr<T: Expression>(&self) -> Result<T, DeserializationError> {
         if let Some(kind) = self.get_kind() {
             let raw_name = unsafe { CStr::from_ptr(T::get_raw_name()) };
             if kind == raw_name {
                 return T::from_expr(self.expr);
             }
         }
-        None
+        Err(DeserializationError::InvalidExpressionKind)
     }
 }

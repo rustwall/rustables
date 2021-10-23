@@ -2,6 +2,8 @@ use std::fmt::Debug;
 
 use rustables_sys::libc;
 
+use super::DeserializationError;
+
 /// A netfilter data register. The expressions store and read data to and from these
 /// when evaluating rule statements.
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Hash)]
@@ -19,14 +21,14 @@ impl Register {
         self as u32
     }
 
-    pub fn from_raw(val: u32) -> Option<Self> {
+    pub fn from_raw(val: u32) -> Result<Self, DeserializationError> {
         match val as i32 {
-            libc::NFT_REG_VERDICT => Some(Self::Verdict),
-            libc::NFT_REG_1 => Some(Self::Reg1),
-            libc::NFT_REG_2 => Some(Self::Reg2),
-            libc::NFT_REG_3 => Some(Self::Reg3),
-            libc::NFT_REG_4 => Some(Self::Reg4),
-            _ => None,
+            libc::NFT_REG_VERDICT => Ok(Self::Verdict),
+            libc::NFT_REG_1 => Ok(Self::Reg1),
+            libc::NFT_REG_2 => Ok(Self::Reg2),
+            libc::NFT_REG_3 => Ok(Self::Reg3),
+            libc::NFT_REG_4 => Ok(Self::Reg4),
+            _ => Err(DeserializationError::InvalidValue),
         }
     }
 }

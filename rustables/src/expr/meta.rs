@@ -1,4 +1,4 @@
-use super::{Expression, Rule};
+use super::{DeserializationError, Expression, Rule};
 use rustables_sys::{self as sys, libc};
 use std::os::raw::c_char;
 
@@ -58,24 +58,23 @@ impl Meta {
         }
     }
 
-    fn from_raw(val: u32) -> Option<Self> {
+    fn from_raw(val: u32) -> Result<Self, DeserializationError> {
         match val as i32 {
-            libc::NFT_META_PROTOCOL => Some(Self::Protocol),
-            libc::NFT_META_MARK => Some(Self::Mark { set: false }),
-            libc::NFT_META_IIF => Some(Self::Iif),
-            libc::NFT_META_OIF => Some(Self::Oif),
-            libc::NFT_META_IIFNAME => Some(Self::IifName),
-            libc::NFT_META_OIFNAME => Some(Self::OifName),
-            libc::NFT_META_IIFTYPE => Some(Self::IifType),
-            libc::NFT_META_OIFTYPE => Some(Self::OifType),
-            libc::NFT_META_SKUID => Some(Self::SkUid),
-            libc::NFT_META_SKGID => Some(Self::SkGid),
-            libc::NFT_META_NFPROTO => Some(Self::NfProto),
-            libc::NFT_META_L4PROTO => Some(Self::L4Proto),
-            libc::NFT_META_CGROUP => Some(Self::Cgroup),
-            libc::NFT_META_PRANDOM => Some(Self::PRandom),
-
-            _ => None,
+            libc::NFT_META_PROTOCOL => Ok(Self::Protocol),
+            libc::NFT_META_MARK => Ok(Self::Mark { set: false }),
+            libc::NFT_META_IIF => Ok(Self::Iif),
+            libc::NFT_META_OIF => Ok(Self::Oif),
+            libc::NFT_META_IIFNAME => Ok(Self::IifName),
+            libc::NFT_META_OIFNAME => Ok(Self::OifName),
+            libc::NFT_META_IIFTYPE => Ok(Self::IifType),
+            libc::NFT_META_OIFTYPE => Ok(Self::OifType),
+            libc::NFT_META_SKUID => Ok(Self::SkUid),
+            libc::NFT_META_SKGID => Ok(Self::SkGid),
+            libc::NFT_META_NFPROTO => Ok(Self::NfProto),
+            libc::NFT_META_L4PROTO => Ok(Self::L4Proto),
+            libc::NFT_META_CGROUP => Ok(Self::Cgroup),
+            libc::NFT_META_PRANDOM => Ok(Self::PRandom),
+            _ => Err(DeserializationError::InvalidValue),
         }
     }
 }
@@ -85,24 +84,21 @@ impl Expression for Meta {
         b"meta\0" as *const _ as *const c_char
     }
 
-    fn from_expr(expr: *const sys::nftnl_expr) -> Option<Self>
+    fn from_expr(expr: *const sys::nftnl_expr) -> Result<Self, DeserializationError>
     where
         Self: Sized,
     {
         unsafe {
-            let mut ret = match Self::from_raw(sys::nftnl_expr_get_u32(
+            let mut ret = Self::from_raw(sys::nftnl_expr_get_u32(
                 expr,
                 sys::NFTNL_EXPR_META_KEY as u16,
-            )) {
-                Some(x) => x,
-                None => return None,
-            };
+            ))?;
 
             if let Self::Mark { ref mut set } = ret {
                 *set = sys::nftnl_expr_is_set(expr, sys::NFTNL_EXPR_META_SREG as u16);
             }
 
-            Some(ret)
+            Ok(ret)
         }
     }
 

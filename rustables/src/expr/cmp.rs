@@ -1,11 +1,9 @@
-use super::{Expression, Rule};
+use super::{DeserializationError, Expression, Rule, ToSlice};
 use rustables_sys::{self as sys, libc};
 use std::{
     borrow::Cow,
     ffi::{c_void, CString},
-    net::{IpAddr, Ipv4Addr, Ipv6Addr},
     os::raw::c_char,
-    slice,
 };
 
 /// Comparison operator.
@@ -39,16 +37,16 @@ impl CmpOp {
         }
     }
 
-    pub fn from_raw(val: u32) -> Option<Self> {
+    pub fn from_raw(val: u32) -> Result<Self, DeserializationError> {
         use self::CmpOp::*;
         match val as i32 {
-            libc::NFT_CMP_EQ => Some(Eq),
-            libc::NFT_CMP_NEQ => Some(Neq),
-            libc::NFT_CMP_LT => Some(Lt),
-            libc::NFT_CMP_LTE => Some(Lte),
-            libc::NFT_CMP_GT => Some(Gt),
-            libc::NFT_CMP_GTE => Some(Gte),
-            _ => None,
+            libc::NFT_CMP_EQ => Ok(Eq),
+            libc::NFT_CMP_NEQ => Ok(Neq),
+            libc::NFT_CMP_LT => Ok(Lt),
+            libc::NFT_CMP_LTE => Ok(Lte),
+            libc::NFT_CMP_GT => Ok(Gt),
+            libc::NFT_CMP_GTE => Ok(Gte),
+            _ => Err(DeserializationError::InvalidValue),
         }
     }
 }
@@ -89,7 +87,7 @@ impl<T: ToSlice> Expression for Cmp<T> {
             sys::nftnl_expr_set(
                 expr,
                 sys::NFTNL_EXPR_CMP_DATA as u16,
-                data.as_ref() as *const _ as *const c_void,
+                data.as_ptr() as *const c_void,
                 data.len() as u32,
             );
 
@@ -107,7 +105,7 @@ impl<const N: usize> Expression for Cmp<[u8; N]> {
     // be *extremely* dangerous in terms of memory safety,
     // rustables only accept to deserialize expressions with variable-size data
     // to arrays of bytes, so that the memory layout cannot be invalid.
-    fn from_expr(expr: *const sys::nftnl_expr) -> Option<Self> {
+    fn from_expr(expr: *const sys::nftnl_expr) -> Result<Self, DeserializationError> {
         unsafe {
             let ref_len = std::mem::size_of::<[u8; N]>() as u32;
             let mut data_len = 0;
@@ -118,23 +116,22 @@ impl<const N: usize> Expression for Cmp<[u8; N]> {
             );
 
             if data.is_null() {
-                return None;
+                return Err(DeserializationError::NullPointer);
             } else if data_len != ref_len {
-                debug!("Invalid size requested for deserializing a 'cmp' expression: expected {} bytes, got {}", ref_len, data_len);
-                return None;
+                return Err(DeserializationError::InvalidDataSize);
             }
 
             let data = *(data as *const [u8; N]);
 
-            let op = CmpOp::from_raw(sys::nftnl_expr_get_u32(expr, sys::NFTNL_EXPR_CMP_OP as u16));
-            op.map(|op| Cmp { op, data })
+            let op = CmpOp::from_raw(sys::nftnl_expr_get_u32(expr, sys::NFTNL_EXPR_CMP_OP as u16))?;
+            Ok(Cmp { op, data })
         }
     }
 
     // call to the other implementation to generate the expression
     fn to_expr(&self, rule: &Rule) -> *mut sys::nftnl_expr {
         Cmp {
-            data: self.data.as_ref(),
+            data: &self.data as &[u8],
             op: self.op,
         }
         .to_expr(rule)
@@ -164,87 +161,6 @@ macro_rules! nft_expr_cmp {
     ($op:tt $data:expr) => {
         $crate::expr::Cmp::new(nft_expr_cmp!(@cmp_op $op), $data)
     };
-}
-
-/// A type that can be converted into a byte buffer.
-pub trait ToSlice {
-    /// Returns the data this type represents.
-    fn to_slice(&self) -> Cow<'_, [u8]>;
-}
-
-impl<'a> ToSlice for &'a [u8] {
-    fn to_slice(&self) -> Cow<'_, [u8]> {
-        Cow::Borrowed(self)
-    }
-}
-
-impl<'a> ToSlice for &'a [u16] {
-    fn to_slice(&self) -> Cow<'_, [u8]> {
-        let ptr = self.as_ptr() as *const u8;
-        let len = self.len() * 2;
-        Cow::Borrowed(unsafe { slice::from_raw_parts(ptr, len) })
-    }
-}
-
-impl ToSlice for IpAddr {
-    fn to_slice(&self) -> Cow<'_, [u8]> {
-        match *self {
-            IpAddr::V4(ref addr) => addr.to_slice(),
-            IpAddr::V6(ref addr) => addr.to_slice(),
-        }
-    }
-}
-
-impl ToSlice for Ipv4Addr {
-    fn to_slice(&self) -> Cow<'_, [u8]> {
-        Cow::Owned(self.octets().to_vec())
-    }
-}
-
-impl ToSlice for Ipv6Addr {
-    fn to_slice(&self) -> Cow<'_, [u8]> {
-        Cow::Owned(self.octets().to_vec())
-    }
-}
-
-impl ToSlice for u8 {
-    fn to_slice(&self) -> Cow<'_, [u8]> {
-        Cow::Owned(vec![*self])
-    }
-}
-
-impl ToSlice for u16 {
-    fn to_slice(&self) -> Cow<'_, [u8]> {
-        let b0 = (*self & 0x00ff) as u8;
-        let b1 = (*self >> 8) as u8;
-        Cow::Owned(vec![b0, b1])
-    }
-}
-
-impl ToSlice for u32 {
-    fn to_slice(&self) -> Cow<'_, [u8]> {
-        let b0 = *self as u8;
-        let b1 = (*self >> 8) as u8;
-        let b2 = (*self >> 16) as u8;
-        let b3 = (*self >> 24) as u8;
-        Cow::Owned(vec![b0, b1, b2, b3])
-    }
-}
-
-impl ToSlice for i32 {
-    fn to_slice(&self) -> Cow<'_, [u8]> {
-        let b0 = *self as u8;
-        let b1 = (*self >> 8) as u8;
-        let b2 = (*self >> 16) as u8;
-        let b3 = (*self >> 24) as u8;
-        Cow::Owned(vec![b0, b1, b2, b3])
-    }
-}
-
-impl<'a> ToSlice for &'a str {
-    fn to_slice(&self) -> Cow<'_, [u8]> {
-        Cow::from(self.as_bytes())
-    }
 }
 
 /// Can be used to compare the value loaded by [`Meta::IifName`] and [`Meta::OifName`]. Please

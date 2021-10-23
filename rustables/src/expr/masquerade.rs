@@ -1,4 +1,4 @@
-use super::{Expression, Rule};
+use super::{DeserializationError, Expression, Rule};
 use rustables_sys as sys;
 use std::os::raw::c_char;
 
@@ -11,11 +11,11 @@ impl Expression for Masquerade {
         b"masq\0" as *const _ as *const c_char
     }
 
-    fn from_expr(_expr: *const sys::nftnl_expr) -> Option<Self>
+    fn from_expr(_expr: *const sys::nftnl_expr) -> Result<Self, DeserializationError>
     where
         Self: Sized,
     {
-        Some(Masquerade)
+        Ok(Masquerade)
     }
 
     fn to_expr(&self, _rule: &Rule) -> *mut sys::nftnl_expr {

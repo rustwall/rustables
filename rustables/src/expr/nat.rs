@@ -1,4 +1,4 @@
-use super::{Expression, Register, Rule};
+use super::{DeserializationError, Expression, Register, Rule};
 use crate::ProtoFamily;
 use rustables_sys::{self as sys, libc};
 use std::{convert::TryFrom, os::raw::c_char};
@@ -13,11 +13,11 @@ pub enum NatType {
 }
 
 impl NatType {
-    fn from_raw(val: u32) -> Option<Self> {
+    fn from_raw(val: u32) -> Result<Self, DeserializationError> {
         match val as i32 {
-            libc::NFT_NAT_SNAT => Some(NatType::SNat),
-            libc::NFT_NAT_DNAT => Some(NatType::DNat),
-            _ => None,
+            libc::NFT_NAT_SNAT => Ok(NatType::SNat),
+            libc::NFT_NAT_DNAT => Ok(NatType::DNat),
+            _ => Err(DeserializationError::InvalidValue),
         }
     }
 }
@@ -37,7 +37,7 @@ impl Expression for Nat {
         b"nat\0" as *const _ as *const c_char
     }
 
-    fn from_expr(expr: *const sys::nftnl_expr) -> Option<Self>
+    fn from_expr(expr: *const sys::nftnl_expr) -> Result<Self, DeserializationError>
     where
         Self: Sized,
     {
@@ -45,42 +45,27 @@ impl Expression for Nat {
             let nat_type = NatType::from_raw(sys::nftnl_expr_get_u32(
                 expr,
                 sys::NFTNL_EXPR_NAT_TYPE as u16,
-            ));
-            let nat_type = match nat_type {
-                Some(x) => x,
-                None => return None,
-            };
+            ))?;
 
             let family = ProtoFamily::try_from(sys::nftnl_expr_get_u32(
                 expr,
                 sys::NFTNL_EXPR_NAT_FAMILY as u16,
-            ) as i32);
-            let family = match family {
-                Ok(x) => x,
-                Err(_) => return None,
-            };
+            ) as i32)?;
 
             let ip_register = Register::from_raw(sys::nftnl_expr_get_u32(
                 expr,
                 sys::NFTNL_EXPR_NAT_REG_ADDR_MIN as u16,
-            ));
-            let ip_register = match ip_register {
-                Some(x) => x,
-                None => return None,
-            };
+            ))?;
 
             let mut port_register = None;
             if sys::nftnl_expr_is_set(expr, sys::NFTNL_EXPR_NAT_REG_PROTO_MIN as u16) {
-                port_register = Register::from_raw(sys::nftnl_expr_get_u32(
+                port_register = Some(Register::from_raw(sys::nftnl_expr_get_u32(
                     expr,
                     sys::NFTNL_EXPR_NAT_REG_PROTO_MIN as u16,
-                ));
-                if port_register.is_none() {
-                    trace!("Invalid register in expression 'nat'");
-                }
+                ))?);
             }
 
-            Some(Nat {
+            Ok(Nat {
                 ip_register,
                 nat_type,
                 family,

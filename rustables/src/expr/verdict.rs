@@ -1,4 +1,4 @@
-use super::{Expression, Rule};
+use super::{DeserializationError, Expression, Rule};
 use rustables_sys::{
     self as sys,
     libc::{self, c_char},
@@ -40,15 +40,14 @@ impl Expression for Verdict {
         b"immediate\0" as *const _ as *const c_char
     }
 
-    fn from_expr(expr: *const sys::nftnl_expr) -> Option<Self> {
+    fn from_expr(expr: *const sys::nftnl_expr) -> Result<Self, DeserializationError> {
         unsafe {
             let mut chain = None;
             if sys::nftnl_expr_is_set(expr, sys::NFTNL_EXPR_IMM_CHAIN as u16) {
                 let raw_chain = sys::nftnl_expr_get_str(expr, sys::NFTNL_EXPR_IMM_CHAIN as u16);
 
                 if raw_chain.is_null() {
-                    trace!("Unexpected empty chain name when deserializing 'verdict' expression");
-                    return None;
+                    return Err(DeserializationError::NullPointer);
                 }
                 chain = Some(CStr::from_ptr(raw_chain).to_owned());
             }
@@ -56,15 +55,27 @@ impl Expression for Verdict {
             let verdict = sys::nftnl_expr_get_u32(expr, sys::NFTNL_EXPR_IMM_VERDICT as u16);
 
             match verdict as i32 {
-                libc::NF_DROP => Some(Verdict::Drop),
-                libc::NF_ACCEPT => Some(Verdict::Accept),
-                libc::NF_QUEUE => Some(Verdict::Queue),
-                libc::NFT_CONTINUE => Some(Verdict::Continue),
-                libc::NFT_BREAK => Some(Verdict::Break),
-                libc::NFT_JUMP => chain.map(|chain| Verdict::Jump { chain }),
-                libc::NFT_GOTO => chain.map(|chain| Verdict::Goto { chain }),
-                libc::NFT_RETURN => Some(Verdict::Return),
-                _ => None,
+                libc::NF_DROP => Ok(Verdict::Drop),
+                libc::NF_ACCEPT => Ok(Verdict::Accept),
+                libc::NF_QUEUE => Ok(Verdict::Queue),
+                libc::NFT_CONTINUE => Ok(Verdict::Continue),
+                libc::NFT_BREAK => Ok(Verdict::Break),
+                libc::NFT_JUMP => {
+                    if let Some(chain) = chain {
+                        Ok(Verdict::Jump { chain })
+                    } else {
+                        Err(DeserializationError::InvalidValue)
+                    }
+                }
+                libc::NFT_GOTO => {
+                    if let Some(chain) = chain {
+                        Ok(Verdict::Goto { chain })
+                    } else {
+                        Err(DeserializationError::InvalidValue)
+                    }
+                }
+                libc::NFT_RETURN => Ok(Verdict::Return),
+                _ => Err(DeserializationError::InvalidValue),
             }
         }
     }

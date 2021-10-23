@@ -1,4 +1,4 @@
-use super::{Expression, Rule};
+use super::{DeserializationError, Expression, Rule};
 use rustables_sys::{self as sys, libc};
 use std::os::raw::c_char;
 
@@ -22,11 +22,11 @@ impl Payload {
                 offset: f.offset(),
                 len: f.len(),
             }),
-            Payload::Network(ref f) => RawPayload::LinkLayer(RawPayloadData {
+            Payload::Network(ref f) => RawPayload::Network(RawPayloadData {
                 offset: f.offset(),
                 len: f.len(),
             }),
-            Payload::Transport(ref f) => RawPayload::LinkLayer(RawPayloadData {
+            Payload::Transport(ref f) => RawPayload::Transport(RawPayloadData {
                 offset: f.offset(),
                 len: f.offset(),
             }),
@@ -88,23 +88,21 @@ impl Expression for RawPayload {
         b"payload\0" as *const _ as *const c_char
     }
 
-    fn from_expr(expr: *const sys::nftnl_expr) -> Option<Self> {
+    fn from_expr(expr: *const sys::nftnl_expr) -> Result<Self, DeserializationError> {
         unsafe {
             let base = sys::nftnl_expr_get_u32(expr, sys::NFTNL_EXPR_PAYLOAD_BASE as u16);
             let offset = sys::nftnl_expr_get_u32(expr, sys::NFTNL_EXPR_PAYLOAD_OFFSET as u16);
             let len = sys::nftnl_expr_get_u32(expr, sys::NFTNL_EXPR_PAYLOAD_LEN as u16);
             match base as i32 {
-                libc::NFT_PAYLOAD_LL_HEADER => {
-                    Some(Self::LinkLayer(RawPayloadData { offset, len }))
-                }
+                libc::NFT_PAYLOAD_LL_HEADER => Ok(Self::LinkLayer(RawPayloadData { offset, len })),
                 libc::NFT_PAYLOAD_NETWORK_HEADER => {
-                    Some(Self::Network(RawPayloadData { offset, len }))
+                    Ok(Self::Network(RawPayloadData { offset, len }))
                 }
                 libc::NFT_PAYLOAD_TRANSPORT_HEADER => {
-                    Some(Self::Transport(RawPayloadData { offset, len }))
+                    Ok(Self::Transport(RawPayloadData { offset, len }))
                 }
 
-                _ => return None,
+                _ => return Err(DeserializationError::InvalidValue),
             }
         }
     }
@@ -156,18 +154,18 @@ impl HeaderField for LLHeaderField {
 }
 
 impl LLHeaderField {
-    pub fn from_raw_data(data: &RawPayloadData) -> Option<Self> {
+    pub fn from_raw_data(data: &RawPayloadData) -> Result<Self, DeserializationError> {
         let off = data.offset;
         let len = data.len;
 
         if off == 0 && len == 6 {
-            Some(Self::Daddr)
+            Ok(Self::Daddr)
         } else if off == 6 && len == 6 {
-            Some(Self::Saddr)
+            Ok(Self::Saddr)
         } else if off == 12 && len == 2 {
-            Some(Self::EtherType)
+            Ok(Self::EtherType)
         } else {
-            None
+            Err(DeserializationError::InvalidValue)
         }
     }
 }
@@ -228,20 +226,20 @@ impl HeaderField for Ipv4HeaderField {
 }
 
 impl Ipv4HeaderField {
-    pub fn from_raw_data(data: &RawPayloadData) -> Option<Self> {
+    pub fn from_raw_data(data: &RawPayloadData) -> Result<Self, DeserializationError> {
         let off = data.offset;
         let len = data.len;
 
         if off == 8 && len == 1 {
-            Some(Self::Ttl)
+            Ok(Self::Ttl)
         } else if off == 9 && len == 1 {
-            Some(Self::Protocol)
+            Ok(Self::Protocol)
         } else if off == 12 && len == 4 {
-            Some(Self::Saddr)
+            Ok(Self::Saddr)
         } else if off == 16 && len == 4 {
-            Some(Self::Daddr)
+            Ok(Self::Daddr)
         } else {
-            None
+            Err(DeserializationError::InvalidValue)
         }
     }
 }
@@ -278,20 +276,20 @@ impl HeaderField for Ipv6HeaderField {
 }
 
 impl Ipv6HeaderField {
-    pub fn from_raw_data(data: &RawPayloadData) -> Option<Self> {
+    pub fn from_raw_data(data: &RawPayloadData) -> Result<Self, DeserializationError> {
         let off = data.offset;
         let len = data.len;
 
         if off == 6 && len == 1 {
-            Some(Self::NextHeader)
+            Ok(Self::NextHeader)
         } else if off == 7 && len == 1 {
-            Some(Self::HopLimit)
+            Ok(Self::HopLimit)
         } else if off == 8 && len == 16 {
-            Some(Self::Saddr)
+            Ok(Self::Saddr)
         } else if off == 24 && len == 16 {
-            Some(Self::Daddr)
+            Ok(Self::Daddr)
         } else {
-            None
+            Err(DeserializationError::InvalidValue)
         }
     }
 }
@@ -350,16 +348,16 @@ impl HeaderField for TcpHeaderField {
 }
 
 impl TcpHeaderField {
-    pub fn from_raw_data(data: &RawPayloadData) -> Option<Self> {
+    pub fn from_raw_data(data: &RawPayloadData) -> Result<Self, DeserializationError> {
         let off = data.offset;
         let len = data.len;
 
         if off == 0 && len == 2 {
-            Some(Self::Sport)
+            Ok(Self::Sport)
         } else if off == 2 && len == 2 {
-            Some(Self::Dport)
+            Ok(Self::Dport)
         } else {
-            None
+            Err(DeserializationError::InvalidValue)
         }
     }
 }
@@ -393,18 +391,18 @@ impl HeaderField for UdpHeaderField {
 }
 
 impl UdpHeaderField {
-    pub fn from_raw_data(data: &RawPayloadData) -> Option<Self> {
+    pub fn from_raw_data(data: &RawPayloadData) -> Result<Self, DeserializationError> {
         let off = data.offset;
         let len = data.len;
 
         if off == 0 && len == 2 {
-            Some(Self::Sport)
+            Ok(Self::Sport)
         } else if off == 2 && len == 2 {
-            Some(Self::Dport)
+            Ok(Self::Dport)
         } else if off == 4 && len == 2 {
-            Some(Self::Len)
+            Ok(Self::Len)
         } else {
-            None
+            Err(DeserializationError::InvalidValue)
         }
     }
 }
@@ -438,18 +436,18 @@ impl HeaderField for Icmpv6HeaderField {
 }
 
 impl Icmpv6HeaderField {
-    pub fn from_raw_data(data: &RawPayloadData) -> Option<Self> {
+    pub fn from_raw_data(data: &RawPayloadData) -> Result<Self, DeserializationError> {
         let off = data.offset;
         let len = data.len;
 
         if off == 0 && len == 1 {
-            Some(Self::Type)
+            Ok(Self::Type)
         } else if off == 1 && len == 1 {
-            Some(Self::Code)
+            Ok(Self::Code)
         } else if off == 2 && len == 2 {
-            Some(Self::Checksum)
+            Ok(Self::Checksum)
         } else {
-            None
+            Err(DeserializationError::InvalidValue)
         }
     }
 }

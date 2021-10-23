@@ -1,5 +1,4 @@
-use super::{Expression, Rule};
-use crate::expr::cmp::ToSlice;
+use super::{Expression, Rule, ToSlice};
 use rustables_sys::{self as sys, libc};
 use std::ffi::c_void;
 use std::os::raw::c_char;

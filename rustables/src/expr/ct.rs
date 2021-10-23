@@ -1,4 +1,4 @@
-use super::{Expression, Rule};
+use super::{DeserializationError, Expression, Rule};
 use rustables_sys::{self as sys, libc};
 use std::os::raw::c_char;
 
@@ -31,7 +31,7 @@ impl Expression for Conntrack {
         b"ct\0" as *const _ as *const c_char
     }
 
-    fn from_expr(expr: *const sys::nftnl_expr) -> Option<Self>
+    fn from_expr(expr: *const sys::nftnl_expr) -> Result<Self, DeserializationError>
     where
         Self: Sized,
     {
@@ -40,11 +40,11 @@ impl Expression for Conntrack {
             let ct_sreg_is_set = sys::nftnl_expr_is_set(expr, sys::NFTNL_EXPR_CT_SREG as u16);
 
             match ct_key as i32 {
-                libc::NFT_CT_STATE => Some(Conntrack::State),
-                libc::NFT_CT_MARK => Some(Conntrack::Mark {
+                libc::NFT_CT_STATE => Ok(Conntrack::State),
+                libc::NFT_CT_MARK => Ok(Conntrack::Mark {
                     set: ct_sreg_is_set,
                 }),
-                _ => None,
+                _ => Err(DeserializationError::InvalidValue),
             }
         }
     }
