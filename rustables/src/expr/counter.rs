@@ -44,3 +44,41 @@ impl Expression for Counter {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::Expression;
+    use std::ffi::CString;
+    use std::rc::Rc;
+
+    #[test]
+    fn counter_expr_is_valid() {
+        let mut counter = super::Counter::new();
+        counter.nb_bytes = 0;
+        counter.nb_packets = 0;
+        let table = Rc::new(crate::Table::new(
+                &CString::new("mocktable").unwrap(),
+                crate::ProtoFamily::Inet)
+        );
+        let chain = Rc::new(crate::Chain::new(
+                &CString::new("mockchain").unwrap(),
+                Rc::clone(&table))
+        );
+        let rule = crate::Rule::new(Rc::clone(&chain));
+        let view = &counter.to_expr(&rule) as *const _ as *const u8;
+        let slice = unsafe {
+            std::slice::from_raw_parts(view, std::mem::size_of::<super::Counter>())
+        };
+        assert_eq!(slice[0], 64);
+        assert_eq!(slice[1], 15);
+        assert_eq!(slice[2], 0);
+        assert_eq!(slice[5], 127);
+        assert_eq!(slice[6], 0);
+        assert_eq!(slice[7], 0);
+        assert_eq!(slice[8], 200);
+        assert_eq!(slice[13], 127);
+        assert_eq!(slice[14], 0);
+        assert_eq!(slice[15], 0);
+        //assert_eq!(slice, [64, 15, 0, 1, 1, 127, 0, 0, 200, 1, 1, 1, 1, 127, 0, 0]);
+    }
+}
