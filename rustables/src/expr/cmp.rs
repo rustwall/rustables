@@ -101,10 +101,30 @@ impl<const N: usize> Expression for Cmp<[u8; N]> {
         Cmp::<u8>::get_raw_name()
     }
 
-    // As casting bytes to any type of the same size as the input would
-    // be *extremely* dangerous in terms of memory safety,
-    // rustables only accept to deserialize expressions with variable-size data
-    // to arrays of bytes, so that the memory layout cannot be invalid.
+    /// The raw data contained inside `Cmp` expressions can only be deserialized to
+    /// arrays of bytes, to ensure that the memory layout of retrieved data cannot be
+    /// violated. It is your responsibility to provide the correct length of the byte
+    /// data. If the data size is invalid, you will get the error
+    /// `DeserializationError::InvalidDataSize`.
+    ///
+    /// Example (warning, no error checking!):
+    /// ```rust
+    /// use std::ffi::CString;
+    /// use std::net::Ipv4Addr;
+    /// use std::rc::Rc;
+    ///
+    /// use rustables::{Chain, expr::{Cmp, CmpOp}, ProtoFamily, Rule, Table};
+    ///
+    /// let table = Rc::new(Table::new(&CString::new("mytable").unwrap(), ProtoFamily::Inet));
+    /// let chain = Rc::new(Chain::new(&CString::new("mychain").unwrap(), table));
+    /// let mut rule = Rule::new(chain);
+    /// rule.add_expr(&Cmp::new(CmpOp::Eq, 1337u16));
+    /// for expr in Rc::new(rule).get_exprs() {
+    ///     println!("{:?}", expr.decode_expr::<Cmp<[u8; 2]>>().unwrap());
+    /// }
+    /// ```
+    /// These limitations occur because casting bytes to any type of the same size
+    /// as the raw input would be *extremely* dangerous in terms of memory safety.
     fn from_expr(expr: *const sys::nftnl_expr) -> Result<Self, DeserializationError> {
         unsafe {
             let ref_len = std::mem::size_of::<[u8; N]>() as u32;
