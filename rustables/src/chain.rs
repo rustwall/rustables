@@ -87,9 +87,11 @@ impl Chain {
                 sys::NFTNL_CHAIN_FAMILY as u16,
                 table.get_family() as u32,
             );
-            if let Some(table_name) = table.get_name() {
-                sys::nftnl_chain_set_str(chain, sys::NFTNL_CHAIN_TABLE as u16, table_name.as_ptr());
-            }
+            sys::nftnl_chain_set_str(
+                chain,
+                sys::NFTNL_CHAIN_TABLE as u16,
+                table.get_name().as_ptr(),
+            );
             sys::nftnl_chain_set_str(chain, sys::NFTNL_CHAIN_NAME as u16, name.as_ref().as_ptr());
             Chain { chain, table }
         }
@@ -152,13 +154,13 @@ impl Chain {
     }
 
     /// Returns the name of this chain.
-    pub fn get_name(&self) -> Option<&CStr> {
+    pub fn get_name(&self) -> &CStr {
         unsafe {
             let ptr = sys::nftnl_chain_get_str(self.chain, sys::NFTNL_CHAIN_NAME as u16);
-            if !ptr.is_null() {
-                Some(CStr::from_ptr(ptr))
+            if ptr.is_null() {
+                panic!("Impossible situation: retrieving the name of a chain failed")
             } else {
-                None
+                CStr::from_ptr(ptr)
             }
         }
     }
@@ -269,7 +271,7 @@ pub fn get_chains_cb<'a>(
             }
         };
 
-        if Some(table_name) != table.get_name() {
+        if table_name != table.get_name() {
             sys::nftnl_chain_free(chain);
             return mnl::mnl_sys::MNL_CB_OK;
         }

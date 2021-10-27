@@ -42,9 +42,7 @@ impl<'a, K> Set<'a, K> {
             let set = try_alloc!(sys::nftnl_set_alloc());
 
             sys::nftnl_set_set_u32(set, sys::NFTNL_SET_FAMILY as u16, family as u32);
-            if let Some(table_name) = table.get_name() {
-                sys::nftnl_set_set_str(set, sys::NFTNL_SET_TABLE as u16, table_name.as_ptr());
-            }
+            sys::nftnl_set_set_str(set, sys::NFTNL_SET_TABLE as u16, table.get_name().as_ptr());
             sys::nftnl_set_set_str(set, sys::NFTNL_SET_NAME as u16, name.as_ptr());
             sys::nftnl_set_set_u32(set, sys::NFTNL_SET_ID as u16, id);
 
