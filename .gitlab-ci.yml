@@ -6,22 +6,23 @@ image: "rust:alpine"
 # You will often need this when you (or any of your dependencies) depends on C code.
 before_script:
   - apk update
-  - apk add build-base pkgconf libmnl-dev libmnl-static libnftnl-dev
+  - apk add build-base pkgconf libmnl-dev libnftnl-dev
 
 cache:
   paths:
     - target/
     - cargo/
 
-# Set CARGO_HOME inside the CI directory, otherwise cargo won't use the cache.
 variables:
+  # Set CARGO_HOME inside the CI directory, otherwise cargo won't use the cache.
   CARGO_HOME: $CI_PROJECT_DIR/cargo
+  # Let rust create dynamically linked builds under musl libc - see [this rust issue](https://github.com/rust-lang/compiler-team/issues/422)
+  RUSTFLAGS: "-C target-feature=-crt-static"
+    # Same consideration for doc tests - see [this rust issue](https://github.com/rust-lang/cargo/issues/6650)
+  RUSTDOCFLAGS: "-C target-feature=-crt-static"
 
 test:cargo:
   script:
-    # Copy the libnftnl-static lib file that is stored in LFS. Workaround to
-    # be able to compile under alpine musl.
-    - cp ci-fix/libnftnl.a /usr/lib
     - mkdir -p target cargo
     - du -sh target cargo
     - rustc --version && cargo --version
