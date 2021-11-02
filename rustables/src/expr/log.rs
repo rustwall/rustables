@@ -50,8 +50,8 @@ pub enum LogPrefixError {
 pub struct LogGroup(pub u16);
 
 /// A prefix that will get prepended to each log line.
-#[derive(Clone)]
-pub struct LogPrefix(pub CString);
+#[derive(Debug, Clone, PartialEq)]
+pub struct LogPrefix(CString);
 
 impl LogPrefix {
     /// Create a new LogPrefix from a String. Converts it to CString as needed by nftnl. Note
