@@ -1,11 +1,15 @@
-use crate::{nft_nlmsg_maxsize, Chain, NlMsg, ProtoFamily, MsgType, Rule, Table};
-use crate::expr::{Bitwise, Cmp, CmpOp, Conntrack, Counter, Expression, IcmpCode, Immediate, Log, LogGroup, LogPrefix, Lookup, Meta, Nat, NatType, Payload, Reject, Register, TcpHeaderField, TransportHeaderField, HeaderField};
+use crate::expr::{
+    Bitwise, Cmp, CmpOp, Conntrack, Counter, Expression, HeaderField, IcmpCode, Immediate, Log,
+    LogGroup, LogPrefix, Lookup, Meta, Nat, NatType, Payload, Register, Reject, TcpHeaderField,
+    TransportHeaderField,
+};
 use crate::set::Set;
+use crate::{nft_nlmsg_maxsize, Chain, MsgType, NlMsg, ProtoFamily, Rule, Table};
 use rustables_sys::libc::{nlmsghdr, AF_UNIX, NFNETLINK_V0, NFNL_SUBSYS_NFTABLES, NFT_MSG_NEWRULE};
 use std::ffi::{c_void, CStr};
 use std::mem::size_of;
-use std::rc::Rc;
 use std::net::Ipv4Addr;
+use std::rc::Rc;
 use thiserror::Error;
 
 mod sys;
@@ -35,13 +39,9 @@ enum NetlinkExpr {
 struct EmptyDataError;
 
 impl NetlinkExpr {
-    fn to_raw(self) -> Result<Vec<u8>, EmptyDataError> {
+    fn to_raw(self) -> Vec<u8> {
         match self {
             NetlinkExpr::Final(ty, val) => {
-                if val.len() == 0 {
-                    return Err(EmptyDataError);
-                }
-
                 let len = val.len() + 4;
                 let mut res = Vec::with_capacity(len);
 
@@ -53,19 +53,15 @@ impl NetlinkExpr {
                     res.push(0);
                 }
 
-                Ok(res)
+                res
             }
             NetlinkExpr::Nested(ty, exprs) => {
-                if exprs.len() == 0 {
-                    return Err(EmptyDataError);
-                }
-
                 // some heuristic to decrease allocations (even though this is
                 // only useful for testing so performance is not an objective)
                 let mut sub = Vec::with_capacity(exprs.len() * 50);
 
                 for expr in exprs {
-                    sub.append(&mut expr.to_raw()?);
+                    sub.append(&mut expr.to_raw());
                 }
 
                 let len = sub.len() + 4;
@@ -76,22 +72,18 @@ impl NetlinkExpr {
                 res.extend(&(ty | 0x8000).to_le_bytes());
                 res.extend(sub);
 
-                Ok(res)
+                res
             }
             NetlinkExpr::List(exprs) => {
-                if exprs.len() == 0 {
-                    return Err(EmptyDataError);
-                }
-
                 // some heuristic to decrease allocations (even though this is
                 // only useful for testing so performance is not an objective)
                 let mut list = Vec::with_capacity(exprs.len() * 50);
 
                 for expr in exprs {
-                    list.append(&mut expr.to_raw()?);
+                    list.append(&mut expr.to_raw());
                 }
 
-                Ok(list)
+                list
             }
         }
     }
@@ -118,7 +110,10 @@ fn get_test_rule() -> Rule {
     rule
 }
 
-fn get_test_nlmsg_from_expr(rule: &mut Rule, expr: &impl Expression) -> (nlmsghdr, Nfgenmsg, Vec<u8>){
+fn get_test_nlmsg_from_expr(
+    rule: &mut Rule,
+    expr: &impl Expression,
+) -> (nlmsghdr, Nfgenmsg, Vec<u8>) {
     rule.add_expr(expr);
 
     let mut buf = vec![0u8; nft_nlmsg_maxsize() as usize];
@@ -126,9 +121,9 @@ fn get_test_nlmsg_from_expr(rule: &mut Rule, expr: &impl Expression) -> (nlmsghd
         rule.write(buf.as_mut_ptr() as *mut c_void, 0, MsgType::Add);
 
         // right now the message is composed of the following parts:
-        // - nlmsghdr (contain the message size and type)
-        // - nfgenmsg (nftables header that describe the family)
-        // - the raw expression that we want to check
+        // - nlmsghdr (contains the message size and type)
+        // - nfgenmsg (nftables header that describes the message family)
+        // - the raw expression that we want to validate
 
         let size_of_hdr = size_of::<nlmsghdr>();
         let size_of_nfgenmsg = size_of::<Nfgenmsg>();
@@ -136,7 +131,9 @@ fn get_test_nlmsg_from_expr(rule: &mut Rule, expr: &impl Expression) -> (nlmsghd
         let nfgenmsg =
             *(buf[size_of_hdr..size_of_hdr + size_of_nfgenmsg].as_ptr() as *const Nfgenmsg);
         let raw_expr = buf[size_of_hdr + size_of_nfgenmsg..nlmsghdr.nlmsg_len as usize]
-                          .iter().map(|x| *x).collect();
+            .iter()
+            .map(|x| *x)
+            .collect();
 
         // sanity checks on the global message (this should be very similar/factorisable for the
         // most part in other tests)
@@ -155,11 +152,7 @@ fn get_test_nlmsg_from_expr(rule: &mut Rule, expr: &impl Expression) -> (nlmsghd
         assert_eq!(nfgenmsg.version, NFNETLINK_V0 as u8);
         assert_eq!(nfgenmsg.res_id.to_be(), 0);
 
-        (
-            nlmsghdr,
-            nfgenmsg,
-            raw_expr,
-        )
+        (nlmsghdr, nfgenmsg, raw_expr)
     }
 }
 
@@ -193,27 +186,20 @@ fn bitwise_expr_is_valid() {
                                     NFTA_BITWISE_DREG,
                                     NFT_REG_1.to_be_bytes().to_vec()
                                 ),
-                                NetlinkExpr::Final(
-                                    NFTA_BITWISE_LEN,
-                                    4u32.to_be_bytes().to_vec()
-                                ),
+                                NetlinkExpr::Final(NFTA_BITWISE_LEN, 4u32.to_be_bytes().to_vec()),
                                 NetlinkExpr::Nested(
                                     NFTA_BITWISE_MASK,
-                                    vec![
-                                        NetlinkExpr::Final(
-                                            NFTA_DATA_VALUE,
-                                            vec![255, 255, 255, 0]
-                                        )
-                                    ]
+                                    vec![NetlinkExpr::Final(
+                                        NFTA_DATA_VALUE,
+                                        vec![255, 255, 255, 0]
+                                    )]
                                 ),
                                 NetlinkExpr::Nested(
                                     NFTA_BITWISE_XOR,
-                                    vec![
-                                        NetlinkExpr::Final(
-                                            NFTA_DATA_VALUE,
-                                            0u32.to_be_bytes().to_vec()
-                                        )
-                                    ]
+                                    vec![NetlinkExpr::Final(
+                                        NFTA_DATA_VALUE,
+                                        0u32.to_be_bytes().to_vec()
+                                    )]
                                 )
                             ]
                         )
@@ -222,7 +208,6 @@ fn bitwise_expr_is_valid() {
             )
         ])
         .to_raw()
-        .unwrap()
     );
 }
 
@@ -247,22 +232,11 @@ fn cmp_expr_is_valid() {
                         NetlinkExpr::Nested(
                             NFTA_EXPR_DATA,
                             vec![
-                                NetlinkExpr::Final(
-                                    NFTA_CMP_SREG,
-                                    NFT_REG_1.to_be_bytes().to_vec()
-                                ),
-                                NetlinkExpr::Final(
-                                    NFTA_CMP_OP,
-                                    NFT_CMP_EQ.to_be_bytes().to_vec()
-                                ),
+                                NetlinkExpr::Final(NFTA_CMP_SREG, NFT_REG_1.to_be_bytes().to_vec()),
+                                NetlinkExpr::Final(NFTA_CMP_OP, NFT_CMP_EQ.to_be_bytes().to_vec()),
                                 NetlinkExpr::Nested(
                                     NFTA_CMP_DATA,
-                                    vec![
-                                        NetlinkExpr::Final(
-                                            1u16,
-                                            0u32.to_be_bytes().to_vec()
-                                        )
-                                    ]
+                                    vec![NetlinkExpr::Final(1u16, 0u32.to_be_bytes().to_vec())]
                                 )
                             ]
                         )
@@ -271,7 +245,6 @@ fn cmp_expr_is_valid() {
             )
         ])
         .to_raw()
-        .unwrap()
     );
 }
 
@@ -316,7 +289,6 @@ fn counter_expr_is_valid() {
             )
         ])
         .to_raw()
-        .unwrap()
     );
 }
 
@@ -345,10 +317,7 @@ fn ct_expr_is_valid() {
                                     NFTA_CT_KEY,
                                     NFT_CT_STATE.to_be_bytes().to_vec()
                                 ),
-                                NetlinkExpr::Final(
-                                    NFTA_CT_DREG,
-                                    NFT_REG_1.to_be_bytes().to_vec()
-                                )
+                                NetlinkExpr::Final(NFTA_CT_DREG, NFT_REG_1.to_be_bytes().to_vec())
                             ]
                         )
                     ]
@@ -356,7 +325,6 @@ fn ct_expr_is_valid() {
             )
         ])
         .to_raw()
-        .unwrap()
     )
 }
 
@@ -387,12 +355,7 @@ fn immediate_expr_is_valid() {
                                 ),
                                 NetlinkExpr::Nested(
                                     NFTA_IMMEDIATE_DATA,
-                                    vec![
-                                        NetlinkExpr::Final(
-                                            1u16,
-                                            42u8.to_be_bytes().to_vec()
-                                        )
-                                    ]
+                                    vec![NetlinkExpr::Final(1u16, 42u8.to_be_bytes().to_vec())]
                                 )
                             ]
                         )
@@ -401,7 +364,6 @@ fn immediate_expr_is_valid() {
             )
         ])
         .to_raw()
-        .unwrap()
     );
 }
 
@@ -409,7 +371,7 @@ fn immediate_expr_is_valid() {
 fn log_expr_is_valid() {
     let log = Log {
         group: Some(LogGroup(1)),
-        prefix: Some(LogPrefix::new("mockprefix").unwrap())
+        prefix: Some(LogPrefix::new("mockprefix").unwrap()),
     };
     let mut rule = get_test_rule();
     let (nlmsghdr, _nfgenmsg, raw_expr) = get_test_nlmsg_from_expr(&mut rule, &log);
@@ -429,14 +391,8 @@ fn log_expr_is_valid() {
                         NetlinkExpr::Nested(
                             NFTA_EXPR_DATA,
                             vec![
-                                NetlinkExpr::Final(
-                                    NFTA_LOG_PREFIX,
-                                    b"mockprefix\0".to_vec()
-                                ),
-                                NetlinkExpr::Final(
-                                    NFTA_LOG_GROUP,
-                                    1u16.to_be_bytes().to_vec()
-                                )
+                                NetlinkExpr::Final(NFTA_LOG_PREFIX, b"mockprefix\0".to_vec()),
+                                NetlinkExpr::Final(NFTA_LOG_GROUP, 1u16.to_be_bytes().to_vec())
                             ]
                         )
                     ]
@@ -444,7 +400,6 @@ fn log_expr_is_valid() {
             )
         ])
         .to_raw()
-        .unwrap()
     );
 }
 
@@ -478,14 +433,8 @@ fn lookup_expr_is_valid() {
                                     NFTA_LOOKUP_SREG,
                                     NFT_REG_1.to_be_bytes().to_vec()
                                 ),
-                                NetlinkExpr::Final(
-                                    NFTA_LOOKUP_SET,
-                                    b"mockset\0".to_vec()
-                                ),
-                                NetlinkExpr::Final(
-                                    NFTA_LOOKUP_SET_ID,
-                                    0u32.to_be_bytes().to_vec()
-                                ),
+                                NetlinkExpr::Final(NFTA_LOOKUP_SET, b"mockset\0".to_vec()),
+                                NetlinkExpr::Final(NFTA_LOOKUP_SET_ID, 0u32.to_be_bytes().to_vec()),
                             ]
                         )
                     ]
@@ -493,11 +442,9 @@ fn lookup_expr_is_valid() {
             )
         ])
         .to_raw()
-        .unwrap()
     );
 }
 
-/* 
 use crate::expr::Masquerade;
 #[test]
 fn masquerade_expr_is_valid() {
@@ -517,17 +464,14 @@ fn masquerade_expr_is_valid() {
                     NFTA_LIST_ELEM,
                     vec![
                         NetlinkExpr::Final(NFTA_EXPR_NAME, b"masq\0".to_vec()),
-                        // TODO find the right value to substitute here.
-                        NetlinkExpr::Final(32770u16, vec![]),
+                        NetlinkExpr::Nested(NFTA_EXPR_DATA, vec![]),
                     ]
                 )]
             )
         ])
         .to_raw()
-        .unwrap()
     );
 }
-*/
 
 #[test]
 fn meta_expr_is_valid() {
@@ -565,7 +509,6 @@ fn meta_expr_is_valid() {
             )
         ])
         .to_raw()
-        .unwrap()
     );
 }
 
@@ -575,7 +518,7 @@ fn nat_expr_is_valid() {
         nat_type: NatType::SNat,
         family: ProtoFamily::Ipv4,
         ip_register: Register::Reg1,
-        port_register: None
+        port_register: None,
     };
     let mut rule = get_test_rule();
     let (nlmsghdr, _nfgenmsg, raw_expr) = get_test_nlmsg_from_expr(&mut rule, &nat);
@@ -616,7 +559,6 @@ fn nat_expr_is_valid() {
             )
         ])
         .to_raw()
-        .unwrap()
     );
 }
 
@@ -668,7 +610,6 @@ fn payload_expr_is_valid() {
             )
         ])
         .to_raw()
-        .unwrap()
     );
 }
 
@@ -709,18 +650,15 @@ fn reject_expr_is_valid() {
             )
         ])
         .to_raw()
-        .unwrap()
     );
 }
 
-/*
-use rustables_sys::libc::NF_DROP;
 use crate::expr::Verdict;
+use rustables_sys::libc::NF_DROP;
 #[test]
 fn verdict_expr_is_valid() {
     let verdict = Verdict::Drop;
     let mut rule = get_test_rule();
-    let chain = rule.get_chain().get_name().to_owned();
     let (nlmsghdr, _nfgenmsg, raw_expr) = get_test_nlmsg_from_expr(&mut rule, &verdict);
     assert_eq!(nlmsghdr.nlmsg_len, 104);
 
@@ -745,19 +683,13 @@ fn verdict_expr_is_valid() {
                                 ),
                                 NetlinkExpr::Nested(
                                     NFTA_IMMEDIATE_DATA,
-                                    vec![
-                                        NetlinkExpr::Final(
-                                            NFTA_VERDICT_CHAIN_ID,
-                                            //rustables_sys::NFTNL_EXPR_IMM_CHAIN as u16,
-                                            (chain.as_ptr() as u8).to_be_bytes().to_vec()
-                                        ),
-                                        NetlinkExpr::Final(
+                                    vec![NetlinkExpr::Nested(
+                                        NFTA_DATA_VERDICT,
+                                        vec![NetlinkExpr::Final(
                                             NFTA_VERDICT_CODE,
-                                            //rustables_sys::NFTNL_EXPR_IMM_VERDICT as u16,
-                                            NF_DROP.to_be_bytes().to_vec()
-                                            //0u32.to_be_bytes().to_vec()
-                                        ),
-                                    ]
+                                            NF_DROP.to_be_bytes().to_vec() //0u32.to_be_bytes().to_vec()
+                                        ),]
+                                    )],
                                 ),
                             ]
                         )
@@ -766,8 +698,5 @@ fn verdict_expr_is_valid() {
             )
         ])
         .to_raw()
-        .unwrap()
     );
 }
-*/
-
