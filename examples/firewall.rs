@@ -34,19 +34,19 @@ pub struct Firewall {
 
 impl Firewall {
     pub fn new() -> Result<Self, Error> {
-        let table = Table::new(
-                &CString::new(TABLE_NAME)?,
-                ProtoFamily::Inet
-        );
-        Ok(Firewall { table: Rc::new(table) })
+        let table = Rc::new(Table::new(
+            &CString::new(TABLE_NAME)?,
+            ProtoFamily::Inet
+        ));
+        Ok(Firewall { table })
     }
     /// Attempt to use the batch from the struct holding the table.
     pub fn allow_port(&mut self, port: &str, protocol: &Protocol, chain: Rc<Chain>, batch: &mut Batch) -> Result<(), Error> {
-            let rule = Rule::new(chain).dport(port, protocol)?.accept().add_to_batch(batch);
-            batch.add(&rule, MsgType::Add);
-            Ok(())
+        let rule = Rule::new(chain).dport(port, protocol)?.accept().add_to_batch(batch);
+        batch.add(&rule, MsgType::Add);
+        Ok(())
     }
-    /// If there is no batch applied, apply the current realm's batch.
+    /// Apply the current realm's batch.
     pub fn start(&mut self) -> Result<(), Error> {
         let mut batch = Batch::new();
         batch.add(&self.table, MsgType::Add);
@@ -92,13 +92,9 @@ impl Firewall {
         //let prefix = "REALM=".to_string() + &self.realm_def.name;
         Rule::new(Rc::clone(&inbound))
              .log(Some(LogGroup(1)), None)
-             //.log( Some(LogGroup::LogGroupOne), Some(LogPrefix::new(&prefix)
+             //.log( Some(LogGroup(1)), Some(LogPrefix::new(&prefix)
              //       .expect("Could not convert log prefix string to CString")))
              .add_to_batch(&mut batch);
-
-        // Chain is defined over a Table, as is Batch, so we can never borrow them at the same
-        // time. The next statement would fail.
-        //self.allow_port("22", &Protocol::TCP, &inbound);
 
         let finalized_batch = batch.finalize().unwrap();
         apply_nftnl_batch(finalized_batch)?;
