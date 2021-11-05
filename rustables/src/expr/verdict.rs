@@ -1,5 +1,4 @@
-use super::{Expression, Rule};
-use crate::ProtoFamily;
+use super::{DeserializationError, Expression, Rule};
 use rustables_sys::{
     self as sys,
     libc::{self, c_char},
@@ -14,8 +13,6 @@ pub enum Verdict {
     Drop,
     /// Accept the packet and let it pass.
     Accept,
-    /// Reject the packet and return a message.
-    Reject(RejectionType),
     Queue,
     Continue,
     Break,
@@ -28,88 +25,7 @@ pub enum Verdict {
     Return,
 }
 
-/// The type of rejection message sent by the Reject verdict.
-#[derive(Debug, Clone, Copy, Eq, PartialEq, Hash)]
-pub enum RejectionType {
-    /// Return an ICMP unreachable packet
-    Icmp(IcmpCode),
-    /// Reject by sending a TCP RST packet
-    TcpRst,
-}
-
-impl RejectionType {
-    fn to_raw(&self, family: ProtoFamily) -> u32 {
-        use libc::*;
-        let value = match *self {
-            RejectionType::Icmp(..) => match family {
-                ProtoFamily::Bridge | ProtoFamily::Inet => NFT_REJECT_ICMPX_UNREACH,
-                _ => NFT_REJECT_ICMP_UNREACH,
-            },
-            RejectionType::TcpRst => NFT_REJECT_TCP_RST,
-        };
-        value as u32
-    }
-}
-
-/// An ICMP reject code.
-#[derive(Debug, Clone, Copy, Eq, PartialEq, Hash)]
-#[repr(u8)]
-pub enum IcmpCode {
-    NoRoute = libc::NFT_REJECT_ICMPX_NO_ROUTE as u8,
-    PortUnreach = libc::NFT_REJECT_ICMPX_PORT_UNREACH as u8,
-    HostUnreach = libc::NFT_REJECT_ICMPX_HOST_UNREACH as u8,
-    AdminProhibited = libc::NFT_REJECT_ICMPX_ADMIN_PROHIBITED as u8,
-}
-
 impl Verdict {
-    unsafe fn to_immediate_expr(&self, immediate_const: i32) -> *mut sys::nftnl_expr {
-        let expr = try_alloc!(sys::nftnl_expr_alloc(
-            b"immediate\0" as *const _ as *const c_char
-        ));
-
-        sys::nftnl_expr_set_u32(
-            expr,
-            sys::NFTNL_EXPR_IMM_DREG as u16,
-            libc::NFT_REG_VERDICT as u32,
-        );
-
-        if let Some(chain) = self.chain() {
-            sys::nftnl_expr_set_str(expr, sys::NFTNL_EXPR_IMM_CHAIN as u16, chain.as_ptr());
-        }
-        sys::nftnl_expr_set_u32(
-            expr,
-            sys::NFTNL_EXPR_IMM_VERDICT as u16,
-            immediate_const as u32,
-        );
-
-        expr
-    }
-
-    unsafe fn to_reject_expr(
-        &self,
-        reject_type: RejectionType,
-        family: ProtoFamily,
-    ) -> *mut sys::nftnl_expr {
-        let expr = try_alloc!(sys::nftnl_expr_alloc(
-            b"reject\0" as *const _ as *const c_char
-        ));
-
-        sys::nftnl_expr_set_u32(
-            expr,
-            sys::NFTNL_EXPR_REJECT_TYPE as u16,
-            reject_type.to_raw(family),
-        );
-
-        let reject_code = match reject_type {
-            RejectionType::Icmp(code) => code as u8,
-            RejectionType::TcpRst => 0,
-        };
-
-        sys::nftnl_expr_set_u8(expr, sys::NFTNL_EXPR_REJECT_CODE as u16, reject_code);
-
-        expr
-    }
-
     fn chain(&self) -> Option<&CStr> {
         match *self {
             Verdict::Jump { ref chain } => Some(chain.as_c_str()),
@@ -120,7 +36,51 @@ impl Verdict {
 }
 
 impl Expression for Verdict {
-    fn to_expr(&self, rule: &Rule) -> *mut sys::nftnl_expr {
+    fn get_raw_name() -> *const libc::c_char {
+        b"immediate\0" as *const _ as *const c_char
+    }
+
+    fn from_expr(expr: *const sys::nftnl_expr) -> Result<Self, DeserializationError> {
+        unsafe {
+            let mut chain = None;
+            if sys::nftnl_expr_is_set(expr, sys::NFTNL_EXPR_IMM_CHAIN as u16) {
+                let raw_chain = sys::nftnl_expr_get_str(expr, sys::NFTNL_EXPR_IMM_CHAIN as u16);
+
+                if raw_chain.is_null() {
+                    return Err(DeserializationError::NullPointer);
+                }
+                chain = Some(CStr::from_ptr(raw_chain).to_owned());
+            }
+
+            let verdict = sys::nftnl_expr_get_u32(expr, sys::NFTNL_EXPR_IMM_VERDICT as u16);
+
+            match verdict as i32 {
+                libc::NF_DROP => Ok(Verdict::Drop),
+                libc::NF_ACCEPT => Ok(Verdict::Accept),
+                libc::NF_QUEUE => Ok(Verdict::Queue),
+                libc::NFT_CONTINUE => Ok(Verdict::Continue),
+                libc::NFT_BREAK => Ok(Verdict::Break),
+                libc::NFT_JUMP => {
+                    if let Some(chain) = chain {
+                        Ok(Verdict::Jump { chain })
+                    } else {
+                        Err(DeserializationError::InvalidValue)
+                    }
+                }
+                libc::NFT_GOTO => {
+                    if let Some(chain) = chain {
+                        Ok(Verdict::Goto { chain })
+                    } else {
+                        Err(DeserializationError::InvalidValue)
+                    }
+                }
+                libc::NFT_RETURN => Ok(Verdict::Return),
+                _ => Err(DeserializationError::InvalidValue),
+            }
+        }
+    }
+
+    fn to_expr(&self, _rule: &Rule) -> *mut sys::nftnl_expr {
         let immediate_const = match *self {
             Verdict::Drop => libc::NF_DROP,
             Verdict::Accept => libc::NF_ACCEPT,
@@ -130,13 +90,29 @@ impl Expression for Verdict {
             Verdict::Jump { .. } => libc::NFT_JUMP,
             Verdict::Goto { .. } => libc::NFT_GOTO,
             Verdict::Return => libc::NFT_RETURN,
-            Verdict::Reject(reject_type) => {
-                return unsafe {
-                    self.to_reject_expr(reject_type, rule.get_chain().get_table().get_family())
-                }
-            }
         };
-        unsafe { self.to_immediate_expr(immediate_const) }
+        unsafe {
+            let expr = try_alloc!(sys::nftnl_expr_alloc(
+                b"immediate\0" as *const _ as *const c_char
+            ));
+
+            sys::nftnl_expr_set_u32(
+                expr,
+                sys::NFTNL_EXPR_IMM_DREG as u16,
+                libc::NFT_REG_VERDICT as u32,
+            );
+
+            if let Some(chain) = self.chain() {
+                sys::nftnl_expr_set_str(expr, sys::NFTNL_EXPR_IMM_CHAIN as u16, chain.as_ptr());
+            }
+            sys::nftnl_expr_set_u32(
+                expr,
+                sys::NFTNL_EXPR_IMM_VERDICT as u16,
+                immediate_const as u32,
+            );
+
+            expr
+        }
     }
 }
 

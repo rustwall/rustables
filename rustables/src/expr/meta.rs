@@ -1,8 +1,9 @@
-use super::{Expression, Rule};
+use super::{DeserializationError, Expression, Rule};
 use rustables_sys::{self as sys, libc};
 use std::os::raw::c_char;
 
 /// A meta expression refers to meta data associated with a packet.
+#[derive(Debug, Copy, Clone, Eq, PartialEq)]
 #[non_exhaustive]
 pub enum Meta {
     /// Packet ethertype protocol (skb->protocol), invalid in OUTPUT.
@@ -56,14 +57,54 @@ impl Meta {
             PRandom => libc::NFT_META_PRANDOM as u32,
         }
     }
+
+    fn from_raw(val: u32) -> Result<Self, DeserializationError> {
+        match val as i32 {
+            libc::NFT_META_PROTOCOL => Ok(Self::Protocol),
+            libc::NFT_META_MARK => Ok(Self::Mark { set: false }),
+            libc::NFT_META_IIF => Ok(Self::Iif),
+            libc::NFT_META_OIF => Ok(Self::Oif),
+            libc::NFT_META_IIFNAME => Ok(Self::IifName),
+            libc::NFT_META_OIFNAME => Ok(Self::OifName),
+            libc::NFT_META_IIFTYPE => Ok(Self::IifType),
+            libc::NFT_META_OIFTYPE => Ok(Self::OifType),
+            libc::NFT_META_SKUID => Ok(Self::SkUid),
+            libc::NFT_META_SKGID => Ok(Self::SkGid),
+            libc::NFT_META_NFPROTO => Ok(Self::NfProto),
+            libc::NFT_META_L4PROTO => Ok(Self::L4Proto),
+            libc::NFT_META_CGROUP => Ok(Self::Cgroup),
+            libc::NFT_META_PRANDOM => Ok(Self::PRandom),
+            _ => Err(DeserializationError::InvalidValue),
+        }
+    }
 }
 
 impl Expression for Meta {
+    fn get_raw_name() -> *const libc::c_char {
+        b"meta\0" as *const _ as *const c_char
+    }
+
+    fn from_expr(expr: *const sys::nftnl_expr) -> Result<Self, DeserializationError>
+    where
+        Self: Sized,
+    {
+        unsafe {
+            let mut ret = Self::from_raw(sys::nftnl_expr_get_u32(
+                expr,
+                sys::NFTNL_EXPR_META_KEY as u16,
+            ))?;
+
+            if let Self::Mark { ref mut set } = ret {
+                *set = sys::nftnl_expr_is_set(expr, sys::NFTNL_EXPR_META_SREG as u16);
+            }
+
+            Ok(ret)
+        }
+    }
+
     fn to_expr(&self, _rule: &Rule) -> *mut sys::nftnl_expr {
         unsafe {
-            let expr = try_alloc!(sys::nftnl_expr_alloc(
-                b"meta\0" as *const _ as *const c_char
-            ));
+            let expr = try_alloc!(sys::nftnl_expr_alloc(Self::get_raw_name()));
 
             if let Meta::Mark { set: true } = self {
                 sys::nftnl_expr_set_u32(

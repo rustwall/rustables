@@ -1,5 +1,4 @@
-use super::{Expression, Rule};
-use crate::expr::cmp::ToSlice;
+use super::{Expression, Rule, ToSlice};
 use rustables_sys::{self as sys, libc};
 use std::ffi::c_void;
 use std::os::raw::c_char;
@@ -19,11 +18,13 @@ impl<M: ToSlice, X: ToSlice> Bitwise<M, X> {
 }
 
 impl<M: ToSlice, X: ToSlice> Expression for Bitwise<M, X> {
+    fn get_raw_name() -> *const c_char {
+        b"bitwise\0" as *const _ as *const c_char
+    }
+
     fn to_expr(&self, _rule: &Rule) -> *mut sys::nftnl_expr {
         unsafe {
-            let expr = try_alloc!(sys::nftnl_expr_alloc(
-                b"bitwise\0" as *const _ as *const c_char
-            ));
+            let expr = try_alloc!(sys::nftnl_expr_alloc(Self::get_raw_name()));
 
             let mask = self.mask.to_slice();
             let xor = self.xor.to_slice();

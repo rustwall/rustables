@@ -27,9 +27,9 @@ macro_rules! nft_set {
 }
 
 pub struct Set<'a, K> {
-    set: *mut sys::nftnl_set,
-    table: &'a Table,
-    family: ProtoFamily,
+    pub(crate) set: *mut sys::nftnl_set,
+    pub(crate) table: &'a Table,
+    pub(crate) family: ProtoFamily,
     _marker: ::std::marker::PhantomData<K>,
 }
 
@@ -130,10 +130,14 @@ impl<'a, K> Set<'a, K> {
         }
     }
 
-    pub fn get_name(&self) -> &CStr {
+    pub fn get_name(&self) -> Option<&CStr> {
         unsafe {
             let ptr = sys::nftnl_set_get_str(self.set, sys::NFTNL_SET_NAME as u16);
-            CStr::from_ptr(ptr)
+            if !ptr.is_null() {
+                Some(CStr::from_ptr(ptr))
+            } else {
+                None
+            }
         }
     }
 

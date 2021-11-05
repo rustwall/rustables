@@ -1,7 +1,8 @@
 use crate::{MsgType, Table};
 use rustables_sys::{self as sys, libc};
+#[cfg(feature = "query")]
+use std::convert::TryFrom;
 use std::{
-    convert::TryFrom,
     ffi::{c_void, CStr, CString},
     fmt,
     os::raw::c_char,
@@ -70,8 +71,8 @@ impl ChainType {
 /// [`Rule`]: struct.Rule.html
 /// [`set_hook`]: #method.set_hook
 pub struct Chain {
-    chain: *mut sys::nftnl_chain,
-    table: Rc<Table>,
+    pub(crate) chain: *mut sys::nftnl_chain,
+    pub(crate) table: Rc<Table>,
 }
 
 impl Chain {
@@ -156,7 +157,11 @@ impl Chain {
     pub fn get_name(&self) -> &CStr {
         unsafe {
             let ptr = sys::nftnl_chain_get_str(self.chain, sys::NFTNL_CHAIN_NAME as u16);
-            CStr::from_ptr(ptr)
+            if ptr.is_null() {
+                panic!("Impossible situation: retrieving the name of a chain failed")
+            } else {
+                CStr::from_ptr(ptr)
+            }
         }
     }
 
