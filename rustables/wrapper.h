@@ -1,1 +1,1 @@
-#include "/usr/include/linux/netfilter/nf_tables.h"
+#include "linux/netfilter/nf_tables.h"
