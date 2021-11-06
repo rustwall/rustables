@@ -5,15 +5,15 @@ use crate::expr::{
 };
 use crate::set::Set;
 use crate::{nft_nlmsg_maxsize, Chain, MsgType, NlMsg, ProtoFamily, Rule, Table};
-use rustables_sys::libc::{nlmsghdr, AF_UNIX, NFNETLINK_V0, NFNL_SUBSYS_NFTABLES, NFT_MSG_NEWRULE};
+use rustables_sys::libc::{nlmsghdr, AF_UNIX, NFNETLINK_V0, NFNL_SUBSYS_NFTABLES};
 use std::ffi::{c_void, CStr};
 use std::mem::size_of;
 use std::net::Ipv4Addr;
 use std::rc::Rc;
 use thiserror::Error;
 
-mod sys;
-use sys::*;
+mod bindings;
+use bindings::*;
 
 fn get_subsystem_from_nlmsghdr_type(x: u16) -> u8 {
     ((x & 0xff00) >> 8) as u8

@@ -31,3 +31,9 @@ mnl = "0.2"
 
 [dev-dependencies]
 ipnetwork = "0.16"
+
+[build-dependencies]
+bindgen = "0.53.1"
+regex = "1.5.4"
+lazy_static = "1.4.0"
+
