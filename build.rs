@@ -1,13 +1,12 @@
 use bindgen;
 use lazy_static::lazy_static;
-use regex::{Captures, Regex};
 use pkg_config;
+use regex::{Captures, Regex};
+use std::borrow::Cow;
 use std::env;
 use std::fs::File;
 use std::io::Write;
 use std::path::PathBuf;
-use std::borrow::Cow;
-
 
 const SYS_HEADER_FILE: &str = "wrapper.h";
 const SYS_BINDINGS_FILE: &str = "src/sys.rs";
@@ -16,14 +15,15 @@ const TESTS_BINDINGS_FILE: &str = "tests/sys.rs";
 const MIN_LIBNFTNL_VERSION: &str = "1.0.6";
 const MIN_LIBMNL_VERSION: &str = "1.0.0";
 
-
 fn get_env(var: &'static str) -> Option<PathBuf> {
     println!("cargo:rerun-if-env-changed={}", var);
     env::var_os(var).map(PathBuf::from)
 }
 
 /// Set env vars to help rustc find linked libraries.
-fn setup_libs() {
+fn setup_libs() -> Vec<String> {
+    let mut res = vec![];
+
     if let Some(lib_dir) = get_env("LIBNFTNL_LIB_DIR") {
         if !lib_dir.is_dir() {
             panic!(
@@ -36,10 +36,13 @@ fn setup_libs() {
     } else {
         // Trying with pkg-config instead
         println!("Minimum libnftnl version: {}", MIN_LIBNFTNL_VERSION);
-        pkg_config::Config::new()
+        let pkg_config_res = pkg_config::Config::new()
             .atleast_version(MIN_LIBNFTNL_VERSION)
             .probe("libnftnl")
             .unwrap();
+        for path in pkg_config_res.include_paths {
+            res.push(format!("-I{}", path.to_str().unwrap()));
+        }
     }
 
     if let Some(lib_dir) = get_env("LIBMNL_LIB_DIR") {
@@ -58,6 +61,8 @@ fn setup_libs() {
             .probe("libmnl")
             .unwrap();
     }
+
+    res
 }
 
 /// Recast nft_*_attributes from u32 to u16 in header file `before`.
@@ -70,12 +75,13 @@ fn reformat_units(before: &str) -> Cow<str> {
     })
 }
 
-fn generate_consts() {
+fn generate_consts(clang_args: impl Iterator<Item = String>) {
     // Tell cargo to invalidate the built crate whenever the headers change.
     println!("cargo:rerun-if-changed={}", SYS_HEADER_FILE);
 
     let bindings = bindgen::Builder::default()
         .header(SYS_HEADER_FILE)
+        .clang_args(clang_args)
         .generate_comments(false)
         .prepend_enum_name(false)
         .use_core()
@@ -120,9 +126,9 @@ fn generate_consts() {
     // Write the bindings to the rust header file.
     let out_path = PathBuf::from(SYS_BINDINGS_FILE);
     File::create(out_path)
-         .expect("Error: could not create rust header file.")
-         .write_all(&s.as_bytes())
-         .expect("Error: could not write to the rust header file.");
+        .expect("Error: could not create rust header file.")
+        .write_all(&s.as_bytes())
+        .expect("Error: could not write to the rust header file.");
 }
 
 fn generate_test_consts() {
@@ -149,13 +155,13 @@ fn generate_test_consts() {
     // Write the bindings to the rust header file.
     let out_path = PathBuf::from(TESTS_BINDINGS_FILE);
     File::create(out_path)
-         .expect("Error: could not create rust header file.")
-         .write_all(&s.as_bytes())
-         .expect("Error: could not write to the rust header file.");
+        .expect("Error: could not create rust header file.")
+        .write_all(&s.as_bytes())
+        .expect("Error: could not write to the rust header file.");
 }
 
 fn main() {
-    setup_libs();
-    generate_consts();
+    let clang_args = setup_libs();
+    generate_consts(clang_args.into_iter());
     generate_test_consts();
 }
