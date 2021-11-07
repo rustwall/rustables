@@ -1,2 +1,32 @@
-[workspace]
-members = ["rustables"]
+[package]
+name = "rustables"
+version = "0.7.0"
+authors = ["lafleur@boum.org, Simon Thoby, Mullvad VPN"]
+license = "GPL-3.0-or-later"
+description = "Safe abstraction for libnftnl. Provides low-level userspace access to the in-kernel nf_tables subsystem"
+repository = "https://gitlab.com/rustwall/rustables"
+readme = "README.md"
+keywords = ["nftables", "nft", "firewall", "iptables", "netfilter"]
+categories = ["network-programming", "os::unix-apis", "api-bindings"]
+edition = "2018"
+
+[features]
+query = []
+unsafe-raw-handles = []
+
+[dependencies]
+bitflags = "1.0"
+thiserror = "1.0"
+log = "0.4"
+libc = "0.2.43"
+mnl = "0.2"
+
+[dev-dependencies]
+ipnetwork = "0.16"
+
+[build-dependencies]
+bindgen = "0.53.1"
+pkg-config = "0.3"
+regex = "1.5.4"
+lazy_static = "1.4.0"
+

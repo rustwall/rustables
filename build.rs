@@ -14,6 +14,7 @@ const SYS_BINDINGS_FILE: &str = "src/sys.rs";
 const TESTS_HEADER_FILE: &str = "tests_wrapper.h";
 const TESTS_BINDINGS_FILE: &str = "tests/sys.rs";
 const MIN_LIBNFTNL_VERSION: &str = "1.0.6";
+const MIN_LIBMNL_VERSION: &str = "1.0.0";
 
 
 fn get_env(var: &'static str) -> Option<PathBuf> {
@@ -53,7 +54,7 @@ fn setup_libs() {
     } else {
         // Trying with pkg-config instead
         pkg_config::Config::new()
-            .atleast_version("1.0.0")
+            .atleast_version(MIN_LIBMNL_VERSION)
             .probe("libmnl")
             .unwrap();
     }
