@@ -37,7 +37,7 @@
 //! ```
 
 use ipnetwork::{IpNetwork, Ipv4Network};
-use rustables::{nft_expr, rustables_sys::libc, Batch, Chain, FinalizedBatch, ProtoFamily, Rule, Table};
+use rustables::{nft_expr, sys::libc, Batch, Chain, FinalizedBatch, ProtoFamily, Rule, Table};
 use std::{
     ffi::{self, CString},
     io,

@@ -1,5 +1,5 @@
 use super::{DeserializationError, Expression, Register, Rule, ToSlice};
-use rustables_sys as sys;
+use crate::sys;
 use std::ffi::c_void;
 use std::os::raw::c_char;
 

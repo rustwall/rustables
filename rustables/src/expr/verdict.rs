@@ -1,8 +1,5 @@
 use super::{DeserializationError, Expression, Rule};
-use rustables_sys::{
-    self as sys,
-    libc::{self, c_char},
-};
+use crate::sys::{self, libc::{self, c_char}};
 use std::ffi::{CStr, CString};
 
 /// A verdict expression. In the background, this is usually an "Immediate" expression in nftnl

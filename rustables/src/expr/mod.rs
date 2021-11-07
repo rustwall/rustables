@@ -9,7 +9,7 @@ use std::net::Ipv4Addr;
 use std::net::Ipv6Addr;
 
 use super::rule::Rule;
-use rustables_sys::{self as sys, libc};
+use crate::sys::{self, libc};
 use thiserror::Error;
 
 mod bitwise;

@@ -1,5 +1,5 @@
 use super::{DeserializationError, Expression, Rule};
-use rustables_sys as sys;
+use crate::sys;
 use std::os::raw::c_char;
 
 /// Sets the source IP to that of the output interface.

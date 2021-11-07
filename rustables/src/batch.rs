@@ -1,5 +1,5 @@
 use crate::{MsgType, NlMsg};
-use rustables_sys::{self as sys, libc};
+use crate::sys::{self as sys, libc};
 use std::ffi::c_void;
 use std::os::raw::c_char;
 use std::ptr;
@@ -157,7 +157,7 @@ impl FinalizedBatch {
             };
             num_pages
         ];
-        let iovecs_ptr = iovecs.as_mut_ptr() as *mut [u8; 0];
+        let iovecs_ptr = iovecs.as_mut_ptr();
         unsafe {
             sys::nftnl_batch_iovec(self.batch.batch, iovecs_ptr, num_pages as u32);
         }

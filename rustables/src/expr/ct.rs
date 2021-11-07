@@ -1,5 +1,5 @@
 use super::{DeserializationError, Expression, Rule};
-use rustables_sys::{self as sys, libc};
+use crate::sys::{self, libc};
 use std::os::raw::c_char;
 
 bitflags::bitflags! {

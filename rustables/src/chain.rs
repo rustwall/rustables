@@ -1,5 +1,5 @@
 use crate::{MsgType, Table};
-use rustables_sys::{self as sys, libc};
+use crate::sys::{self as sys, libc};
 #[cfg(feature = "query")]
 use std::convert::TryFrom;
 use std::{

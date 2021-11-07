@@ -76,8 +76,8 @@ use thiserror::Error;
 #[macro_use]
 extern crate log;
 
-pub use rustables_sys;
-use rustables_sys::libc;
+pub mod sys;
+use sys::libc;
 use std::{convert::TryFrom, ffi::c_void, ops::Deref};
 
 macro_rules! try_alloc {
@@ -117,9 +117,6 @@ pub use rule::Rule;
 pub use rule::{get_rules_cb, list_rules_for_chain};
 
 pub mod set;
-
-#[cfg(test)]
-mod tests;
 
 /// The type of the message as it's sent to netfilter. A message consists of an object, such as a
 /// [`Table`], [`Chain`] or [`Rule`] for example, and a [`MsgType`] to describe what to do with

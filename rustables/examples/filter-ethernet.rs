@@ -22,7 +22,7 @@
 //! # nft delete table inet example-filter-ethernet
 //! ```
 
-use rustables::{nft_expr, rustables_sys::libc, Batch, Chain, FinalizedBatch, ProtoFamily, Rule, Table};
+use rustables::{nft_expr, sys::libc, Batch, Chain, FinalizedBatch, ProtoFamily, Rule, Table};
 use std::{ffi::CString, io, rc::Rc};
 
 const TABLE_NAME: &str = "example-filter-ethernet";

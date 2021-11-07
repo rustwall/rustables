@@ -1,6 +1,6 @@
 use crate::expr::ExpressionWrapper;
 use crate::{chain::Chain, expr::Expression, MsgType};
-use rustables_sys::{self as sys, libc};
+use crate::sys::{self, libc};
 use std::ffi::{c_void, CStr, CString};
 use std::fmt::Debug;
 use std::os::raw::c_char;

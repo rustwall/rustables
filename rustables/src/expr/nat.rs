@@ -1,6 +1,6 @@
 use super::{DeserializationError, Expression, Register, Rule};
 use crate::ProtoFamily;
-use rustables_sys::{self as sys, libc};
+use crate::sys::{self, libc};
 use std::{convert::TryFrom, os::raw::c_char};
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Hash)]

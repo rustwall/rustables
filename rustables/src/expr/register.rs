@@ -1,6 +1,6 @@
 use std::fmt::Debug;
 
-use rustables_sys::libc;
+use crate::sys::libc;
 
 use super::DeserializationError;
 

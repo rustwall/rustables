@@ -1,5 +1,5 @@
 use crate::{MsgType, ProtoFamily};
-use rustables_sys::{self as sys, libc};
+use crate::sys::{self, libc};
 #[cfg(feature = "query")]
 use std::convert::TryFrom;
 use std::{

@@ -1,5 +1,5 @@
 use super::{DeserializationError, Expression, Rule, ToSlice};
-use rustables_sys::{self as sys, libc};
+use crate::sys::{self, libc};
 use std::{
     borrow::Cow,
     ffi::{c_void, CString},

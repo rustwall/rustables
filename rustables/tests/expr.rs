@@ -1,19 +1,19 @@
-use crate::expr::{
+use rustables::{nft_nlmsg_maxsize, Chain, MsgType, NlMsg, ProtoFamily, Rule, Table};
+use rustables::set::Set;
+use rustables::sys::libc::{nlmsghdr, AF_UNIX, NFNETLINK_V0, NFNL_SUBSYS_NFTABLES, NF_DROP};
+use rustables::expr::{
     Bitwise, Cmp, CmpOp, Conntrack, Counter, Expression, HeaderField, IcmpCode, Immediate, Log,
     LogGroup, LogPrefix, Lookup, Meta, Nat, NatType, Payload, Register, Reject, TcpHeaderField,
-    TransportHeaderField,
+    TransportHeaderField, Verdict
 };
-use crate::set::Set;
-use crate::{nft_nlmsg_maxsize, Chain, MsgType, NlMsg, ProtoFamily, Rule, Table};
-use rustables_sys::libc::{nlmsghdr, AF_UNIX, NFNETLINK_V0, NFNL_SUBSYS_NFTABLES};
 use std::ffi::{c_void, CStr};
 use std::mem::size_of;
 use std::net::Ipv4Addr;
 use std::rc::Rc;
 use thiserror::Error;
 
-mod bindings;
-use bindings::*;
+mod sys;
+use sys::*;
 
 fn get_subsystem_from_nlmsghdr_type(x: u16) -> u8 {
     ((x & 0xff00) >> 8) as u8
@@ -445,7 +445,7 @@ fn lookup_expr_is_valid() {
     );
 }
 
-use crate::expr::Masquerade;
+use rustables::expr::Masquerade;
 #[test]
 fn masquerade_expr_is_valid() {
     let masquerade = Masquerade;
@@ -653,8 +653,6 @@ fn reject_expr_is_valid() {
     );
 }
 
-use crate::expr::Verdict;
-use rustables_sys::libc::NF_DROP;
 #[test]
 fn verdict_expr_is_valid() {
     let verdict = Verdict::Drop;

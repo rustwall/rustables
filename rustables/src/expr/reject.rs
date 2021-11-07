@@ -1,9 +1,6 @@
 use super::{DeserializationError, Expression, Rule};
 use crate::ProtoFamily;
-use rustables_sys::{
-    self as sys,
-    libc::{self, c_char},
-};
+use crate::sys::{self, libc::{self, c_char}};
 
 /// A reject expression that defines the type of rejection message sent
 /// when discarding a packet.

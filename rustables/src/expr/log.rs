@@ -1,5 +1,5 @@
 use super::{DeserializationError, Expression, Rule};
-use rustables_sys as sys;
+use crate::sys;
 use std::ffi::{CStr, CString};
 use std::os::raw::c_char;
 use thiserror::Error;

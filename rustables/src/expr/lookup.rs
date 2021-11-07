@@ -1,6 +1,6 @@
 use super::{DeserializationError, Expression, Rule};
 use crate::set::Set;
-use rustables_sys::{self as sys, libc};
+use crate::sys::{self, libc};
 use std::ffi::{CStr, CString};
 use std::os::raw::c_char;
 

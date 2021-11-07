@@ -3,10 +3,8 @@ use std::ffi::CString;
 use std::fmt::Debug;
 use std::rc::Rc;
 
-use super::DeserializationError;
-use super::Expression;
-use crate::Rule;
-use rustables_sys as sys;
+use super::{DeserializationError, Expression};
+use crate::{sys, Rule};
 
 pub struct ExpressionWrapper {
     pub(crate) expr: *const sys::nftnl_expr,
