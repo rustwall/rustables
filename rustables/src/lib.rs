@@ -118,6 +118,9 @@ pub use rule::{get_rules_cb, list_rules_for_chain};
 
 pub mod set;
 
+#[cfg(test)]
+mod tests;
+
 /// The type of the message as it's sent to netfilter. A message consists of an object, such as a
 /// [`Table`], [`Chain`] or [`Rule`] for example, and a [`MsgType`] to describe what to do with
 /// that object. If a [`Table`] object is sent with `MsgType::Add` then that table will be added

@@ -2,11 +2,11 @@
 # https://hub.docker.com/r/library/rust/tags/
 image: "rust:alpine"
 
-# Optional: Install a C compiler, cmake and git into the container.
-# You will often need this when you (or any of your dependencies) depends on C code.
+# clang-libs are needed by bindgen. build-base contains various needed things,
+# among which crti.o and pkg-config.
 before_script:
   - apk update
-  - apk add build-base pkgconf libmnl-dev libnftnl-dev
+  - apk add build-base libmnl-dev libnftnl-dev clang-libs
 
 cache:
   paths:
@@ -16,9 +16,11 @@ cache:
 variables:
   # Set CARGO_HOME inside the CI directory, otherwise cargo won't use the cache.
   CARGO_HOME: $CI_PROJECT_DIR/cargo
-  # Let rust create dynamically linked builds under musl libc - see [this rust issue](https://github.com/rust-lang/compiler-team/issues/422)
+  # Let rust create dynamically linked builds under musl libc - see [this rust
+  # issue](https://github.com/rust-lang/compiler-team/issues/422)
   RUSTFLAGS: "-C target-feature=-crt-static"
-    # Same consideration for doc tests - see [this rust issue](https://github.com/rust-lang/cargo/issues/6650)
+    # Same consideration for doc tests - see [this rust
+    # issue](https://github.com/rust-lang/cargo/issues/6650)
   RUSTDOCFLAGS: "-C target-feature=-crt-static"
 
 test:cargo:

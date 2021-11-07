@@ -2,7 +2,7 @@ use super::{DeserializationError, Expression, Rule};
 use rustables_sys::{self as sys, libc};
 use std::os::raw::c_char;
 
-trait HeaderField {
+pub trait HeaderField {
     fn offset(&self) -> u32;
     fn len(&self) -> u32;
 }
