@@ -1,7 +1,6 @@
-//! This build script generates rust sys files that link to the libnftnl C library. It does so
-//! by :
-//!   - setting up rustc's necessary include directives using `pkg_config`, and
-//!   - generating the rust include files that wil be used by the crate, using `bindgen`.
+//! This build script leverages `bindgen` to generate rust sys files that link to the libnftnl
+//! library. It retrieves the includes needed by `bindgen` using `pkg_config`, and tells cargo
+//! the directives needed by the linker to link against the exported symbols.
 
 use bindgen;
 use lazy_static::lazy_static;
@@ -28,7 +27,7 @@ fn main() {
     generate_tests_sys();
 }
 
-/// Setup rustc includes for libnftnl and return the include directory list.
+/// Setup rust linking directives for libnftnl, and return the include directory list.
 fn pkg_config_nftnl() -> Vec<String> {
     let mut res = vec![];
 
@@ -56,7 +55,7 @@ fn pkg_config_nftnl() -> Vec<String> {
     res
 }
 
-/// Setup rustc includes for libmnl.
+/// Setup rust linking directives for libmnl.
 fn pkg_config_mnl() {
     if let Some(lib_dir) = get_env("LIBMNL_LIB_DIR") {
         if !lib_dir.is_dir() {
@@ -169,12 +168,12 @@ fn generate_tests_sys() {
         .expect("Error: could not write to the rust header file.");
 }
 
-/// Recast nft_*_attributes from u32 to u16 in header file `before`.
-fn reformat_units(before: &str) -> Cow<str> {
+/// Recast nft_*_attributes from u32 to u16 in header string `header`.
+fn reformat_units(header: &str) -> Cow<str> {
     lazy_static! {
         static ref RE: Regex = Regex::new(r"(pub type nft[a-zA-Z_]*_attributes) = u32;").unwrap();
     }
-    RE.replace_all(before, |captures: &Captures| {
+    RE.replace_all(header, |captures: &Captures| {
         format!("{} = u16;", &captures[1])
     })
 }
