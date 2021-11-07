@@ -1,32 +1,43 @@
-# Official language image. Look for the different tagged releases at:
-# https://hub.docker.com/r/library/rust/tags/
-image: "rust:alpine"
+default:
+  cache:
+    paths:
+      - target/
+      - cargo/
 
-# clang-libs are needed by bindgen. build-base contains various needed things,
-# among which crti.o and pkg-config.
-before_script:
-  - apk update
-  - apk add build-base libmnl-dev libnftnl-dev clang-libs
-
-cache:
-  paths:
-    - target/
-    - cargo/
-
-variables:
-  # Set CARGO_HOME inside the CI directory, otherwise cargo won't use the cache.
-  CARGO_HOME: $CI_PROJECT_DIR/cargo
-  # Let rust create dynamically linked builds under musl libc - see [this rust
-  # issue](https://github.com/rust-lang/compiler-team/issues/422)
-  RUSTFLAGS: "-C target-feature=-crt-static"
+test:alpine:
+  # Official language image. Look for the different tagged releases at:
+  # https://hub.docker.com/r/library/rust/tags/
+  image: "rust:alpine"
+  # clang-libs are needed by bindgen. build-base contains various needed things,
+  # among which crti.o and pkg-config.
+  variables:
+    # Set CARGO_HOME inside the CI directory, otherwise cargo won't use the cache.
+    CARGO_HOME: $CI_PROJECT_DIR/cargo
+    # Let rust create dynamically linked builds under musl libc - see [this rust
+    # issue](https://github.com/rust-lang/compiler-team/issues/422)
+    RUSTFLAGS: "-C target-feature=-crt-static"     
     # Same consideration for doc tests - see [this rust
     # issue](https://github.com/rust-lang/cargo/issues/6650)
-  RUSTDOCFLAGS: "-C target-feature=-crt-static"
-
-test:cargo:
+    RUSTDOCFLAGS: "-C target-feature=-crt-static"  
+  before_script:
+    - apk update
+    - apk add build-base libmnl-dev libnftnl-dev clang-libs
   script:
     - mkdir -p target cargo
     - du -sh target cargo
     - rustc --version && cargo --version
     - cargo test --workspace --verbose --release
 
+test:debian-stable:
+  # Test on debian stable - uses libnftnl11 1.1.9-1
+  image: "rust:slim-bullseye"
+  variables:
+    CARGO_HOME: $CI_PROJECT_DIR/cargo
+  before_script:
+    - apt-get -y update
+    - apt-get -y install libmnl-dev libnftnl-dev libclang-11-dev
+  script:
+    - mkdir -p target cargo
+    - du -sh target cargo
+    - rustc --version && cargo --version
+    - cargo test --workspace --verbose --release
