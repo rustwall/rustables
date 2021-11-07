@@ -1,3 +1,8 @@
+//! This build script generates rust sys files that link to the libnftnl C library. It does so
+//! by :
+//!   - setting up rustc's necessary include directives using `pkg_config`, and
+//!   - generating the rust include files that wil be used by the crate, using `bindgen`.
+
 use bindgen;
 use lazy_static::lazy_static;
 use pkg_config;
@@ -15,13 +20,16 @@ const TESTS_BINDINGS_FILE: &str = "tests/sys.rs";
 const MIN_LIBNFTNL_VERSION: &str = "1.0.6";
 const MIN_LIBMNL_VERSION: &str = "1.0.0";
 
-fn get_env(var: &'static str) -> Option<PathBuf> {
-    println!("cargo:rerun-if-env-changed={}", var);
-    env::var_os(var).map(PathBuf::from)
+
+fn main() {
+    pkg_config_mnl();
+    let clang_args = pkg_config_nftnl();
+    generate_sys(clang_args.into_iter());
+    generate_tests_sys();
 }
 
-/// Set env vars to help rustc find linked libraries.
-fn setup_libs() -> Vec<String> {
+/// Setup rustc includes for libnftnl and return the include directory list.
+fn pkg_config_nftnl() -> Vec<String> {
     let mut res = vec![];
 
     if let Some(lib_dir) = get_env("LIBNFTNL_LIB_DIR") {
@@ -45,6 +53,11 @@ fn setup_libs() -> Vec<String> {
         }
     }
 
+    res
+}
+
+/// Setup rustc includes for libmnl.
+fn pkg_config_mnl() {
     if let Some(lib_dir) = get_env("LIBMNL_LIB_DIR") {
         if !lib_dir.is_dir() {
             panic!(
@@ -61,21 +74,15 @@ fn setup_libs() -> Vec<String> {
             .probe("libmnl")
             .unwrap();
     }
-
-    res
 }
 
-/// Recast nft_*_attributes from u32 to u16 in header file `before`.
-fn reformat_units(before: &str) -> Cow<str> {
-    lazy_static! {
-        static ref RE: Regex = Regex::new(r"(pub type nft[a-zA-Z_]*_attributes) = u32;").unwrap();
-    }
-    RE.replace_all(before, |captures: &Captures| {
-        format!("{} = u16;", &captures[1])
-    })
+fn get_env(var: &'static str) -> Option<PathBuf> {
+    println!("cargo:rerun-if-env-changed={}", var);
+    env::var_os(var).map(PathBuf::from)
 }
 
-fn generate_consts(clang_args: impl Iterator<Item = String>) {
+/// `bindgen`erate a rust sys file from the C headers of the nftnl library.
+fn generate_sys(clang_args: impl Iterator<Item = String>) {
     // Tell cargo to invalidate the built crate whenever the headers change.
     println!("cargo:rerun-if-changed={}", SYS_HEADER_FILE);
 
@@ -131,7 +138,9 @@ fn generate_consts(clang_args: impl Iterator<Item = String>) {
         .expect("Error: could not write to the rust header file.");
 }
 
-fn generate_test_consts() {
+/// `bindgen`erate a rust sys file from the C kernel headers of the nf_tables capabilities.
+/// Used in the rustables tests.
+fn generate_tests_sys() {
     // Tell cargo to invalidate the built crate whenever the headers change.
     println!("cargo:rerun-if-changed={}", TESTS_HEADER_FILE);
 
@@ -160,8 +169,13 @@ fn generate_test_consts() {
         .expect("Error: could not write to the rust header file.");
 }
 
-fn main() {
-    let clang_args = setup_libs();
-    generate_consts(clang_args.into_iter());
-    generate_test_consts();
+/// Recast nft_*_attributes from u32 to u16 in header file `before`.
+fn reformat_units(before: &str) -> Cow<str> {
+    lazy_static! {
+        static ref RE: Regex = Regex::new(r"(pub type nft[a-zA-Z_]*_attributes) = u32;").unwrap();
+    }
+    RE.replace_all(before, |captures: &Captures| {
+        format!("{} = u16;", &captures[1])
+    })
 }
+
