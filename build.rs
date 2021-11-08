@@ -12,9 +12,9 @@ use std::fs::File;
 use std::io::Write;
 use std::path::PathBuf;
 
-const SYS_HEADER_FILE: &str = "wrapper.h";
+const SYS_HEADER_FILE: &str = "include/wrapper.h";
 const SYS_BINDINGS_FILE: &str = "src/sys.rs";
-const TESTS_HEADER_FILE: &str = "tests_wrapper.h";
+const TESTS_HEADER_FILE: &str = "include/tests_wrapper.h";
 const TESTS_BINDINGS_FILE: &str = "tests/sys.rs";
 const MIN_LIBNFTNL_VERSION: &str = "1.0.6";
 const MIN_LIBMNL_VERSION: &str = "1.0.0";
