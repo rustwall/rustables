@@ -1,4 +1,4 @@
-use crate::{Batch, Rule, nft_expr, rustables_sys::libc};
+use crate::{Batch, Rule, nft_expr, sys::libc};
 use crate::expr::{LogGroup, LogPrefix};
 use ipnetwork::IpNetwork;
 use std::ffi::{CString, NulError};
