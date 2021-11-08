@@ -1,4 +1,5 @@
-use rustables::{Batch, FinalizedBatch, Chain, Hook, Match, MatchError, Policy, Rule, Protocol, ProtoFamily, Table, MsgType, expr::LogGroup};
+use rustables::{Batch, Chain, Hook, Match, MatchError, Policy, Rule, Protocol, ProtoFamily, Table, MsgType, expr::LogGroup};
+use rustables::query::{send_batch, Error as QueryError};
 use ipnetwork::IpNetwork;
 use std::ffi::{CString, NulError};
 use std::str::Utf8Error;
@@ -18,6 +19,8 @@ pub enum Error {
     Utf8Error(#[from] Utf8Error),
     #[error("Error applying batch")]
     BatchError(#[from] std::io::Error),
+    #[error("Error applying batch")]
+    QueryError(#[from] QueryError),
 }
 
 const TABLE_NAME: &str = "main-table";
@@ -96,8 +99,8 @@ impl Firewall {
              //       .expect("Could not convert log prefix string to CString")))
              .add_to_batch(&mut batch);
 
-        let finalized_batch = batch.finalize().unwrap();
-        apply_nftnl_batch(finalized_batch)?;
+        let mut finalized_batch = batch.finalize().unwrap();
+        send_batch(&mut finalized_batch)?;
         println!("ruleset applied");
         Ok(())
     }
@@ -109,30 +112,5 @@ impl Firewall {
         batch.add(&table, MsgType::Del);
         Ok(())
     }
-}
-
-fn apply_nftnl_batch(mut nftnl_finalized_batch: FinalizedBatch)
-            -> Result<(), std::io::Error> {
-    let socket = mnl::Socket::new(mnl::Bus::Netfilter)?;
-    socket.send_all(&mut nftnl_finalized_batch)?;
-    // Parse results from the socket :
-    let portid = socket.portid();
-    let mut buffer = vec![0; rustables::nft_nlmsg_maxsize() as usize];
-    // Unclear variable :
-    let seq = 0;
-    loop {
-        let length = socket.recv(&mut buffer[..])?;
-        if length == 0 {
-            eprintln!("batch socket returned 0");
-            break;
-        }
-        match mnl::cb_run(&buffer[..length], seq, portid)? {
-            mnl::CbResult::Stop => {
-                break;
-            }
-            mnl::CbResult::Ok => (),
-        }
-    }
-    Ok(())
 }
 
