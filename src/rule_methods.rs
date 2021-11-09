@@ -31,12 +31,12 @@ pub enum Protocol {
     UDP
 }
 
-/// A Match trait over [`rustables::Rule`], to make it match some criteria, and give it a verdict.
-/// Mostly adapted from [talpid-core's
+/// A RuleMethods trait over [`rustables::Rule`], to make it match some criteria, and give it a
+/// verdict.  Mostly adapted from [talpid-core's
 /// firewall](https://github.com/mullvad/mullvadvpn-app/blob/d92376b4d1df9b547930c68aa9bae9640ff2a022/talpid-core/src/firewall/linux.rs).
 /// All methods return the rule itself, allowing them to be chained. Usage example :
 /// ```rust
-/// use rustables::{Batch, Chain, Match, Protocol, Rule, ProtoFamily, Table, MsgType, Hook};
+/// use rustables::{Batch, Chain, Protocol, ProtoFamily, Rule, RuleMethods, Table, MsgType, Hook};
 /// use std::ffi::CString;
 /// use std::rc::Rc;
 /// let table = Rc::new(Table::new(&CString::new("main_table").unwrap(), ProtoFamily::Inet));
@@ -51,7 +51,7 @@ pub enum Protocol {
 ///                 .accept();
 /// batch.add(&rule, MsgType::Add);
 /// ```
-pub trait Match {
+pub trait RuleMethods {
     /// Match ICMP packets.
     fn icmp(self) -> Self;
     /// Match IGMP packets.
@@ -87,7 +87,7 @@ pub trait Match {
 }
 
 /// A trait to add helper functions to match some criterium over `rustables::Rule`.
-impl Match for Rule {
+impl RuleMethods for Rule {
     fn icmp(mut self) -> Self {
         self.add_expr(&nft_expr!(meta l4proto));
         //self.add_expr(&nft_expr!(cmp == libc::IPPROTO_ICMPV6 as u8));

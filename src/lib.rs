@@ -116,8 +116,8 @@ pub use rule::Rule;
 #[cfg(feature = "query")]
 pub use rule::{get_rules_cb, list_rules_for_chain};
 
-mod rule_match;
-pub use rule_match::{iface_index, Match, Protocol, Error as MatchError};
+mod rule_methods;
+pub use rule_methods::{iface_index, Protocol, RuleMethods, Error as MatchError};
 
 pub mod set;
 
