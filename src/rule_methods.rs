@@ -31,25 +31,23 @@ pub enum Protocol {
     UDP
 }
 
-/// A RuleMethods trait over [`rustables::Rule`], to make it match some criteria, and give it a
+/// A RuleMethods trait over [`crate::Rule`], to make it match some criteria, and give it a
 /// verdict.  Mostly adapted from [talpid-core's
 /// firewall](https://github.com/mullvad/mullvadvpn-app/blob/d92376b4d1df9b547930c68aa9bae9640ff2a022/talpid-core/src/firewall/linux.rs).
 /// All methods return the rule itself, allowing them to be chained. Usage example :
 /// ```rust
-/// use rustables::{Batch, Chain, Protocol, ProtoFamily, Rule, RuleMethods, Table, MsgType, Hook};
+/// use rustables::{Batch, Chain, ChainMethods, Protocol, ProtoFamily, Rule, RuleMethods, Table, MsgType, Hook};
 /// use std::ffi::CString;
 /// use std::rc::Rc;
 /// let table = Rc::new(Table::new(&CString::new("main_table").unwrap(), ProtoFamily::Inet));
 /// let mut batch = Batch::new();
 /// batch.add(&table, MsgType::Add);
-/// let mut inbound = Chain::new(&CString::new("inbound").unwrap(), table);
-/// inbound.set_hook(Hook::In, 0);
-/// let inbound = Rc::new(inbound);
-/// batch.add(&inbound, MsgType::Add);
+/// let inbound = Rc::new(Chain::from_hook(Hook::In, Rc::clone(&table))
+///                  .add_to_batch(&mut batch));
 /// let rule = Rule::new(inbound)
 ///                 .dport("80", &Protocol::TCP).unwrap()
-///                 .accept();
-/// batch.add(&rule, MsgType::Add);
+///                 .accept()
+///                 .add_to_batch(&mut batch);
 /// ```
 pub trait RuleMethods {
     /// Match ICMP packets.
@@ -86,7 +84,7 @@ pub trait RuleMethods {
     fn add_to_batch(self, batch: &mut Batch) -> Self;
 }
 
-/// A trait to add helper functions to match some criterium over `rustables::Rule`.
+/// A trait to add helper functions to match some criterium over `crate::Rule`.
 impl RuleMethods for Rule {
     fn icmp(mut self) -> Self {
         self.add_expr(&nft_expr!(meta l4proto));
@@ -141,12 +139,16 @@ impl RuleMethods for Rule {
         Ok(self)
     }
     fn iface(mut self, iface_name: &str) -> Result<Self, Error> {
-        if iface_name.len() > libc::IFNAMSIZ {
+        if iface_name.len() >= libc::IFNAMSIZ {
             return Err(Error::NameTooLong);
         }
 
+        let mut name_arr = [0u8; libc::IFNAMSIZ];
+        for (pos, i) in iface_name.bytes().enumerate() {
+            name_arr[pos] = i;
+        }
         self.add_expr(&nft_expr!(meta iifname));
-        self.add_expr(&nft_expr!(cmp == CString::new(iface_name)?.as_bytes()));
+        self.add_expr(&nft_expr!(cmp == name_arr.as_ref()));
         Ok(self)
     }
     fn saddr(mut self, ip: IpAddr) -> Self {

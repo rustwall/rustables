@@ -3,12 +3,12 @@ use std::ffi::CString;
 use std::rc::Rc;
 
 
-/// A helper trait over [`rustables::Chain`].
+/// A helper trait over [`crate::Chain`].
 pub trait ChainMethods {
-    /// Create a new Chain instance from a [`rustables::Hook`] over a [`rustables::Table`].
+    /// Create a new Chain instance from a [`crate::Hook`] over a [`crate::Table`].
     fn from_hook(hook: Hook, table: Rc<Table>) -> Self
         where Self: std::marker::Sized;
-    /// Add a [`rustables::Policy`] to the current Chain.
+    /// Add a [`crate::Policy`] to the current Chain.
     fn verdict(self, policy: Policy) -> Self;
     fn add_to_batch(self, batch: &mut Batch) -> Self;
 }
