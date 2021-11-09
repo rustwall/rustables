@@ -1,9 +1,12 @@
-use rustables::{Batch, Chain, Hook, Match, MatchError, Policy, Rule, Protocol, ProtoFamily, Table, MsgType, expr::LogGroup};
+use rustables::{Batch, Chain, ChainMethods, Direction, MatchError, ProtoFamily,
+    Protocol, Rule, RuleMethods, Table, MsgType, Verdict};
 use rustables::query::{send_batch, Error as QueryError};
+use rustables::expr::{LogGroup, LogPrefix, LogPrefixError};
 use ipnetwork::IpNetwork;
 use std::ffi::{CString, NulError};
 use std::str::Utf8Error;
 use std::rc::Rc;
+
 
 #[derive(thiserror::Error, Debug)]
 pub enum Error {
@@ -21,96 +24,119 @@ pub enum Error {
     BatchError(#[from] std::io::Error),
     #[error("Error applying batch")]
     QueryError(#[from] QueryError),
+    #[error("Error encoding the prefix")]
+    LogPrefixError(#[from] LogPrefixError),
 }
 
 const TABLE_NAME: &str = "main-table";
 
+
 fn main() -> Result<(), Error> {
-    let mut fw = Firewall::new()?;
+    let fw = Firewall::new()?;
     fw.start()?;
     Ok(())
 }
 
+
+/// An example firewall. See the source of its `start()` method.
 pub struct Firewall {
-    table: Rc<Table>
+    batch: Batch,
+    inbound: Rc<Chain>,
+    _outbound: Rc<Chain>,
+    _forward: Rc<Chain>,
+    _table: Rc<Table>,
 }
 
 impl Firewall {
     pub fn new() -> Result<Self, Error> {
-        let table = Rc::new(Table::new(
-            &CString::new(TABLE_NAME)?,
-            ProtoFamily::Inet
-        ));
-        Ok(Firewall { table })
-    }
-    /// Attempt to use the batch from the struct holding the table.
-    pub fn allow_port(&mut self, port: &str, protocol: &Protocol, chain: Rc<Chain>, batch: &mut Batch) -> Result<(), Error> {
-        let rule = Rule::new(chain).dport(port, protocol)?.accept().add_to_batch(batch);
-        batch.add(&rule, MsgType::Add);
-        Ok(())
-    }
-    /// Apply the current realm's batch.
-    pub fn start(&mut self) -> Result<(), Error> {
         let mut batch = Batch::new();
-        batch.add(&self.table, MsgType::Add);
+        let _table = Rc::new(
+            Table::new(&CString::new(TABLE_NAME)?, ProtoFamily::Inet)
+        );
+        batch.add(&_table, MsgType::Add);
 
-        let local_net = IpNetwork::new([192, 168, 1, 0].into(), 24).unwrap();
-        let mut inbound = Chain::new(&CString::new("in")?, Rc::clone(&self.table));
-        inbound.set_hook(Hook::In, 0);
-        inbound.set_policy(Policy::Drop);
-        let inbound = Rc::new(inbound);
-        batch.add(&inbound, MsgType::Add);
-        let mut outbound = Chain::new(&CString::new("out")?, Rc::clone(&self.table));
-        outbound.set_hook(Hook::Out, 0);
-        outbound.set_policy(Policy::Accept);
-        batch.add(&outbound, MsgType::Add);
-        let mut forward = Chain::new(&CString::new("forward")?, Rc::clone(&self.table));
-        forward.set_hook(Hook::Forward, 0);
-        forward.set_policy(Policy::Accept);
-        batch.add(&forward, MsgType::Add);
-        Rule::new(Rc::clone(&inbound))
+        // Create base chains. Base chains are hooked into a Direction/Hook.
+        let inbound = Rc::new(
+            Chain::from_direction(&Direction::Inbound, Rc::clone(&_table))?
+                  .verdict(&Verdict::Drop)
+                  .add_to_batch(&mut batch)
+        );
+        let _outbound = Rc::new(
+            Chain::from_direction(&Direction::Outbound, Rc::clone(&_table))?
+                  .verdict(&Verdict::Accept)
+                  .add_to_batch(&mut batch)
+        );
+        let _forward = Rc::new(
+            Chain::from_direction(&Direction::Forward, Rc::clone(&_table))?
+                  .verdict(&Verdict::Accept)
+                  .add_to_batch(&mut batch)
+        );
+
+        Ok(Firewall {
+            _table,
+            batch,
+            inbound,
+            _outbound,
+            _forward
+        })
+    }
+    /// Allow some common-sense exceptions to inbound drop, and accept outbound and forward.
+    pub fn start(mut self) -> Result<(), Error> {
+        // Allow all established connections to get in.
+        Rule::new(Rc::clone(&self.inbound))
              .established()
              .accept()
-             .add_to_batch(&mut batch);
-        Rule::new(Rc::clone(&inbound))
+             .add_to_batch(&mut self.batch);
+        // Allow all traffic on the loopback interface.
+        Rule::new(Rc::clone(&self.inbound))
              .iface("lo")?
              .accept()
-             .add_to_batch(&mut batch);
-        self.allow_port("22", &Protocol::TCP, Rc::clone(&inbound), &mut batch)?;
-        Rule::new(Rc::clone(&inbound))
+             .add_to_batch(&mut self.batch);
+        // Allow ssh from anywhere, and log to dmesg with a prefix.
+        Rule::new(Rc::clone(&self.inbound))
+             .dport("22", &Protocol::TCP)?
+             .accept()
+             .log(None, Some(LogPrefix::new("allow ssh connection:")?))
+             .add_to_batch(&mut self.batch);
+
+        // Allow http from all IPs in 192.168.1.255/24 .
+        let local_net = IpNetwork::new([192, 168, 1, 0].into(), 24).unwrap();
+        Rule::new(Rc::clone(&self.inbound))
              .dport("80", &Protocol::TCP)?
              .snetwork(local_net)
              .accept()
-             .add_to_batch(&mut batch);
-        Rule::new(Rc::clone(&inbound))
+             .add_to_batch(&mut self.batch);
+
+        // Allow ICMP traffic, drop IGMP.
+        Rule::new(Rc::clone(&self.inbound))
              .icmp()
              .accept()
-             .add_to_batch(&mut batch);
-        Rule::new(Rc::clone(&inbound))
+             .add_to_batch(&mut self.batch);
+        Rule::new(Rc::clone(&self.inbound))
              .igmp()
              .drop()
-             .add_to_batch(&mut batch);
+             .add_to_batch(&mut self.batch);
 
-        //use nftnl::expr::LogPrefix;
-        //let prefix = "REALM=".to_string() + &self.realm_def.name;
-        Rule::new(Rc::clone(&inbound))
+        // Log all traffic not accepted to NF_LOG group 1, accessible with ulogd.
+        Rule::new(Rc::clone(&self.inbound))
              .log(Some(LogGroup(1)), None)
-             //.log( Some(LogGroup(1)), Some(LogPrefix::new(&prefix)
-             //       .expect("Could not convert log prefix string to CString")))
-             .add_to_batch(&mut batch);
+             .add_to_batch(&mut self.batch);
 
-        let mut finalized_batch = batch.finalize().unwrap();
+        let mut finalized_batch = self.batch.finalize().unwrap();
         send_batch(&mut finalized_batch)?;
-        println!("ruleset applied");
+        println!("table {} commited", TABLE_NAME);
         Ok(())
     }
-    /// If there are any rulesets applied, remove them.
-    pub fn stop(&mut self) -> Result<(), Error> {
-        let table = Table::new(&CString::new(TABLE_NAME)?, ProtoFamily::Inet);
-        let mut batch = Batch::new();
-        batch.add(&table, MsgType::Add);
-        batch.add(&table, MsgType::Del);
+    /// If there is any table with name TABLE_NAME, remove it.
+    pub fn stop(mut self) -> Result<(), Error> {
+        self.batch.add(&self._table, MsgType::Add);
+        self.batch.add(&self._table, MsgType::Del);
+
+        let mut finalized_batch = self.batch.finalize().unwrap();
+        send_batch(&mut finalized_batch)?;
+        println!("table {} destroyed", TABLE_NAME);
         Ok(())
     }
 }
+
 
