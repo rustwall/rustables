@@ -1,5 +1,5 @@
-use rustables::{Batch, Chain, ChainMethods, Direction, MatchError, ProtoFamily,
-    Protocol, Rule, RuleMethods, Table, MsgType, Verdict};
+use rustables::{Batch, Chain, ChainMethods, Hook, MatchError, ProtoFamily,
+    Protocol, Rule, RuleMethods, Table, MsgType, Policy};
 use rustables::query::{send_batch, Error as QueryError};
 use rustables::expr::{LogGroup, LogPrefix, LogPrefixError};
 use ipnetwork::IpNetwork;
@@ -44,36 +44,36 @@ pub struct Firewall {
     inbound: Rc<Chain>,
     _outbound: Rc<Chain>,
     _forward: Rc<Chain>,
-    _table: Rc<Table>,
+    table: Rc<Table>,
 }
 
 impl Firewall {
     pub fn new() -> Result<Self, Error> {
         let mut batch = Batch::new();
-        let _table = Rc::new(
+        let table = Rc::new(
             Table::new(&CString::new(TABLE_NAME)?, ProtoFamily::Inet)
         );
-        batch.add(&_table, MsgType::Add);
+        batch.add(&table, MsgType::Add);
 
         // Create base chains. Base chains are hooked into a Direction/Hook.
         let inbound = Rc::new(
-            Chain::from_direction(&Direction::Inbound, Rc::clone(&_table))?
-                  .verdict(&Verdict::Drop)
+            Chain::from_hook(Hook::In, Rc::clone(&table))
+                  .verdict(Policy::Drop)
                   .add_to_batch(&mut batch)
         );
         let _outbound = Rc::new(
-            Chain::from_direction(&Direction::Outbound, Rc::clone(&_table))?
-                  .verdict(&Verdict::Accept)
+            Chain::from_hook(Hook::Out, Rc::clone(&table))
+                  .verdict(Policy::Accept)
                   .add_to_batch(&mut batch)
         );
         let _forward = Rc::new(
-            Chain::from_direction(&Direction::Forward, Rc::clone(&_table))?
-                  .verdict(&Verdict::Accept)
+            Chain::from_hook(Hook::Forward, Rc::clone(&table))
+                  .verdict(Policy::Accept)
                   .add_to_batch(&mut batch)
         );
 
         Ok(Firewall {
-            _table,
+            table,
             batch,
             inbound,
             _outbound,
@@ -129,8 +129,8 @@ impl Firewall {
     }
     /// If there is any table with name TABLE_NAME, remove it.
     pub fn stop(mut self) -> Result<(), Error> {
-        self.batch.add(&self._table, MsgType::Add);
-        self.batch.add(&self._table, MsgType::Del);
+        self.batch.add(&self.table, MsgType::Add);
+        self.batch.add(&self.table, MsgType::Del);
 
         let mut finalized_batch = self.batch.finalize().unwrap();
         send_batch(&mut finalized_batch)?;

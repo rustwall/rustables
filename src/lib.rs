@@ -110,7 +110,7 @@ pub use chain::{get_chains_cb, list_chains_for_table};
 pub use chain::{Chain, ChainType, Hook, Policy, Priority};
 
 mod chain_methods;
-pub use chain_methods::{ChainMethods, Direction, Verdict};
+pub use chain_methods::ChainMethods;
 
 pub mod query;
 
