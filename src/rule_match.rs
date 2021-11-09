@@ -18,6 +18,8 @@ pub enum Error {
     NoSuchIface,
     #[error("Error converting from a string to an integer")]
     ParseError(#[from] ParseIntError),
+    #[error("the interface name is too long")]
+    NameTooLong,
 }
 
 
@@ -62,9 +64,12 @@ pub trait Match {
         where Self: std::marker::Sized;
     /// Match packets in an already established connections.
     fn established(self) -> Self where Self: std::marker::Sized;
-    /// Match packets going through `interface`. `iface_name` is an interface name, as in
-    /// "wlan0" or "lo".
-    fn iface(self, ifacename: &str) -> Result<Self, Error>
+    /// Match packets going through `iface_index`. Interface indexes can be queried with
+    /// `iface_index()`.
+    fn iface_id(self, iface_index: libc::c_uint) -> Result<Self, Error>
+        where Self: std::marker::Sized;
+    /// Match packets going through `iface_name`, an interface name, as in "wlan0" or "lo".
+    fn iface(self, iface_name: &str) -> Result<Self, Error>
         where Self: std::marker::Sized;
     /// Add a log instruction to the rule. `group` is the NFLog group, `prefix` is a prefix
     /// appended to each log line.
@@ -130,10 +135,18 @@ impl Match for Rule {
         self.add_expr(&nft_expr!(cmp != 0u32));
         self
     }
-    fn iface(mut self, iface_name: &str) -> Result<Self, Error> {
-        let iface_index = iface_index(iface_name)?;
+    fn iface_id(mut self, iface_index: libc::c_uint) -> Result<Self, Error> {
         self.add_expr(&nft_expr!(meta iif));
         self.add_expr(&nft_expr!(cmp == iface_index));
+        Ok(self)
+    }
+    fn iface(mut self, iface_name: &str) -> Result<Self, Error> {
+        if iface_name.len() > libc::IFNAMSIZ {
+            return Err(Error::NameTooLong);
+        }
+
+        self.add_expr(&nft_expr!(meta iifname));
+        self.add_expr(&nft_expr!(cmp == CString::new(iface_name)?.as_bytes()));
         Ok(self)
     }
     fn saddr(mut self, ip: IpAddr) -> Self {
@@ -202,7 +215,7 @@ impl Match for Rule {
 }
 
 /// Look up the interface index for a given interface name.
-fn iface_index(name: &str) -> Result<libc::c_uint, Error> {
+pub fn iface_index(name: &str) -> Result<libc::c_uint, Error> {
     let c_name = CString::new(name)?;
     let index = unsafe { libc::if_nametoindex(c_name.as_ptr()) };
     match index {

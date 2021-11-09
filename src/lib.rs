@@ -117,7 +117,7 @@ pub use rule::Rule;
 pub use rule::{get_rules_cb, list_rules_for_chain};
 
 mod rule_match;
-pub use rule_match::{Match, Protocol, Error as MatchError};
+pub use rule_match::{iface_index, Match, Protocol, Error as MatchError};
 
 pub mod set;
 
