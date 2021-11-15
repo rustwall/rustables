@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 use libc::{nlmsghdr, AF_UNIX, NFNETLINK_V0, NFNL_SUBSYS_NFTABLES};
 use rustables::{nft_nlmsg_maxsize, Chain, MsgType, NlMsg, ProtoFamily, Rule, Table};
 use std::ffi::{c_void, CStr};
@@ -14,6 +15,10 @@ pub fn get_operation_from_nlmsghdr_type(x: u16) -> u8 {
 
 pub const TABLE_NAME: &[u8; 10] = b"mocktable\0";
 pub const CHAIN_NAME: &[u8; 10] = b"mockchain\0";
+
+pub const TABLE_USERDATA: &[u8; 14] = b"mocktabledata\0";
+pub const CHAIN_USERDATA: &[u8; 14] = b"mockchaindata\0";
+pub const RULE_USERDATA: &[u8; 13] = b"mockruledata\0";
 
 type NetLinkType = u16;
 
@@ -100,10 +105,13 @@ pub fn get_test_rule() -> Rule {
     rule
 }
 
-pub fn get_test_nlmsg(rule: &mut dyn NlMsg) -> (nlmsghdr, Nfgenmsg, Vec<u8>) {
+pub fn get_test_nlmsg_with_msg_type(
+    obj: &mut dyn NlMsg,
+    msg_type: MsgType,
+) -> (nlmsghdr, Nfgenmsg, Vec<u8>) {
     let mut buf = vec![0u8; nft_nlmsg_maxsize() as usize];
     unsafe {
-        rule.write(buf.as_mut_ptr() as *mut c_void, 0, MsgType::Add);
+        obj.write(buf.as_mut_ptr() as *mut c_void, 0, msg_type);
 
         // right now the message is composed of the following parts:
         // - nlmsghdr (contains the message size and type)
@@ -135,4 +143,8 @@ pub fn get_test_nlmsg(rule: &mut dyn NlMsg) -> (nlmsghdr, Nfgenmsg, Vec<u8>) {
 
         (nlmsghdr, nfgenmsg, raw_value)
     }
+}
+
+pub fn get_test_nlmsg(obj: &mut dyn NlMsg) -> (nlmsghdr, Nfgenmsg, Vec<u8>) {
+    get_test_nlmsg_with_msg_type(obj, MsgType::Add)
 }
