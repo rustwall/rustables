@@ -1,6 +1,7 @@
 #![allow(dead_code)]
 use libc::{nlmsghdr, AF_UNIX, NFNETLINK_V0, NFNL_SUBSYS_NFTABLES};
-use rustables::{nft_nlmsg_maxsize, Chain, MsgType, NlMsg, ProtoFamily, Rule, Table};
+use rustables::set::SetKey;
+use rustables::{nft_nlmsg_maxsize, Chain, MsgType, NlMsg, ProtoFamily, Rule, Set, Table};
 use std::ffi::{c_void, CStr};
 use std::mem::size_of;
 use std::rc::Rc;
@@ -15,10 +16,14 @@ pub fn get_operation_from_nlmsghdr_type(x: u16) -> u8 {
 
 pub const TABLE_NAME: &[u8; 10] = b"mocktable\0";
 pub const CHAIN_NAME: &[u8; 10] = b"mockchain\0";
+pub const SET_NAME: &[u8; 8] = b"mockset\0";
 
 pub const TABLE_USERDATA: &[u8; 14] = b"mocktabledata\0";
 pub const CHAIN_USERDATA: &[u8; 14] = b"mockchaindata\0";
 pub const RULE_USERDATA: &[u8; 13] = b"mockruledata\0";
+pub const SET_USERDATA: &[u8; 12] = b"mocksetdata\0";
+
+pub const SET_ID: u32 = 123456;
 
 type NetLinkType = u16;
 
@@ -107,8 +112,16 @@ pub fn get_test_chain() -> Chain {
 }
 
 pub fn get_test_rule() -> Rule {
-    let rule = Rule::new(Rc::new(get_test_chain()));
-    rule
+    Rule::new(Rc::new(get_test_chain()))
+}
+
+pub fn get_test_set<'a, T: SetKey>(table: &'a Table) -> Set<'a, T> {
+    Set::new(
+        CStr::from_bytes_with_nul(SET_NAME).unwrap(),
+        SET_ID,
+        table,
+        ProtoFamily::Ipv4,
+    )
 }
 
 pub fn get_test_nlmsg_with_msg_type(
