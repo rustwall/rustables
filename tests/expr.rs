@@ -281,7 +281,7 @@ fn lookup_expr_is_valid() {
     let set_name = &CStr::from_bytes_with_nul(b"mockset\0").unwrap();
     let mut rule = get_test_rule();
     let table = rule.get_chain().get_table();
-    let mut set = Set::new(set_name, 0, &table, ProtoFamily::Inet);
+    let mut set = Set::new(set_name, 0, table, ProtoFamily::Inet);
     let address: Ipv4Addr = [8, 8, 8, 8].into();
     set.add(&address);
     let lookup = Lookup::new(&set).unwrap();

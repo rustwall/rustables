@@ -115,11 +115,11 @@ pub fn get_test_rule() -> Rule {
     Rule::new(Rc::new(get_test_chain()))
 }
 
-pub fn get_test_set<'a, T: SetKey>(table: &'a Table) -> Set<'a, T> {
+pub fn get_test_set<T: SetKey>() -> Set<T> {
     Set::new(
         CStr::from_bytes_with_nul(SET_NAME).unwrap(),
         SET_ID,
-        table,
+        Rc::new(get_test_table()),
         ProtoFamily::Ipv4,
     )
 }

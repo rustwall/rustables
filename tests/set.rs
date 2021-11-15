@@ -9,8 +9,7 @@ use lib::*;
 
 #[test]
 fn new_empty_set() {
-    let table = get_test_table();
-    let mut set = get_test_set::<Ipv4Addr>(&table);
+    let mut set = get_test_set::<Ipv4Addr>();
     let (nlmsghdr, _nfgenmsg, raw_expr) = get_test_nlmsg(&mut set);
     assert_eq!(
         get_operation_from_nlmsghdr_type(nlmsghdr.nlmsg_type),
@@ -39,8 +38,7 @@ fn new_empty_set() {
 
 #[test]
 fn delete_empty_set() {
-    let table = get_test_table();
-    let mut set = get_test_set::<Ipv6Addr>(&table);
+    let mut set = get_test_set::<Ipv6Addr>();
     let (nlmsghdr, _nfgenmsg, raw_expr) = get_test_nlmsg_with_msg_type(&mut set, MsgType::Del);
     assert_eq!(
         get_operation_from_nlmsghdr_type(nlmsghdr.nlmsg_type),
