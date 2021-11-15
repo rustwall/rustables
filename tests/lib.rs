@@ -92,16 +92,22 @@ pub struct Nfgenmsg {
     res_id: u16, /* resource id */
 }
 
-pub fn get_test_rule() -> Rule {
-    let table = Rc::new(Table::new(
+pub fn get_test_table() -> Table {
+    Table::new(
         &CStr::from_bytes_with_nul(TABLE_NAME).unwrap(),
         ProtoFamily::Inet,
-    ));
-    let chain = Rc::new(Chain::new(
+    )
+}
+
+pub fn get_test_chain() -> Chain {
+    Chain::new(
         &CStr::from_bytes_with_nul(CHAIN_NAME).unwrap(),
-        Rc::clone(&table),
-    ));
-    let rule = Rule::new(Rc::clone(&chain));
+        Rc::new(get_test_table()),
+    )
+}
+
+pub fn get_test_rule() -> Rule {
+    let rule = Rule::new(Rc::new(get_test_chain()));
     rule
 }
 
