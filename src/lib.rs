@@ -109,12 +109,18 @@ mod chain;
 pub use chain::{get_chains_cb, list_chains_for_table};
 pub use chain::{Chain, ChainType, Hook, Policy, Priority};
 
+mod chain_methods;
+pub use chain_methods::ChainMethods;
+
 pub mod query;
 
 mod rule;
 pub use rule::Rule;
 #[cfg(feature = "query")]
 pub use rule::{get_rules_cb, list_rules_for_chain};
+
+mod rule_methods;
+pub use rule_methods::{iface_index, Protocol, RuleMethods, Error as MatchError};
 
 pub mod set;
 
