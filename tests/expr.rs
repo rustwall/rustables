@@ -1,114 +1,19 @@
-use rustables::{nft_nlmsg_maxsize, Chain, MsgType, NlMsg, ProtoFamily, Rule, Table};
-use rustables::set::Set;
-use rustables::sys::libc::{nlmsghdr, AF_UNIX, NFNETLINK_V0, NFNL_SUBSYS_NFTABLES, NF_DROP};
 use rustables::expr::{
     Bitwise, Cmp, CmpOp, Conntrack, Counter, Expression, HeaderField, IcmpCode, Immediate, Log,
     LogGroup, LogPrefix, Lookup, Meta, Nat, NatType, Payload, Register, Reject, TcpHeaderField,
-    TransportHeaderField, Verdict
+    TransportHeaderField, Verdict,
 };
-use std::ffi::{c_void, CStr};
-use std::mem::size_of;
+use rustables::set::Set;
+use rustables::sys::libc::{nlmsghdr, NF_DROP};
+use rustables::{ProtoFamily, Rule};
+use std::ffi::CStr;
 use std::net::Ipv4Addr;
-use std::rc::Rc;
-use thiserror::Error;
 
 mod sys;
 use sys::*;
 
-fn get_subsystem_from_nlmsghdr_type(x: u16) -> u8 {
-    ((x & 0xff00) >> 8) as u8
-}
-fn get_operation_from_nlmsghdr_type(x: u16) -> u8 {
-    (x & 0x00ff) as u8
-}
-
-const TABLE_NAME: &[u8; 10] = b"mocktable\0";
-const CHAIN_NAME: &[u8; 10] = b"mockchain\0";
-
-type NetLinkType = u16;
-
-#[derive(Debug, PartialEq)]
-enum NetlinkExpr {
-    Nested(NetLinkType, Vec<NetlinkExpr>),
-    Final(NetLinkType, Vec<u8>),
-    List(Vec<NetlinkExpr>),
-}
-
-#[derive(Debug, Error)]
-#[error("empty data")]
-struct EmptyDataError;
-
-impl NetlinkExpr {
-    fn to_raw(self) -> Vec<u8> {
-        match self {
-            NetlinkExpr::Final(ty, val) => {
-                let len = val.len() + 4;
-                let mut res = Vec::with_capacity(len);
-
-                res.extend(&(len as u16).to_le_bytes());
-                res.extend(&ty.to_le_bytes());
-                res.extend(val);
-                // alignment
-                while res.len() % 4 != 0 {
-                    res.push(0);
-                }
-
-                res
-            }
-            NetlinkExpr::Nested(ty, exprs) => {
-                // some heuristic to decrease allocations (even though this is
-                // only useful for testing so performance is not an objective)
-                let mut sub = Vec::with_capacity(exprs.len() * 50);
-
-                for expr in exprs {
-                    sub.append(&mut expr.to_raw());
-                }
-
-                let len = sub.len() + 4;
-                let mut res = Vec::with_capacity(len);
-
-                // set the "NESTED" flag
-                res.extend(&(len as u16).to_le_bytes());
-                res.extend(&(ty | 0x8000).to_le_bytes());
-                res.extend(sub);
-
-                res
-            }
-            NetlinkExpr::List(exprs) => {
-                // some heuristic to decrease allocations (even though this is
-                // only useful for testing so performance is not an objective)
-                let mut list = Vec::with_capacity(exprs.len() * 50);
-
-                for expr in exprs {
-                    list.append(&mut expr.to_raw());
-                }
-
-                list
-            }
-        }
-    }
-}
-
-#[repr(C)]
-#[derive(Clone, Copy)]
-struct Nfgenmsg {
-    family: u8,  /* AF_xxx */
-    version: u8, /* nfnetlink version */
-    res_id: u16, /* resource id */
-}
-
-fn get_test_rule() -> Rule {
-    let table = Rc::new(Table::new(
-        &CStr::from_bytes_with_nul(TABLE_NAME).unwrap(),
-        ProtoFamily::Inet,
-    ));
-    let chain = Rc::new(Chain::new(
-        &CStr::from_bytes_with_nul(CHAIN_NAME).unwrap(),
-        Rc::clone(&table),
-    ));
-    let rule = Rule::new(Rc::clone(&chain));
-    rule
-}
+mod lib;
+use lib::*;
 
 fn get_test_nlmsg_from_expr(
     rule: &mut Rule,
@@ -116,44 +21,12 @@ fn get_test_nlmsg_from_expr(
 ) -> (nlmsghdr, Nfgenmsg, Vec<u8>) {
     rule.add_expr(expr);
 
-    let mut buf = vec![0u8; nft_nlmsg_maxsize() as usize];
-    unsafe {
-        rule.write(buf.as_mut_ptr() as *mut c_void, 0, MsgType::Add);
-
-        // right now the message is composed of the following parts:
-        // - nlmsghdr (contains the message size and type)
-        // - nfgenmsg (nftables header that describes the message family)
-        // - the raw expression that we want to validate
-
-        let size_of_hdr = size_of::<nlmsghdr>();
-        let size_of_nfgenmsg = size_of::<Nfgenmsg>();
-        let nlmsghdr = *(buf[0..size_of_hdr].as_ptr() as *const nlmsghdr);
-        let nfgenmsg =
-            *(buf[size_of_hdr..size_of_hdr + size_of_nfgenmsg].as_ptr() as *const Nfgenmsg);
-        let raw_expr = buf[size_of_hdr + size_of_nfgenmsg..nlmsghdr.nlmsg_len as usize]
-            .iter()
-            .map(|x| *x)
-            .collect();
-
-        // sanity checks on the global message (this should be very similar/factorisable for the
-        // most part in other tests)
-        // TODO: check the messages flags
-        assert_eq!(
-            get_subsystem_from_nlmsghdr_type(nlmsghdr.nlmsg_type),
-            NFNL_SUBSYS_NFTABLES as u8
-        );
-        assert_eq!(
-            get_operation_from_nlmsghdr_type(nlmsghdr.nlmsg_type),
-            NFT_MSG_NEWRULE as u8
-        );
-        assert_eq!(nlmsghdr.nlmsg_seq, 0);
-        assert_eq!(nlmsghdr.nlmsg_pid, 0);
-        assert_eq!(nfgenmsg.family, AF_UNIX as u8);
-        assert_eq!(nfgenmsg.version, NFNETLINK_V0 as u8);
-        assert_eq!(nfgenmsg.res_id.to_be(), 0);
-
-        (nlmsghdr, nfgenmsg, raw_expr)
-    }
+    let (nlmsghdr, nfgenmsg, raw_expr) = get_test_nlmsg(rule);
+    assert_eq!(
+        get_operation_from_nlmsghdr_type(nlmsghdr.nlmsg_type),
+        NFT_MSG_NEWRULE as u8
+    );
+    (nlmsghdr, nfgenmsg, raw_expr)
 }
 
 #[test]
@@ -408,7 +281,7 @@ fn lookup_expr_is_valid() {
     let set_name = &CStr::from_bytes_with_nul(b"mockset\0").unwrap();
     let mut rule = get_test_rule();
     let table = rule.get_chain().get_table();
-    let mut set = Set::new(set_name, 0, &table, ProtoFamily::Inet);
+    let mut set = Set::new(set_name, 0, table, ProtoFamily::Inet);
     let address: Ipv4Addr = [8, 8, 8, 8].into();
     set.add(&address);
     let lookup = Lookup::new(&set).unwrap();
@@ -544,9 +417,7 @@ fn nat_expr_is_valid() {
                                 ),
                                 NetlinkExpr::Final(
                                     NFTA_NAT_FAMILY,
-                                    // TODO find the right value to substitute here.
-                                    //(ProtoFamily::Ipv4 as u16).to_le_bytes().to_vec()
-                                    2u32.to_be_bytes().to_vec()
+                                    (ProtoFamily::Ipv4 as u32).to_be_bytes().to_vec(),
                                 ),
                                 NetlinkExpr::Final(
                                     NFTA_NAT_REG_ADDR_MIN,
@@ -564,7 +435,6 @@ fn nat_expr_is_valid() {
 
 #[test]
 fn payload_expr_is_valid() {
-    // TODO test loaded payload ?
     let tcp_header_field = TcpHeaderField::Sport;
     let transport_header_field = TransportHeaderField::Tcp(tcp_header_field);
     let payload = Payload::Transport(transport_header_field);
@@ -600,8 +470,7 @@ fn payload_expr_is_valid() {
                                 ),
                                 NetlinkExpr::Final(
                                     NFTA_PAYLOAD_LEN,
-                                    //tcp_header_field.len().to_be_bytes().to_vec()
-                                    0u32.to_be_bytes().to_vec()
+                                    tcp_header_field.len().to_be_bytes().to_vec()
                                 ),
                             ]
                         )
@@ -671,7 +540,6 @@ fn verdict_expr_is_valid() {
                     NFTA_LIST_ELEM,
                     vec![
                         NetlinkExpr::Final(NFTA_EXPR_NAME, b"immediate\0".to_vec()),
-                        // TODO find the right arrangement for Verdict's data.
                         NetlinkExpr::Nested(
                             NFTA_EXPR_DATA,
                             vec![
@@ -685,7 +553,7 @@ fn verdict_expr_is_valid() {
                                         NFTA_DATA_VERDICT,
                                         vec![NetlinkExpr::Final(
                                             NFTA_VERDICT_CODE,
-                                            NF_DROP.to_be_bytes().to_vec() //0u32.to_be_bytes().to_vec()
+                                            NF_DROP.to_be_bytes().to_vec()
                                         ),]
                                     )],
                                 ),

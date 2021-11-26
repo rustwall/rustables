@@ -1,5 +1,5 @@
-use crate::{table::Table, MsgType, ProtoFamily};
 use crate::sys::{self, libc};
+use crate::{table::Table, MsgType, ProtoFamily};
 use std::{
     cell::Cell,
     ffi::{c_void, CStr, CString},
@@ -26,15 +26,15 @@ macro_rules! nft_set {
     }};
 }
 
-pub struct Set<'a, K> {
+pub struct Set<K> {
     pub(crate) set: *mut sys::nftnl_set,
-    pub(crate) table: &'a Table,
+    pub(crate) table: Rc<Table>,
     pub(crate) family: ProtoFamily,
     _marker: ::std::marker::PhantomData<K>,
 }
 
-impl<'a, K> Set<'a, K> {
-    pub fn new(name: &CStr, id: u32, table: &'a Table, family: ProtoFamily) -> Self
+impl<K> Set<K> {
+    pub fn new(name: &CStr, id: u32, table: Rc<Table>, family: ProtoFamily) -> Self
     where
         K: SetKey,
     {
@@ -63,7 +63,7 @@ impl<'a, K> Set<'a, K> {
         }
     }
 
-    pub unsafe fn from_raw(set: *mut sys::nftnl_set, table: &'a Table, family: ProtoFamily) -> Self
+    pub unsafe fn from_raw(set: *mut sys::nftnl_set, table: Rc<Table>, family: ProtoFamily) -> Self
     where
         K: SetKey,
     {
@@ -95,7 +95,7 @@ impl<'a, K> Set<'a, K> {
         }
     }
 
-    pub fn elems_iter(&'a self) -> SetElemsIter<'a, K> {
+    pub fn elems_iter(&self) -> SetElemsIter<K> {
         SetElemsIter::new(self)
     }
 
@@ -146,13 +146,13 @@ impl<'a, K> Set<'a, K> {
     }
 }
 
-impl<'a, K> Debug for Set<'a, K> {
+impl<K> Debug for Set<K> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{:?}", self.get_str())
     }
 }
 
-unsafe impl<'a, K> crate::NlMsg for Set<'a, K> {
+unsafe impl<K> crate::NlMsg for Set<K> {
     unsafe fn write(&self, buf: *mut c_void, seq: u32, msg_type: MsgType) {
         let type_ = match msg_type {
             MsgType::Add => libc::NFT_MSG_NEWSET,
@@ -169,20 +169,20 @@ unsafe impl<'a, K> crate::NlMsg for Set<'a, K> {
     }
 }
 
-impl<'a, K> Drop for Set<'a, K> {
+impl<K> Drop for Set<K> {
     fn drop(&mut self) {
         unsafe { sys::nftnl_set_free(self.set) };
     }
 }
 
 pub struct SetElemsIter<'a, K> {
-    set: &'a Set<'a, K>,
+    set: &'a Set<K>,
     iter: *mut sys::nftnl_set_elems_iter,
     ret: Rc<Cell<i32>>,
 }
 
 impl<'a, K> SetElemsIter<'a, K> {
-    fn new(set: &'a Set<'a, K>) -> Self {
+    fn new(set: &'a Set<K>) -> Self {
         let iter = try_alloc!(unsafe {
             sys::nftnl_set_elems_iter_create(set.set as *const sys::nftnl_set)
         });
@@ -194,7 +194,7 @@ impl<'a, K> SetElemsIter<'a, K> {
     }
 }
 
-impl<'a, K: 'a> Iterator for SetElemsIter<'a, K> {
+impl<'a, K> Iterator for SetElemsIter<'a, K> {
     type Item = SetElemsMsg<'a, K>;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -219,7 +219,7 @@ impl<'a, K> Drop for SetElemsIter<'a, K> {
 }
 
 pub struct SetElemsMsg<'a, K> {
-    set: &'a Set<'a, K>,
+    set: &'a Set<K>,
     iter: *mut sys::nftnl_set_elems_iter,
     ret: Rc<Cell<i32>>,
 }

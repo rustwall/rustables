@@ -28,7 +28,7 @@ impl Payload {
             }),
             Payload::Transport(ref f) => RawPayload::Transport(RawPayloadData {
                 offset: f.offset(),
-                len: f.offset(),
+                len: f.len(),
             }),
         }
     }

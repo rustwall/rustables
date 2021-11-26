@@ -77,8 +77,8 @@ use thiserror::Error;
 extern crate log;
 
 pub mod sys;
-use sys::libc;
 use std::{convert::TryFrom, ffi::c_void, ops::Deref};
+use sys::libc;
 
 macro_rules! try_alloc {
     ($e:expr) => {{
@@ -123,6 +123,7 @@ mod rule_methods;
 pub use rule_methods::{iface_index, Protocol, RuleMethods, Error as MatchError};
 
 pub mod set;
+pub use set::Set;
 
 /// The type of the message as it's sent to netfilter. A message consists of an object, such as a
 /// [`Table`], [`Chain`] or [`Rule`] for example, and a [`MsgType`] to describe what to do with
