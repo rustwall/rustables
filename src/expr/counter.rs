@@ -3,7 +3,7 @@ use crate::sys;
 use std::os::raw::c_char;
 
 /// A counter expression adds a counter to the rule that is incremented to count number of packets
-/// and number of bytes for all packets that has matched the rule.
+/// and number of bytes for all packets that have matched the rule.
 #[derive(Debug, PartialEq)]
 pub struct Counter {
     pub nb_bytes: u64,

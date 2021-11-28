@@ -60,29 +60,29 @@ pub use self::wrapper::ExpressionWrapper;
 #[derive(Debug, Error)]
 pub enum DeserializationError {
     #[error("The expected expression type doesn't match the name of the raw expression")]
-    /// The expected expression type doesn't match the name of the raw expression
+    /// The expected expression type doesn't match the name of the raw expression.
     InvalidExpressionKind,
 
     #[error("Deserializing the requested type isn't implemented yet")]
-    /// Deserializing the requested type isn't implemented yet
+    /// Deserializing the requested type isn't implemented yet.
     NotImplemented,
 
     #[error("The expression value cannot be deserialized to the requested type")]
-    /// The expression value cannot be deserialized to the requested type
+    /// The expression value cannot be deserialized to the requested type.
     InvalidValue,
 
     #[error("A pointer was null while a non-null pointer was expected")]
-    /// A pointer was null while a non-null pointer was expected
+    /// A pointer was null while a non-null pointer was expected.
     NullPointer,
 
     #[error(
         "The size of a raw value was incoherent with the expected type of the deserialized value"
     )]
-    /// The size of a raw value was incoherent with the expected type of the deserialized value
+    /// The size of a raw value was incoherent with the expected type of the deserialized value/
     InvalidDataSize,
 
     #[error(transparent)]
-    /// Couldn't find a matching protocol
+    /// Couldn't find a matching protocol.
     InvalidProtolFamily(#[from] super::InvalidProtocolFamily),
 }
 
@@ -91,8 +91,8 @@ pub trait Expression {
     /// Returns the raw name used by nftables to identify the rule.
     fn get_raw_name() -> *const libc::c_char;
 
-    /// Try to parse the expression from a raw nftables expression,
-    /// returning a [DeserializationError] if the attempted parsing failed.
+    /// Try to parse the expression from a raw nftables expression, returning a
+    /// [DeserializationError] if the attempted parsing failed.
     fn from_expr(_expr: *const sys::nftnl_expr) -> Result<Self, DeserializationError>
     where
         Self: Sized,
@@ -100,8 +100,8 @@ pub trait Expression {
         Err(DeserializationError::NotImplemented)
     }
 
-    /// Allocates and returns the low level `nftnl_expr` representation of this expression.
-    /// The caller to this method is responsible for freeing the expression.
+    /// Allocates and returns the low level `nftnl_expr` representation of this expression. The
+    /// caller to this method is responsible for freeing the expression.
     fn to_expr(&self, rule: &Rule) -> *mut sys::nftnl_expr;
 }
 

@@ -11,8 +11,7 @@ pub struct Lookup {
 }
 
 impl Lookup {
-    /// Creates a new lookup entry.
-    /// May return None if the set have no name.
+    /// Creates a new lookup entry. May return None if the set has no name.
     pub fn new<K>(set: &Set<K>) -> Option<Self> {
         set.get_name().map(|set_name| Lookup {
             set_name: set_name.to_owned(),

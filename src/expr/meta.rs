@@ -14,7 +14,7 @@ pub enum Meta {
     Iif,
     /// Packet output interface index (dev->ifindex).
     Oif,
-    /// Packet input interface name (dev->name)
+    /// Packet input interface name (dev->name).
     IifName,
     /// Packet output interface name (dev->name).
     OifName,
@@ -32,7 +32,7 @@ pub enum Meta {
     L4Proto,
     /// Socket control group (skb->sk->sk_classid).
     Cgroup,
-    /// A 32bit pseudo-random number
+    /// A 32bit pseudo-random number.
     PRandom,
 }
 

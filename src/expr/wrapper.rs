@@ -47,7 +47,7 @@ impl ExpressionWrapper {
         }
     }
 
-    /// Attempt to decode the expression as the type T.
+    /// Attempts to decode the expression as the type T.
     pub fn decode_expr<T: Expression>(&self) -> Result<T, DeserializationError> {
         if let Some(kind) = self.get_kind() {
             let raw_name = unsafe { CStr::from_ptr(T::get_raw_name()) };

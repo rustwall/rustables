@@ -101,11 +101,10 @@ impl<const N: usize> Expression for Cmp<[u8; N]> {
         Cmp::<u8>::get_raw_name()
     }
 
-    /// The raw data contained inside `Cmp` expressions can only be deserialized to
-    /// arrays of bytes, to ensure that the memory layout of retrieved data cannot be
-    /// violated. It is your responsibility to provide the correct length of the byte
-    /// data. If the data size is invalid, you will get the error
-    /// `DeserializationError::InvalidDataSize`.
+    /// The raw data contained inside `Cmp` expressions can only be deserialized to arrays of
+    /// bytes, to ensure that the memory layout of retrieved data cannot be violated. It is your
+    /// responsibility to provide the correct length of the byte data. If the data size is invalid,
+    /// you will get the error `DeserializationError::InvalidDataSize`.
     ///
     /// Example (warning, no error checking!):
     /// ```rust
@@ -183,8 +182,8 @@ macro_rules! nft_expr_cmp {
     };
 }
 
-/// Can be used to compare the value loaded by [`Meta::IifName`] and [`Meta::OifName`]. Please
-/// note that it is faster to check interface index than name.
+/// Can be used to compare the value loaded by [`Meta::IifName`] and [`Meta::OifName`]. Please note
+/// that it is faster to check interface index than name.
 ///
 /// [`Meta::IifName`]: enum.Meta.html#variant.IifName
 /// [`Meta::OifName`]: enum.Meta.html#variant.OifName

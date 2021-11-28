@@ -24,11 +24,9 @@
 //     option. This file may not be copied, modified, or distributed
 //     except according to those terms.
 
-//! Safe abstraction for [`libnftnl`]. Provides low-level userspace access to the in-kernel
-//! nf_tables subsystem. See [`rustables-sys`] for the low level FFI bindings to the C library.
-//!
-//! Can be used to create and remove tables, chains, sets and rules from the nftables firewall,
-//! the successor to iptables.
+//! Safe abstraction for [`libnftnl`]. Provides userspace access to the in-kernel nf_tables
+//! subsystem. Can be used to create and remove tables, chains, sets and rules from the nftables
+//! firewall, the successor to iptables.
 //!
 //! This library currently has quite rough edges and does not make adding and removing netfilter
 //! entries super easy and elegant. That is partly because the library needs more work, but also
@@ -43,33 +41,33 @@
 //! a number of places where the underlying library is used in an invalid or not intended way.
 //! Large portions of [`libnftnl`] are also not covered yet. Contributions are welcome!
 //!
-//! # Selecting version of `libnftnl`
+//! # Supported versions of `libnftnl`
 //!
-//! See the documentation for the corresponding sys crate for details: [`rustables-sys`].
-//! This crate has the same features as the sys crate, and selecting version works the same.
+//! This crate will automatically link to the currently installed version of libnftnl upon build.
+//! It requires libnftnl version 1.0.6 or higher. See how the low level FFI bindings to the C
+//! library are generated in [`build.rs`](../../../build.rs).
 //!
 //! # Access to raw handles
 //!
-//! Retrieving raw handles is considered unsafe and should only ever be enabled if you absoluetely
+//! Retrieving raw handles is considered unsafe and should only ever be enabled if you absolutely
 //! need it. It is disabled by default and hidden behind the feature gate `unsafe-raw-handles`.
-//! The reason for that special treatment is we cannot guarantee the lack of aliasing. For example,
-//! a program using a const handle to a object in a thread and writing through a mutable handle
-//! in another could reach all kind of undefined (and dangerous!) behaviors.
-//! By enabling that feature flag, you acknowledge that guaranteeing the respect of safety
-//! invariants is now your responsibility!
-//! Despite these shortcomings, that feature is still available because it may allow you to perform
-//! manipulations that this library doesn't currently expose. If that is your case, we would
-//! be very happy to hear from you and maybe help you get the necessary functionality upstream.
+//! The reason for that special treatment is we cannot guarantee the lack of aliasing. For
+//! example, a program using a const handle to a object in a thread and writing through a mutable
+//! handle in another could reach all kind of undefined (and dangerous!) behaviors.  By enabling
+//! that feature flag, you acknowledge that guaranteeing the respect of safety invariants is now
+//! your responsibility! Despite these shortcomings, that feature is still available because it
+//! may allow you to perform manipulations that this library doesn't currently expose. If that is
+//! your case, we would be very happy to hear from you and maybe help you get the necessary
+//! functionality upstream.
 //!
-//! Our current lack of confidence in our availability to provide a safe abstraction over the
-//! use of raw handles in the face of concurrency is the reason we decided to settly on `Rc`
-//! pointers instead of `Arc` (besides, this should gives us some nice performance boost, not
-//! that it matters much of course) and why we do not declare the types exposes by the library
-//! as `Send` nor `Sync`.
+//! Our current lack of confidence in our availability to provide a safe abstraction over the use
+//! of raw handles in the face of concurrency is the reason we decided to settly on `Rc` pointers
+//! instead of `Arc` (besides, this should gives us some nice performance boost, not that it
+//! matters much of course) and why we do not declare the types exposed by the library as `Send`
+//! nor `Sync`.
 //!
 //! [`libnftnl`]: https://netfilter.org/projects/libnftnl/
 //! [`nftables`]: https://netfilter.org/projects/nftables/
-//! [`rustables-sys`]: https://crates.io/crates/rustables-sys
 
 use thiserror::Error;
 
@@ -182,8 +180,8 @@ impl TryFrom<i32> for ProtoFamily {
 /// # Unsafe
 ///
 /// This trait is unsafe to implement because it must never serialize to anything larger than the
-/// largest possible netlink message. Internally the `nft_nlmsg_maxsize()` function is used to make
-/// sure the `buf` pointer passed to `write` always has room for the largest possible Netlink
+/// largest possible netlink message. Internally the `nft_nlmsg_maxsize()` function is used to
+/// make sure the `buf` pointer passed to `write` always has room for the largest possible Netlink
 /// message.
 pub unsafe trait NlMsg {
     /// Serializes the Netlink message to the buffer at `buf`. `buf` must have space for at least
@@ -202,11 +200,10 @@ where
     }
 }
 
-/// The largest nf_tables netlink message is the set element message, which
-/// contains the NFTA_SET_ELEM_LIST_ELEMENTS attribute. This attribute is
-/// a nest that describes the set elements. Given that the netlink attribute
-/// length (nla_len) is 16 bits, the largest message is a bit larger than
-/// 64 KBytes.
+/// The largest nf_tables netlink message is the set element message, which contains the
+/// NFTA_SET_ELEM_LIST_ELEMENTS attribute. This attribute is a nest that describes the set
+/// elements. Given that the netlink attribute length (nla_len) is 16 bits, the largest message is
+/// a bit larger than 64 KBytes.
 pub fn nft_nlmsg_maxsize() -> u32 {
     u32::from(::std::u16::MAX) + unsafe { libc::sysconf(libc::_SC_PAGESIZE) } as u32
 }
