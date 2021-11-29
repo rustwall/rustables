@@ -54,7 +54,7 @@ mod inner {
         NetlinkAllocationFailed,
     }
 
-    /// List objects of a certain type (e.g. libc::NFT_MSG_GETTABLE) with the help of a helper
+    /// Lists objects of a certain type (e.g. libc::NFT_MSG_GETTABLE) with the help of a helper
     /// function called by mnl::cb_run2.
     /// The callback expects a tuple of additional data (supplied as an argument to this function)
     /// and of the output vector, to which it should append the parsed object it received.
