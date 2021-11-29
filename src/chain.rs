@@ -101,7 +101,7 @@ impl Chain {
         Chain { chain, table }
     }
 
-    /// Sets the hook and priority for this chain. Without calling this method the chain well
+    /// Sets the hook and priority for this chain. Without calling this method the chain will
     /// become a "regular chain" without any hook and will thus not receive any traffic unless
     /// some rule forward packets to it via goto or jump verdicts.
     ///
@@ -146,7 +146,7 @@ impl Chain {
         }
     }
 
-    /// Update the userdata of this chain.
+    /// Updates the userdata of this chain.
     pub fn set_userdata(&self, data: &CStr) {
         unsafe {
             sys::nftnl_chain_set_str(self.chain, sys::NFTNL_CHAIN_USERDATA as u16, data.as_ptr());
@@ -180,7 +180,7 @@ impl Chain {
         }
     }
 
-    /// Returns a reference to the [`Table`] this chain belongs to
+    /// Returns a reference to the [`Table`] this chain belongs to.
     ///
     /// [`Table`]: struct.Table.html
     pub fn get_table(&self) -> Rc<Table> {
@@ -201,7 +201,7 @@ impl Chain {
 }
 
 impl fmt::Debug for Chain {
-    /// Return a string representation of the chain.
+    /// Returns a string representation of the chain.
     fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(fmt, "{:?}", self.get_str())
     }

@@ -6,9 +6,9 @@ use std::{convert::TryFrom, os::raw::c_char};
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Hash)]
 #[repr(i32)]
 pub enum NatType {
-    /// Source NAT. Changes the source address of a packet
+    /// Source NAT. Changes the source address of a packet.
     SNat = libc::NFT_NAT_SNAT,
-    /// Destination NAT. Changeth the destination address of a packet
+    /// Destination NAT. Changes the destination address of a packet.
     DNat = libc::NFT_NAT_DNAT,
 }
 
@@ -22,8 +22,8 @@ impl NatType {
     }
 }
 
-/// A source or destination NAT statement. Modifies the source or destination address
-/// (and possibly port) of packets.
+/// A source or destination NAT statement. Modifies the source or destination address (and possibly
+/// port) of packets.
 #[derive(Debug, PartialEq)]
 pub struct Nat {
     pub nat_type: NatType,

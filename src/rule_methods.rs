@@ -32,8 +32,7 @@ pub enum Protocol {
 }
 
 /// A RuleMethods trait over [`crate::Rule`], to make it match some criteria, and give it a
-/// verdict.  Mostly adapted from [talpid-core's
-/// firewall](https://github.com/mullvad/mullvadvpn-app/blob/d92376b4d1df9b547930c68aa9bae9640ff2a022/talpid-core/src/firewall/linux.rs).
+/// verdict. Mostly adapted from [talpid-core's firewall].
 /// All methods return the rule itself, allowing them to be chained. Usage example :
 /// ```rust
 /// use rustables::{Batch, Chain, ChainMethods, Protocol, ProtoFamily, Rule, RuleMethods, Table, MsgType, Hook};
@@ -49,38 +48,40 @@ pub enum Protocol {
 ///                 .accept()
 ///                 .add_to_batch(&mut batch);
 /// ```
+/// [talpid-core's firewall]:
+/// https://github.com/mullvad/mullvadvpn-app/blob/d92376b4d1df9b547930c68aa9bae9640ff2a022/talpid-core/src/firewall/linux.rs
 pub trait RuleMethods {
-    /// Match ICMP packets.
+    /// Matches ICMP packets.
     fn icmp(self) -> Self;
-    /// Match IGMP packets.
+    /// Matches IGMP packets.
     fn igmp(self) -> Self;
-    /// Match packets to destination `port` and `protocol`.
+    /// Matches packets to destination `port` and `protocol`.
     fn dport(self, port: &str, protocol: &Protocol) -> Result<Self, Error>
         where Self: std::marker::Sized;
-    /// Match packets on `protocol`.
+    /// Matches packets on `protocol`.
     fn protocol(self, protocol: Protocol) -> Result<Self, Error>
         where Self: std::marker::Sized;
-    /// Match packets in an already established connections.
+    /// Matches packets in an already established connection.
     fn established(self) -> Self where Self: std::marker::Sized;
-    /// Match packets going through `iface_index`. Interface indexes can be queried with
+    /// Matches packets going through `iface_index`. Interface indexes can be queried with
     /// `iface_index()`.
     fn iface_id(self, iface_index: libc::c_uint) -> Result<Self, Error>
         where Self: std::marker::Sized;
-    /// Match packets going through `iface_name`, an interface name, as in "wlan0" or "lo".
+    /// Matches packets going through `iface_name`, an interface name, as in "wlan0" or "lo".
     fn iface(self, iface_name: &str) -> Result<Self, Error>
         where Self: std::marker::Sized;
-    /// Add a log instruction to the rule. `group` is the NFLog group, `prefix` is a prefix
+    /// Adds a log instruction to the rule. `group` is the NFLog group, `prefix` is a prefix
     /// appended to each log line.
     fn log(self, group: Option<LogGroup>, prefix: Option<LogPrefix>) -> Self;
-    /// Match packets whose source IP address is `saddr`.
+    /// Matches packets whose source IP address is `saddr`.
     fn saddr(self, ip: IpAddr) -> Self;
-    /// Match packets whose source network is `snet`.
+    /// Matches packets whose source network is `snet`.
     fn snetwork(self, ip: IpNetwork) -> Self;
-    /// Add the `Accept` verdict to the rule. The packet will be sent to destination.
+    /// Adds the `Accept` verdict to the rule. The packet will be sent to destination.
     fn accept(self) -> Self;
-    /// Add the `Drop` verdict to the rule. The packet will be dropped.
+    /// Adds the `Drop` verdict to the rule. The packet will be dropped.
     fn drop(self) -> Self;
-    /// Append rule to `batch`.
+    /// Appends this rule to `batch`.
     fn add_to_batch(self, batch: &mut Batch) -> Self;
 }
 
@@ -216,7 +217,7 @@ impl RuleMethods for Rule {
     }
 }
 
-/// Look up the interface index for a given interface name.
+/// Looks up the interface index for a given interface name.
 pub fn iface_index(name: &str) -> Result<libc::c_uint, Error> {
     let c_name = CString::new(name)?;
     let index = unsafe { libc::if_nametoindex(c_name.as_ptr()) };

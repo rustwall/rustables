@@ -5,7 +5,7 @@ use std::os::raw::c_char;
 use std::ptr;
 use thiserror::Error;
 
-/// Error while communicating with netlink
+/// Error while communicating with netlink.
 #[derive(Error, Debug)]
 #[error("Error while communicating with netlink")]
 pub struct NetlinkError(());
@@ -67,9 +67,9 @@ impl Batch {
         self.next()
     }
 
-    /// Adds all the messages in the given iterator to this batch. If any message fails to be added
-    /// the error for that failure is returned and all messages up until that message stays added
-    /// to the batch.
+    /// Adds all the messages in the given iterator to this batch. If any message fails to be
+    /// added the error for that failure is returned and all messages up until that message stay
+    /// added to the batch.
     pub fn add_iter<T, I>(&mut self, msg_iter: I, msg_type: MsgType)
     where
         T: NlMsg,
@@ -192,9 +192,8 @@ impl<'a> Iterator for Iter<'a> {
     }
 }
 
-/// selected batch page is 256 Kbytes long to load ruleset of
-/// half a million rules without hitting -EMSGSIZE due to large
-/// iovec.
+/// Selected batch page is 256 Kbytes long to load ruleset of half a million rules without hitting
+/// -EMSGSIZE due to large iovec.
 pub fn default_batch_page_size() -> u32 {
     unsafe { libc::sysconf(libc::_SC_PAGESIZE) as u32 * 32 }
 }

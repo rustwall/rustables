@@ -2,13 +2,12 @@ use super::{DeserializationError, Expression, Rule};
 use crate::ProtoFamily;
 use crate::sys::{self, libc::{self, c_char}};
 
-/// A reject expression that defines the type of rejection message sent
-/// when discarding a packet.
+/// A reject expression that defines the type of rejection message sent when discarding a packet.
 #[derive(Debug, Clone, Copy, Eq, PartialEq, Hash)]
 pub enum Reject {
-    /// Return an ICMP unreachable packet
+    /// Returns an ICMP unreachable packet.
     Icmp(IcmpCode),
-    /// Reject by sending a TCP RST packet
+    /// Rejects by sending a TCP RST packet.
     TcpRst,
 }
 

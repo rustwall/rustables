@@ -3,8 +3,8 @@ use sys::libc;
 
 /// Returns a buffer containing a netlink message which requests a list of all the netfilter
 /// matching objects (e.g. tables, chains, rules, ...).
-/// Supply the type of objects to retrieve (e.g. libc::NFT_MSG_GETTABLE), and optionally
-/// a callback to execute on the header, to set parameters for example.
+/// Supply the type of objects to retrieve (e.g. libc::NFT_MSG_GETTABLE), and optionally a callback
+/// to execute on the header, to set parameters for example.
 /// To pass arbitrary data inside that callback, please use a closure.
 pub fn get_list_of_objects<Error>(
     seq: u32,
@@ -54,11 +54,10 @@ mod inner {
         NetlinkAllocationFailed,
     }
 
-    /// List objects of a certain type (e.g. libc::NFT_MSG_GETTABLE) with the help of an helper
+    /// Lists objects of a certain type (e.g. libc::NFT_MSG_GETTABLE) with the help of a helper
     /// function called by mnl::cb_run2.
-    /// The callback expect a tuple of additional data (supplied as an argument to
-    /// this function) and of the output vector, to which it should append the parsed
-    /// object it received.
+    /// The callback expects a tuple of additional data (supplied as an argument to this function)
+    /// and of the output vector, to which it should append the parsed object it received.
     pub fn list_objects_with_data<'a, A, T>(
         data_type: u16,
         cb: fn(&libc::nlmsghdr, &mut (&'a A, &mut Vec<T>)) -> libc::c_int,

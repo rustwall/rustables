@@ -8,8 +8,8 @@ use std::{
     os::raw::c_char,
 };
 
-/// Abstraction of `nftnl_table`. The top level container in netfilter. A table has a protocol
-/// family and contain [`Chain`]s that in turn hold the rules.
+/// Abstraction of `nftnl_table`, the top level container in netfilter. A table has a protocol
+/// family and contains [`Chain`]s that in turn hold the rules.
 ///
 /// [`Chain`]: struct.Chain.html
 pub struct Table {
@@ -78,7 +78,7 @@ impl Table {
         }
     }
 
-    /// Update the userdata of this chain.
+    /// Updates the userdata of this chain.
     pub fn set_userdata(&self, data: &CStr) {
         unsafe {
             sys::nftnl_table_set_str(self.table, sys::NFTNL_TABLE_USERDATA as u16, data.as_ptr());

@@ -73,8 +73,8 @@ pub struct LogGroup(pub u16);
 pub struct LogPrefix(CString);
 
 impl LogPrefix {
-    /// Create a new LogPrefix from a String. Converts it to CString as needed by nftnl. Note
-    /// that LogPrefix should not be more than 127 characters long.
+    /// Creates a new LogPrefix from a String. Converts it to CString as needed by nftnl. Note that
+    /// LogPrefix should not be more than 127 characters long.
     pub fn new(prefix: &str) -> Result<Self, LogPrefixError> {
         if prefix.chars().count() > 127 {
             return Err(LogPrefixError::TooLongPrefix);

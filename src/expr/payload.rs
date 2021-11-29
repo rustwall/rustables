@@ -51,7 +51,7 @@ pub struct RawPayloadData {
 }
 
 /// Because deserializing a `Payload` expression is not possible (there is not enough information
-/// in the expression itself, this enum should be used to deserialize payloads.
+/// in the expression itself), this enum should be used to deserialize payloads.
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
 pub enum RawPayload {
     LinkLayer(RawPayloadData),

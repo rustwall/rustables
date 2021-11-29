@@ -4,8 +4,8 @@ use crate::sys::libc;
 
 use super::DeserializationError;
 
-/// A netfilter data register. The expressions store and read data to and from these
-/// when evaluating rule statements.
+/// A netfilter data register. The expressions store and read data to and from these when
+/// evaluating rule statements.
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Hash)]
 #[repr(i32)]
 pub enum Register {
