@@ -45,7 +45,7 @@
 //!
 //! This crate will automatically link to the currently installed version of libnftnl upon build.
 //! It requires libnftnl version 1.0.6 or higher. See how the low level FFI bindings to the C
-//! library are generated in [`build.rs`](../../../build.rs).
+//! library are generated in [`build.rs`].
 //!
 //! # Access to raw handles
 //!
@@ -68,6 +68,7 @@
 //!
 //! [`libnftnl`]: https://netfilter.org/projects/libnftnl/
 //! [`nftables`]: https://netfilter.org/projects/nftables/
+//! [`build.rs`]: https://gitlab.com/rustwall/rustables/-/blob/master/build.rs
 
 use thiserror::Error;
 
