@@ -26,23 +26,21 @@ trial and error, there might of course be a number of places where the
 underlying library is used in an invalid or not intended way.  Large portions
 of [`libnftnl`] are also not covered yet. Contributions are welcome!
 
-## Selecting version of `libnftnl`
+## Supported versions of `libnftnl`
 
-See the documentation for the corresponding sys crate for details:
-[`rustables-sys`] This crate has the same features as the sys crate, and
-selecting version works the same.
+This crate will automatically link to the currently installed version of
+libnftnl upon build.  It requires libnftnl version 1.0.6 or higher. See how the
+low level FFI bindings to the C library are generated in [`build.rs`].
+
+## Licensing
 
 License: GNU GPLv3
 
-Original work licensed by Amagicom AB under MIT/Apache-2.0
-
-Since the GNU GPLv3 applies to parts of this software, you may use the original
-software if you wish to use the more permissive MIT/Apache-2.0 licenses :
-[`nftnl-rs`].
+Original work licensed by Amagicom AB under MIT/Apache-2.0.
 
 [`nftnl-rs`]: https://github.com/mullvad/nftnl-rs
 [Mullvad VPN app]: https://github.com/mullvad/mullvadvpn-app
 [`libnftnl`]: https://netfilter.org/projects/libnftnl/
 [`nftables`]: https://netfilter.org/projects/nftables/
-[`rustables-sys`]: https://crates.io/crates/rustables-sys
+[`build.rs`]: https://gitlab.com/rustwall/rustables/-/blob/master/build.rs
 
