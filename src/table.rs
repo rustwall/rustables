@@ -51,13 +51,13 @@ impl Table {
         let mut descr_buf = vec![0i8; 4096];
         unsafe {
             sys::nftnl_table_snprintf(
-                descr_buf.as_mut_ptr(),
+                descr_buf.as_mut_ptr() as *mut c_char,
                 (descr_buf.len() - 1) as u64,
                 self.table,
                 sys::NFTNL_OUTPUT_DEFAULT,
                 0,
             );
-            CStr::from_ptr(descr_buf.as_ptr()).to_owned()
+            CStr::from_ptr(descr_buf.as_ptr() as *mut c_char).to_owned()
         }
     }
 
