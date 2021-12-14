@@ -2,6 +2,7 @@ use std::ffi::CStr;
 use std::ffi::CString;
 use std::fmt::Debug;
 use std::rc::Rc;
+use std::os::raw::c_char;
 
 use super::{DeserializationError, Expression};
 use crate::{sys, Rule};
@@ -25,13 +26,13 @@ impl ExpressionWrapper {
         let mut descr_buf = vec![0i8; 4096];
         unsafe {
             sys::nftnl_expr_snprintf(
-                descr_buf.as_mut_ptr(),
+                descr_buf.as_mut_ptr() as *mut c_char,
                 (descr_buf.len() - 1) as u64,
                 self.expr,
                 sys::NFTNL_OUTPUT_DEFAULT,
                 0,
             );
-            CStr::from_ptr(descr_buf.as_ptr()).to_owned()
+            CStr::from_ptr(descr_buf.as_ptr() as *mut c_char).to_owned()
         }
     }
 
