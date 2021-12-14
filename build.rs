@@ -101,7 +101,7 @@ fn generate_sys(clang_args: impl Iterator<Item = String>) {
         .blacklist_type("nlmsghdr")
         .raw_line("#![allow(non_camel_case_types)]\n\n")
         .raw_line("pub use libc;")
-        .raw_line("use libc::{c_char, c_int, c_ulong, c_void, iovec, nlmsghdr, FILE};")
+        .raw_line("use libc::{c_char, c_int, c_uint, c_ulong, c_void, iovec, nlmsghdr, FILE};")
         .raw_line("use core::option::Option;")
         .ctypes_prefix("libc")
         // Tell cargo to invalidate the built crate whenever any of the
