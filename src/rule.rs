@@ -3,7 +3,7 @@ use crate::{chain::Chain, expr::Expression, MsgType};
 use crate::sys::{self, libc};
 use std::ffi::{c_void, CStr, CString};
 use std::fmt::Debug;
-use std::os::raw::c_char;
+use std::os::raw::{c_char, c_ulong};
 use std::rc::Rc;
 
 /// A nftables firewall rule.
@@ -104,7 +104,7 @@ impl Rule {
         unsafe {
             sys::nftnl_rule_snprintf(
                 descr_buf.as_mut_ptr() as *mut c_char,
-                (descr_buf.len() - 1) as u64,
+                (descr_buf.len() - 1) as c_ulong,
                 self.rule,
                 sys::NFTNL_OUTPUT_DEFAULT,
                 0,
@@ -163,14 +163,14 @@ impl Rule {
             unsafe {
                 sys::nftnl_expr_snprintf(
                     self_str.as_mut_ptr(),
-                    (self_str.len() - 1) as u64,
+                    (self_str.len() - 1) as c_ulong,
                     self_next,
                     sys::NFTNL_OUTPUT_DEFAULT,
                     0,
                 );
                 sys::nftnl_expr_snprintf(
                     other_str.as_mut_ptr(),
-                    (other_str.len() - 1) as u64,
+                    (other_str.len() - 1) as c_ulong,
                     other_next,
                     sys::NFTNL_OUTPUT_DEFAULT,
                     0,

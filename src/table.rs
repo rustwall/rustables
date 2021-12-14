@@ -5,7 +5,7 @@ use std::convert::TryFrom;
 use std::{
     ffi::{c_void, CStr, CString},
     fmt::Debug,
-    os::raw::c_char,
+    os::raw::{c_char, c_ulong},
 };
 
 /// Abstraction of `nftnl_table`, the top level container in netfilter. A table has a protocol
@@ -52,7 +52,7 @@ impl Table {
         unsafe {
             sys::nftnl_table_snprintf(
                 descr_buf.as_mut_ptr() as *mut c_char,
-                (descr_buf.len() - 1) as u64,
+                (descr_buf.len() - 1) as c_ulong,
                 self.table,
                 sys::NFTNL_OUTPUT_DEFAULT,
                 0,

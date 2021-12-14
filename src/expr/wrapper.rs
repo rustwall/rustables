@@ -2,7 +2,7 @@ use std::ffi::CStr;
 use std::ffi::CString;
 use std::fmt::Debug;
 use std::rc::Rc;
-use std::os::raw::c_char;
+use std::os::raw::{c_char, c_ulong};
 
 use super::{DeserializationError, Expression};
 use crate::{sys, Rule};
@@ -27,7 +27,7 @@ impl ExpressionWrapper {
         unsafe {
             sys::nftnl_expr_snprintf(
                 descr_buf.as_mut_ptr() as *mut c_char,
-                (descr_buf.len() - 1) as u64,
+                (descr_buf.len() - 1) as c_ulong,
                 self.expr,
                 sys::NFTNL_OUTPUT_DEFAULT,
                 0,

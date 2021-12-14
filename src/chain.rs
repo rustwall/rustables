@@ -5,7 +5,7 @@ use std::convert::TryFrom;
 use std::{
     ffi::{c_void, CStr, CString},
     fmt,
-    os::raw::c_char,
+    os::raw::{c_char, c_ulong},
     rc::Rc,
 };
 
@@ -171,7 +171,7 @@ impl Chain {
         unsafe {
             sys::nftnl_chain_snprintf(
                 descr_buf.as_mut_ptr() as *mut c_char,
-                (descr_buf.len() - 1) as u64,
+                (descr_buf.len() - 1) as c_ulong,
                 self.chain,
                 sys::NFTNL_OUTPUT_DEFAULT,
                 0,
