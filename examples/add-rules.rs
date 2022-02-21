@@ -37,13 +37,8 @@
 //! ```
 
 use ipnetwork::{IpNetwork, Ipv4Network};
-use rustables::{nft_expr, sys::libc, Batch, Chain, FinalizedBatch, ProtoFamily, Rule, Table};
-use std::{
-    ffi::{self, CString},
-    io,
-    net::Ipv4Addr,
-    rc::Rc
-};
+use rustables::{nft_expr, query::send_batch, sys::libc, Batch, Chain, ProtoFamily, Rule, Table};
+use std::{ffi::CString, io, net::Ipv4Addr, rc::Rc};
 
 const TABLE_NAME: &str = "example-table";
 const OUT_CHAIN_NAME: &str = "chain-for-outgoing-packets";
@@ -56,7 +51,10 @@ fn main() -> Result<(), Error> {
     let mut batch = Batch::new();
 
     // Create a netfilter table operating on both IPv4 and IPv6 (ProtoFamily::Inet)
-    let table = Rc::new(Table::new(&CString::new(TABLE_NAME).unwrap(), ProtoFamily::Inet));
+    let table = Rc::new(Table::new(
+        &CString::new(TABLE_NAME).unwrap(),
+        ProtoFamily::Inet,
+    ));
     // Add the table to the batch with the `MsgType::Add` type, thus instructing netfilter to add
     // this table under its `ProtoFamily::Inet` ruleset.
     batch.add(&Rc::clone(&table), rustables::MsgType::Add);
@@ -178,10 +176,10 @@ fn main() -> Result<(), Error> {
     match batch.finalize() {
         Some(mut finalized_batch) => {
             // Send the entire batch and process any returned messages.
-            send_and_process(&mut finalized_batch)?;
+            send_batch(&mut finalized_batch)?;
             Ok(())
-        },
-        None => todo!()
+        }
+        None => todo!(),
     }
 }
 
@@ -196,53 +194,11 @@ fn iface_index(name: &str) -> Result<libc::c_uint, Error> {
     }
 }
 
-fn send_and_process(batch: &mut FinalizedBatch) -> Result<(), Error> {
-    // Create a netlink socket to netfilter.
-    let socket = mnl::Socket::new(mnl::Bus::Netfilter)?;
-    // Send all the bytes in the batch.
-    socket.send_all(&mut *batch)?;
-
-    // Try to parse the messages coming back from netfilter. This part is still very unclear.
-    let portid = socket.portid();
-    let mut buffer = vec![0; rustables::nft_nlmsg_maxsize() as usize];
-    let very_unclear_what_this_is_for = 2;
-    while let Some(message) = socket_recv(&socket, &mut buffer[..])? {
-        match mnl::cb_run(message, very_unclear_what_this_is_for, portid)? {
-            mnl::CbResult::Stop => {
-                break;
-            }
-            mnl::CbResult::Ok => (),
-        }
-    }
-    Ok(())
-}
-
-fn socket_recv<'a>(socket: &mnl::Socket, buf: &'a mut [u8]) -> Result<Option<&'a [u8]>, Error> {
-    let ret = socket.recv(buf)?;
-    if ret > 0 {
-        Ok(Some(&buf[..ret]))
-    } else {
-        Ok(None)
-    }
-}
-
 #[derive(Debug)]
 struct Error(String);
 
-impl From<io::Error> for Error {
-    fn from(error: io::Error) -> Self {
-        Error(error.to_string())
-    }
-}
-
-impl From<ffi::NulError> for Error {
-    fn from(error: ffi::NulError) -> Self {
-        Error(error.to_string())
-    }
-}
-
-impl From<ipnetwork::IpNetworkError> for Error {
-    fn from(error: ipnetwork::IpNetworkError) -> Self {
+impl<T: std::error::Error> From<T> for Error {
+    fn from(error: T) -> Self {
         Error(error.to_string())
     }
 }

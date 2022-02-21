@@ -1,18 +1,10 @@
 #![allow(dead_code)]
-use libc::{nlmsghdr, AF_UNIX, NFNETLINK_V0, NFNL_SUBSYS_NFTABLES};
+use libc::{nlmsghdr, AF_UNIX};
+use rustables::query::{parse_nlmsg, Nfgenmsg};
 use rustables::set::SetKey;
 use rustables::{nft_nlmsg_maxsize, Chain, MsgType, NlMsg, ProtoFamily, Rule, Set, Table};
 use std::ffi::{c_void, CStr};
-use std::mem::size_of;
 use std::rc::Rc;
-
-pub fn get_subsystem_from_nlmsghdr_type(x: u16) -> u8 {
-    ((x & 0xff00) >> 8) as u8
-}
-
-pub fn get_operation_from_nlmsghdr_type(x: u16) -> u8 {
-    (x & 0x00ff) as u8
-}
 
 pub const TABLE_NAME: &[u8; 10] = b"mocktable\0";
 pub const CHAIN_NAME: &[u8; 10] = b"mockchain\0";
@@ -89,14 +81,6 @@ impl NetlinkExpr {
     }
 }
 
-#[repr(C)]
-#[derive(Clone, Copy)]
-pub struct Nfgenmsg {
-    family: u8,  /* AF_xxx */
-    version: u8, /* nfnetlink version */
-    res_id: u16, /* resource id */
-}
-
 pub fn get_test_table() -> Table {
     Table::new(
         &CStr::from_bytes_with_nul(TABLE_NAME).unwrap(),
@@ -131,35 +115,20 @@ pub fn get_test_nlmsg_with_msg_type(
     unsafe {
         obj.write(buf.as_mut_ptr() as *mut c_void, 0, msg_type);
 
-        // right now the message is composed of the following parts:
-        // - nlmsghdr (contains the message size and type)
-        // - nfgenmsg (nftables header that describes the message family)
-        // - the raw value that we want to validate
+        let (nlmsghdr, msg) = parse_nlmsg(&buf, 0, 0).expect("Couldn't parse the message");
 
-        let size_of_hdr = size_of::<nlmsghdr>();
-        let size_of_nfgenmsg = size_of::<Nfgenmsg>();
-        let nlmsghdr = *(buf[0..size_of_hdr].as_ptr() as *const nlmsghdr);
-        let nfgenmsg =
-            *(buf[size_of_hdr..size_of_hdr + size_of_nfgenmsg].as_ptr() as *const Nfgenmsg);
-        let raw_value = buf[size_of_hdr + size_of_nfgenmsg..nlmsghdr.nlmsg_len as usize]
-            .iter()
-            .map(|x| *x)
-            .collect();
+        let (nfgenmsg, raw_value) = match msg {
+            rustables::query::NlMsg::NfGenMsg(nfgenmsg, raw_value) => (nfgenmsg, raw_value),
+            _ => panic!("Invalid return value type, expected a valid message"),
+        };
 
         // sanity checks on the global message (this should be very similar/factorisable for the
         // most part in other tests)
         // TODO: check the messages flags
-        assert_eq!(
-            get_subsystem_from_nlmsghdr_type(nlmsghdr.nlmsg_type),
-            NFNL_SUBSYS_NFTABLES as u8
-        );
-        assert_eq!(nlmsghdr.nlmsg_seq, 0);
-        assert_eq!(nlmsghdr.nlmsg_pid, 0);
         assert_eq!(nfgenmsg.family, AF_UNIX as u8);
-        assert_eq!(nfgenmsg.version, NFNETLINK_V0 as u8);
         assert_eq!(nfgenmsg.res_id.to_be(), 0);
 
-        (nlmsghdr, nfgenmsg, raw_value)
+        (*nlmsghdr, *nfgenmsg, raw_value.to_owned())
     }
 }
 

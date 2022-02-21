@@ -22,19 +22,22 @@
 //! # nft delete table inet example-filter-ethernet
 //! ```
 
-use rustables::{nft_expr, sys::libc, Batch, Chain, FinalizedBatch, ProtoFamily, Rule, Table};
-use std::{ffi::CString, io, rc::Rc};
+use rustables::{nft_expr, query::send_batch, sys::libc, Batch, Chain, ProtoFamily, Rule, Table};
+use std::{ffi::CString, rc::Rc};
 
 const TABLE_NAME: &str = "example-filter-ethernet";
 const OUT_CHAIN_NAME: &str = "chain-for-outgoing-packets";
 
 const BLOCK_THIS_MAC: &[u8] = &[0, 0, 0, 0, 0, 0];
 
-fn main() -> Result<(), Error> {
+fn main() {
     // For verbose explanations of what all these lines up until the rule creation does, see the
     // `add-rules` example.
     let mut batch = Batch::new();
-    let table = Rc::new(Table::new(&CString::new(TABLE_NAME).unwrap(), ProtoFamily::Inet));
+    let table = Rc::new(Table::new(
+        &CString::new(TABLE_NAME).unwrap(),
+        ProtoFamily::Inet,
+    ));
     batch.add(&Rc::clone(&table), rustables::MsgType::Add);
 
     let mut out_chain = Chain::new(&CString::new(OUT_CHAIN_NAME).unwrap(), Rc::clone(&table));
@@ -86,48 +89,8 @@ fn main() -> Result<(), Error> {
 
     match batch.finalize() {
         Some(mut finalized_batch) => {
-            send_and_process(&mut finalized_batch)?;
-            Ok(())
-        },
-        None => todo!()
-    }
-}
-
-fn send_and_process(batch: &mut FinalizedBatch) -> Result<(), Error> {
-    // Create a netlink socket to netfilter.
-    let socket = mnl::Socket::new(mnl::Bus::Netfilter)?;
-    // Send all the bytes in the batch.
-    socket.send_all(&mut *batch)?;
-
-    // Try to parse the messages coming back from netfilter. This part is still very unclear.
-    let portid = socket.portid();
-    let mut buffer = vec![0; rustables::nft_nlmsg_maxsize() as usize];
-    let very_unclear_what_this_is_for = 2;
-    while let Some(message) = socket_recv(&socket, &mut buffer[..])? {
-        match mnl::cb_run(message, very_unclear_what_this_is_for, portid)? {
-            mnl::CbResult::Stop => {
-                break;
-            }
-            mnl::CbResult::Ok => (),
+            send_batch(&mut finalized_batch).expect("Couldn't process the batch");
         }
-    }
-    Ok(())
-}
-
-fn socket_recv<'a>(socket: &mnl::Socket, buf: &'a mut [u8]) -> Result<Option<&'a [u8]>, Error> {
-    let ret = socket.recv(buf)?;
-    if ret > 0 {
-        Ok(Some(&buf[..ret]))
-    } else {
-        Ok(None)
-    }
-}
-
-#[derive(Debug)]
-struct Error(String);
-
-impl From<io::Error> for Error {
-    fn from(error: io::Error) -> Self {
-        Error(error.to_string())
+        None => todo!(),
     }
 }

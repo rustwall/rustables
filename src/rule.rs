@@ -1,6 +1,8 @@
 use crate::expr::ExpressionWrapper;
-use crate::{chain::Chain, expr::Expression, MsgType};
+#[cfg(feature = "query")]
+use crate::query::{Nfgenmsg, ParseError};
 use crate::sys::{self, libc};
+use crate::{chain::Chain, expr::Expression, MsgType};
 use std::ffi::{c_void, CStr, CString};
 use std::fmt::Debug;
 use std::os::raw::c_char;
@@ -284,31 +286,42 @@ impl Drop for RuleExprsIter {
 #[cfg(feature = "query")]
 pub fn get_rules_cb(
     header: &libc::nlmsghdr,
+    _genmsg: &Nfgenmsg,
+    _data: &[u8],
     (chain, rules): &mut (&Rc<Chain>, &mut Vec<Rule>),
-) -> libc::c_int {
+) -> Result<(), crate::query::Error> {
     unsafe {
         let rule = sys::nftnl_rule_alloc();
         if rule == std::ptr::null_mut() {
-            return mnl::mnl_sys::MNL_CB_ERROR;
+            return Err(ParseError::Custom(Box::new(std::io::Error::new(
+                std::io::ErrorKind::Other,
+                "Rule allocation failed",
+            )))
+            .into());
         }
         let err = sys::nftnl_rule_nlmsg_parse(header, rule);
         if err < 0 {
-            error!("Failed to parse nelink rule message - {}", err);
             sys::nftnl_rule_free(rule);
-            return err;
+            return Err(ParseError::Custom(Box::new(std::io::Error::new(
+                std::io::ErrorKind::Other,
+                "The netlink table couldn't be parsed !?",
+            )))
+            .into());
         }
 
         rules.push(Rule::from_raw(rule, chain.clone()));
     }
-    mnl::mnl_sys::MNL_CB_OK
+
+    Ok(())
 }
 
 #[cfg(feature = "query")]
 pub fn list_rules_for_chain(chain: &Rc<Chain>) -> Result<Vec<Rule>, crate::query::Error> {
+    let mut result = Vec::new();
     crate::query::list_objects_with_data(
         libc::NFT_MSG_GETRULE as u16,
-        get_rules_cb,
-        &chain,
+        &get_rules_cb,
+        &mut (chain, &mut result),
         // only retrieve rules from the currently targetted chain
         Some(&|hdr| unsafe {
             let rule = sys::nftnl_rule_alloc();
@@ -337,5 +350,6 @@ pub fn list_rules_for_chain(chain: &Rc<Chain>) -> Result<Vec<Rule>, crate::query
             sys::nftnl_rule_free(rule);
             Ok(())
         }),
-    )
+    )?;
+    Ok(result)
 }

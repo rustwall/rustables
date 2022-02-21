@@ -20,7 +20,7 @@ bitflags = "1.0"
 thiserror = "1.0"
 log = "0.4"
 libc = "0.2.43"
-mnl = "0.2"
+nix = "0.23"
 ipnetwork = "0.16"
 serde = { version = "1.0", features = ["derive"] }
 

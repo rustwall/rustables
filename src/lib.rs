@@ -119,7 +119,7 @@ pub use rule::Rule;
 pub use rule::{get_rules_cb, list_rules_for_chain};
 
 mod rule_methods;
-pub use rule_methods::{iface_index, Protocol, RuleMethods, Error as MatchError};
+pub use rule_methods::{iface_index, Error as MatchError, Protocol, RuleMethods};
 
 pub mod set;
 pub use set::Set;
@@ -155,6 +155,7 @@ pub enum ProtoFamily {
     Ipv6 = libc::NFPROTO_IPV6 as u16,
     DecNet = libc::NFPROTO_DECNET as u16,
 }
+
 #[derive(Error, Debug)]
 #[error("Couldn't find a matching protocol")]
 pub struct InvalidProtocolFamily;

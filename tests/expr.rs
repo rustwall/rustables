@@ -3,6 +3,7 @@ use rustables::expr::{
     LogGroup, LogPrefix, Lookup, Meta, Nat, NatType, Payload, Register, Reject, TcpHeaderField,
     TransportHeaderField, Verdict,
 };
+use rustables::query::{get_operation_from_nlmsghdr_type, Nfgenmsg};
 use rustables::set::Set;
 use rustables::sys::libc::{nlmsghdr, NF_DROP};
 use rustables::{ProtoFamily, Rule};

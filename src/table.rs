@@ -1,5 +1,7 @@
-use crate::{MsgType, ProtoFamily};
+#[cfg(feature = "query")]
+use crate::query::{Nfgenmsg, ParseError};
 use crate::sys::{self, libc};
+use crate::{MsgType, ProtoFamily};
 #[cfg(feature = "query")]
 use std::convert::TryFrom;
 use std::{
@@ -39,7 +41,7 @@ impl Table {
         unsafe {
             let ptr = sys::nftnl_table_get_str(self.table, sys::NFTNL_TABLE_NAME as u16);
             if ptr.is_null() {
-                panic!("Impossible situation: retrieving the name of a chain failed")
+                panic!("Impossible situation: retrieving the name of a table failed")
             } else {
                 CStr::from_ptr(ptr)
             }
@@ -137,29 +139,41 @@ impl Drop for Table {
 /// A callback to parse the response for messages created with `get_tables_nlmsg`.
 pub fn get_tables_cb(
     header: &libc::nlmsghdr,
-    (_, tables): &mut (&(), &mut Vec<Table>),
-) -> libc::c_int {
+    _genmsg: &Nfgenmsg,
+    _data: &[u8],
+    tables: &mut Vec<Table>,
+) -> Result<(), crate::query::Error> {
     unsafe {
         let table = sys::nftnl_table_alloc();
         if table == std::ptr::null_mut() {
-            return mnl::mnl_sys::MNL_CB_ERROR;
+            return Err(ParseError::Custom(Box::new(std::io::Error::new(
+                std::io::ErrorKind::Other,
+                "Table allocation failed",
+            )))
+            .into());
         }
         let err = sys::nftnl_table_nlmsg_parse(header, table);
         if err < 0 {
-            error!("Failed to parse nelink table message - {}", err);
             sys::nftnl_table_free(table);
-            return err;
+            return Err(ParseError::Custom(Box::new(std::io::Error::new(
+                std::io::ErrorKind::Other,
+                "The netlink table couldn't be parsed !?",
+            )))
+            .into());
         }
         let family = sys::nftnl_table_get_u32(table, sys::NFTNL_TABLE_FAMILY as u16);
         match crate::ProtoFamily::try_from(family as i32) {
             Ok(family) => {
                 tables.push(Table::from_raw(table, family));
-                mnl::mnl_sys::MNL_CB_OK
+                Ok(())
             }
             Err(crate::InvalidProtocolFamily) => {
-                error!("The netlink table didn't have a valid protocol family !?");
                 sys::nftnl_table_free(table);
-                mnl::mnl_sys::MNL_CB_ERROR
+                Err(ParseError::Custom(Box::new(std::io::Error::new(
+                    std::io::ErrorKind::Other,
+                    "The netlink table didn't have a valid protocol family !?",
+                )))
+                .into())
             }
         }
     }
@@ -167,5 +181,12 @@ pub fn get_tables_cb(
 
 #[cfg(feature = "query")]
 pub fn list_tables() -> Result<Vec<Table>, crate::query::Error> {
-    crate::query::list_objects_with_data(libc::NFT_MSG_GETTABLE as u16, get_tables_cb, &(), None)
+    let mut result = Vec::new();
+    crate::query::list_objects_with_data(
+        libc::NFT_MSG_GETTABLE as u16,
+        &get_tables_cb,
+        &mut result,
+        None,
+    )?;
+    Ok(result)
 }

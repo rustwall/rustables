@@ -1,7 +1,7 @@
 use std::ffi::CStr;
 
 mod sys;
-use rustables::MsgType;
+use rustables::{query::get_operation_from_nlmsghdr_type, MsgType};
 use sys::*;
 
 mod lib;

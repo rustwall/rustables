@@ -1,7 +1,7 @@
 mod sys;
 use std::net::{Ipv4Addr, Ipv6Addr};
 
-use rustables::{set::SetKey, MsgType};
+use rustables::{query::get_operation_from_nlmsghdr_type, set::SetKey, MsgType};
 use sys::*;
 
 mod lib;

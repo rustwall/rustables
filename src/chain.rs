@@ -1,5 +1,7 @@
-use crate::{MsgType, Table};
+#[cfg(feature = "query")]
+use crate::query::{Nfgenmsg, ParseError};
 use crate::sys::{self as sys, libc};
+use crate::{MsgType, Table};
 #[cfg(feature = "query")]
 use std::convert::TryFrom;
 use std::{
@@ -243,18 +245,27 @@ impl Drop for Chain {
 #[cfg(feature = "query")]
 pub fn get_chains_cb<'a>(
     header: &libc::nlmsghdr,
+    _genmsg: &Nfgenmsg,
+    _data: &[u8],
     (table, chains): &mut (&Rc<Table>, &mut Vec<Chain>),
-) -> libc::c_int {
+) -> Result<(), crate::query::Error> {
     unsafe {
         let chain = sys::nftnl_chain_alloc();
         if chain == std::ptr::null_mut() {
-            return mnl::mnl_sys::MNL_CB_ERROR;
+            return Err(ParseError::Custom(Box::new(std::io::Error::new(
+                std::io::ErrorKind::Other,
+                "Chain allocation failed",
+            )))
+            .into());
         }
         let err = sys::nftnl_chain_nlmsg_parse(header, chain);
         if err < 0 {
-            error!("Failed to parse nelink chain message - {}", err);
             sys::nftnl_chain_free(chain);
-            return err;
+            return Err(ParseError::Custom(Box::new(std::io::Error::new(
+                std::io::ErrorKind::Other,
+                "The netlink chain couldn't be parsed !?",
+            )))
+            .into());
         }
 
         let table_name = CStr::from_ptr(sys::nftnl_chain_get_str(
@@ -267,26 +278,38 @@ pub fn get_chains_cb<'a>(
             Err(crate::InvalidProtocolFamily) => {
                 error!("The netlink table didn't have a valid protocol family !?");
                 sys::nftnl_chain_free(chain);
-                return mnl::mnl_sys::MNL_CB_ERROR;
+                return Err(ParseError::Custom(Box::new(std::io::Error::new(
+                    std::io::ErrorKind::Other,
+                    "The netlink table didn't have a valid protocol family !?",
+                )))
+                .into());
             }
         };
 
         if table_name != table.get_name() {
             sys::nftnl_chain_free(chain);
-            return mnl::mnl_sys::MNL_CB_OK;
+            return Ok(());
         }
 
         if family != crate::ProtoFamily::Unspec && family != table.get_family() {
             sys::nftnl_chain_free(chain);
-            return mnl::mnl_sys::MNL_CB_OK;
+            return Ok(());
         }
 
         chains.push(Chain::from_raw(chain, table.clone()));
     }
-    mnl::mnl_sys::MNL_CB_OK
+
+    Ok(())
 }
 
 #[cfg(feature = "query")]
 pub fn list_chains_for_table(table: Rc<Table>) -> Result<Vec<Chain>, crate::query::Error> {
-    crate::query::list_objects_with_data(libc::NFT_MSG_GETCHAIN as u16, get_chains_cb, &table, None)
+    let mut result = Vec::new();
+    crate::query::list_objects_with_data(
+        libc::NFT_MSG_GETCHAIN as u16,
+        &get_chains_cb,
+        &mut (&table, &mut result),
+        None,
+    )?;
+    Ok(result)
 }
