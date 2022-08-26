@@ -1,5 +1,5 @@
 use crate::sys::{self, libc};
-use crate::{table::Table, MsgType, ProtoFamily};
+use crate::{table::Table, MsgType};
 use std::{
     cell::Cell,
     ffi::{c_void, CStr, CString},
@@ -11,14 +11,14 @@ use std::{
 
 #[macro_export]
 macro_rules! nft_set {
-    ($name:expr, $id:expr, $table:expr, $family:expr) => {
-        $crate::set::Set::new($name, $id, $table, $family)
+    ($name:expr, $id:expr, $table:expr) => {
+        $crate::set::Set::new(Some($name), $id, $table, $family)
     };
-    ($name:expr, $id:expr, $table:expr, $family:expr; [ ]) => {
-        nft_set!($name, $id, $table, $family)
+    ($name:expr, $id:expr, $table:expr; [ ]) => {
+        nft_set!(Some($name), $id, $table)
     };
-    ($name:expr, $id:expr, $table:expr, $family:expr; [ $($value:expr,)* ]) => {{
-        let mut set = nft_set!($name, $id, $table, $family).expect("Set allocation failed");
+    ($name:expr, $id:expr, $table:expr; [ $($value:expr,)* ]) => {{
+        let mut set = nft_set!(Some($name), $id, $table).expect("Set allocation failed");
         $(
             set.add($value).expect(stringify!(Unable to add $value to set $name));
         )*
@@ -29,19 +29,18 @@ macro_rules! nft_set {
 pub struct Set<K> {
     pub(crate) set: *mut sys::nftnl_set,
     pub(crate) table: Rc<Table>,
-    pub(crate) family: ProtoFamily,
     _marker: ::std::marker::PhantomData<K>,
 }
 
 impl<K> Set<K> {
-    pub fn new(name: &CStr, id: u32, table: Rc<Table>, family: ProtoFamily) -> Self
+    pub fn new(name: &CStr, id: u32, table: Rc<Table>) -> Self
     where
         K: SetKey,
     {
         unsafe {
             let set = try_alloc!(sys::nftnl_set_alloc());
 
-            sys::nftnl_set_set_u32(set, sys::NFTNL_SET_FAMILY as u16, family as u32);
+            sys::nftnl_set_set_u32(set, sys::NFTNL_SET_FAMILY as u16, table.get_family() as u32);
             sys::nftnl_set_set_str(set, sys::NFTNL_SET_TABLE as u16, table.get_name().as_ptr());
             sys::nftnl_set_set_str(set, sys::NFTNL_SET_NAME as u16, name.as_ptr());
             sys::nftnl_set_set_u32(set, sys::NFTNL_SET_ID as u16, id);
@@ -57,20 +56,18 @@ impl<K> Set<K> {
             Set {
                 set,
                 table,
-                family,
                 _marker: ::std::marker::PhantomData,
             }
         }
     }
 
-    pub unsafe fn from_raw(set: *mut sys::nftnl_set, table: Rc<Table>, family: ProtoFamily) -> Self
+    pub unsafe fn from_raw(set: *mut sys::nftnl_set, table: Rc<Table>) -> Self
     where
         K: SetKey,
     {
         Set {
             set,
             table,
-            family,
             _marker: ::std::marker::PhantomData,
         }
     }
@@ -109,10 +106,6 @@ impl<K> Set<K> {
     /// Returns a mutable version of the raw handle.
     pub fn as_mut_ptr(&self) -> *mut sys::nftnl_set {
         self.set
-    }
-
-    pub fn get_family(&self) -> ProtoFamily {
-        self.family
     }
 
     /// Returns a textual description of the set.
@@ -237,7 +230,7 @@ unsafe impl<'a, K> crate::NlMsg for SetElemsMsg<'a, K> {
         let header = sys::nftnl_nlmsg_build_hdr(
             buf as *mut c_char,
             type_ as u16,
-            self.set.get_family() as u16,
+            self.set.table.get_family() as u16,
             flags as u16,
             seq,
         );
@@ -269,5 +262,14 @@ impl SetKey for Ipv6Addr {
 
     fn data(&self) -> Box<[u8]> {
         self.octets().to_vec().into_boxed_slice()
+    }
+}
+
+impl<const N: usize> SetKey for [u8; N] {
+    const TYPE: u32 = 5;
+    const LEN: u32 = N as u32;
+
+    fn data(&self) -> Box<[u8]> {
+        Box::new(*self)
     }
 }

@@ -120,7 +120,6 @@ pub fn get_test_set<T: SetKey>() -> Set<T> {
         CStr::from_bytes_with_nul(SET_NAME).unwrap(),
         SET_ID,
         Rc::new(get_test_table()),
-        ProtoFamily::Ipv4,
     )
 }
 
