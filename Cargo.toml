@@ -29,7 +29,6 @@ rustables = { path = ".", features = ["query"] }
 
 [build-dependencies]
 bindgen = "0.53.1"
-pkg-config = "0.3"
 regex = "1.5.4"
 lazy_static = "1.4.0"
 

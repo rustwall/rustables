@@ -1,3 +1,4 @@
+use crate::nlmsg::NlMsg;
 use crate::sys::{self, libc};
 use crate::{table::Table, MsgType};
 use std::{
@@ -145,12 +146,13 @@ impl<K> Debug for Set<K> {
     }
 }
 
-unsafe impl<K> crate::NlMsg for Set<K> {
-    unsafe fn write(&self, buf: *mut c_void, seq: u32, msg_type: MsgType) {
+unsafe impl<K> NlMsg for Set<K> {
+    unsafe fn write(&self, buf: &mut Vec<u8>, seq: u32, msg_type: MsgType) {
         let type_ = match msg_type {
             MsgType::Add => libc::NFT_MSG_NEWSET,
             MsgType::Del => libc::NFT_MSG_DELSET,
         };
+        /*
         let header = sys::nftnl_nlmsg_build_hdr(
             buf as *mut c_char,
             type_ as u16,
@@ -159,6 +161,7 @@ unsafe impl<K> crate::NlMsg for Set<K> {
             seq,
         );
         sys::nftnl_set_nlmsg_build_payload(header, self.set);
+        */
     }
 }
 
@@ -217,7 +220,7 @@ pub struct SetElemsMsg<'a, K> {
     ret: Rc<Cell<i32>>,
 }
 
-unsafe impl<'a, K> crate::NlMsg for SetElemsMsg<'a, K> {
+unsafe impl<'a, K> NlMsg for SetElemsMsg<'a, K> {
     unsafe fn write(&self, buf: *mut c_void, seq: u32, msg_type: MsgType) {
         trace!("Writing SetElemsMsg to NlMsg");
         let (type_, flags) = match msg_type {

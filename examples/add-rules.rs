@@ -51,10 +51,7 @@ fn main() -> Result<(), Error> {
     let mut batch = Batch::new();
 
     // Create a netfilter table operating on both IPv4 and IPv6 (ProtoFamily::Inet)
-    let table = Rc::new(Table::new(
-        &CString::new(TABLE_NAME).unwrap(),
-        ProtoFamily::Inet,
-    ));
+    let table = Rc::new(Table::new(TABLE_NAME, ProtoFamily::Inet));
     // Add the table to the batch with the `MsgType::Add` type, thus instructing netfilter to add
     // this table under its `ProtoFamily::Inet` ruleset.
     batch.add(&Rc::clone(&table), rustables::MsgType::Add);
@@ -62,8 +59,8 @@ fn main() -> Result<(), Error> {
     // Create input and output chains under the table we created above.
     // Hook the chains to the input and output event hooks, with highest priority (priority zero).
     // See the `Chain::set_hook` documentation for details.
-    let mut out_chain = Chain::new(&CString::new(OUT_CHAIN_NAME).unwrap(), Rc::clone(&table));
-    let mut in_chain = Chain::new(&CString::new(IN_CHAIN_NAME).unwrap(), Rc::clone(&table));
+    let mut out_chain = Chain::new(OUT_CHAIN_NAME, Rc::clone(&table));
+    let mut in_chain = Chain::new(IN_CHAIN_NAME, Rc::clone(&table));
 
     out_chain.set_hook(rustables::Hook::Out, 0);
     in_chain.set_hook(rustables::Hook::In, 0);

@@ -1,53 +1,42 @@
-#[cfg(feature = "query")]
-use crate::query::{Nfgenmsg, ParseError};
-use crate::sys::{self, libc};
-use crate::{MsgType, ProtoFamily};
-#[cfg(feature = "query")]
 use std::convert::TryFrom;
-use std::{
-    ffi::{c_void, CStr, CString},
-    fmt::Debug,
-    os::raw::c_char,
+use std::fmt::Debug;
+
+use crate::nlmsg::{NfNetlinkObject, NfNetlinkWriter};
+use crate::parser::{
+    expect_msgtype_in_nlmsg, parse_nlmsg, Attribute, DecodeError, NfNetlinkAttributeReader,
+    NfNetlinkAttributes, NlMsg, SerializeNfNetlink,
 };
+use crate::sys::{self, NFTA_OBJ_TABLE, NFTA_TABLE_FLAGS, NFTA_TABLE_NAME};
+use crate::{impl_attr_getters_and_setters, MsgType, ProtoFamily};
+#[cfg(feature = "query")]
+use crate::{parser::Nfgenmsg, query::ParseError};
+use libc;
 
 /// Abstraction of `nftnl_table`, the top level container in netfilter. A table has a protocol
 /// family and contains [`Chain`]s that in turn hold the rules.
 ///
 /// [`Chain`]: struct.Chain.html
+#[derive(Debug, PartialEq, Eq)]
 pub struct Table {
-    table: *mut sys::nftnl_table,
+    inner: NfNetlinkAttributes,
     family: ProtoFamily,
 }
 
 impl Table {
     /// Creates a new table instance with the given name and protocol family.
-    pub fn new<T: AsRef<CStr>>(name: &T, family: ProtoFamily) -> Table {
-        unsafe {
-            let table = try_alloc!(sys::nftnl_table_alloc());
+    pub fn new<T: Into<String>>(name: T, family: ProtoFamily) -> Table {
+        let mut res = Table {
+            inner: NfNetlinkAttributes::new(),
+            family,
+        };
 
-            sys::nftnl_table_set_u32(table, sys::NFTNL_TABLE_FAMILY as u16, family as u32);
-            sys::nftnl_table_set_str(table, sys::NFTNL_TABLE_NAME as u16, name.as_ref().as_ptr());
-            sys::nftnl_table_set_u32(table, sys::NFTNL_TABLE_FLAGS as u16, 0u32);
-            Table { table, family }
-        }
+        res.set_name(name.into());
+        res.set_flags(0);
+
+        res
     }
 
-    pub unsafe fn from_raw(table: *mut sys::nftnl_table, family: ProtoFamily) -> Self {
-        Table { table, family }
-    }
-
-    /// Returns the name of this table.
-    pub fn get_name(&self) -> &CStr {
-        unsafe {
-            let ptr = sys::nftnl_table_get_str(self.table, sys::NFTNL_TABLE_NAME as u16);
-            if ptr.is_null() {
-                panic!("Impossible situation: retrieving the name of a table failed")
-            } else {
-                CStr::from_ptr(ptr)
-            }
-        }
-    }
-
+    /*
     /// Returns a textual description of the table.
     pub fn get_str(&self) -> CString {
         let mut descr_buf = vec![0i8; 4096];
@@ -62,79 +51,71 @@ impl Table {
             CStr::from_ptr(descr_buf.as_ptr() as *mut c_char).to_owned()
         }
     }
-
-    /// Returns the protocol family for this table.
-    pub fn get_family(&self) -> ProtoFamily {
-        self.family
-    }
-
-    /// Returns the userdata of this chain.
-    pub fn get_userdata(&self) -> Option<&CStr> {
-        unsafe {
-            let ptr = sys::nftnl_table_get_str(self.table, sys::NFTNL_TABLE_USERDATA as u16);
-            if !ptr.is_null() {
-                Some(CStr::from_ptr(ptr))
-            } else {
-                None
-            }
-        }
-    }
-
-    /// Updates the userdata of this chain.
-    pub fn set_userdata(&self, data: &CStr) {
-        unsafe {
-            sys::nftnl_table_set_str(self.table, sys::NFTNL_TABLE_USERDATA as u16, data.as_ptr());
-        }
-    }
-
-    #[cfg(feature = "unsafe-raw-handles")]
-    /// Returns the raw handle.
-    pub fn as_ptr(&self) -> *const sys::nftnl_table {
-        self.table as *const sys::nftnl_table
-    }
-
-    #[cfg(feature = "unsafe-raw-handles")]
-    /// Returns a mutable version of the raw handle.
-    pub fn as_mut_ptr(&self) -> *mut sys::nftnl_table {
-        self.table
-    }
+    */
 }
-
+/*
 impl PartialEq for Table {
     fn eq(&self, other: &Self) -> bool {
-        self.get_name() == other.get_name() && self.get_family() == other.get_family()
+        self.get_name() == other.get_name() && self.family == other.family
     }
 }
+*/
 
-impl Debug for Table {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{:?}", self.get_str())
-    }
-}
-
-unsafe impl crate::NlMsg for Table {
-    unsafe fn write(&self, buf: *mut c_void, seq: u32, msg_type: MsgType) {
+impl NfNetlinkObject for Table {
+    fn add_or_remove<'a>(&self, writer: &mut NfNetlinkWriter<'a>, msg_type: MsgType, seq: u32) {
         let raw_msg_type = match msg_type {
             MsgType::Add => libc::NFT_MSG_NEWTABLE,
             MsgType::Del => libc::NFT_MSG_DELTABLE,
-        };
-        let header = sys::nftnl_nlmsg_build_hdr(
-            buf as *mut c_char,
-            raw_msg_type as u16,
-            self.family as u16,
-            libc::NLM_F_ACK as u16,
-            seq,
-        );
-        sys::nftnl_table_nlmsg_build_payload(header, self.table);
+        } as u16;
+        writer.write_header(raw_msg_type, self.family, libc::NLM_F_ACK as u16, seq, None);
+        self.inner.serialize(writer);
+    }
+
+    fn decode_attribute(attr_type: u16, buf: &[u8]) -> Result<Attribute, DecodeError> {
+        match attr_type {
+            NFTA_TABLE_NAME => Ok(Attribute::String(String::from_utf8(buf.to_vec())?)),
+            NFTA_TABLE_FLAGS => {
+                let val = [buf[0], buf[1], buf[2], buf[3]];
+
+                Ok(Attribute::U32(u32::from_ne_bytes(val)))
+            }
+            NFTA_TABLE_USERDATA => Ok(Attribute::VecU8(buf.to_vec())),
+            _ => Err(DecodeError::UnsupportedAttributeType(attr_type)),
+        }
+    }
+
+    fn deserialize(buf: &[u8]) -> Result<(&[u8], Self), DecodeError> {
+        let (hdr, nfgenmsg, content, mut attrs) =
+            expect_msgtype_in_nlmsg(buf, libc::NFT_MSG_NEWTABLE as u8)?;
+
+        let (remaining_buf, inner) = attrs.decode::<Table>()?;
+
+        Ok((
+            remaining_buf,
+            Table {
+                inner,
+                family: ProtoFamily::try_from(nfgenmsg.family as i32)?,
+            },
+        ))
     }
 }
 
-impl Drop for Table {
-    fn drop(&mut self) {
-        unsafe { sys::nftnl_table_free(self.table) };
-    }
-}
+impl_attr_getters_and_setters!(
+    Table,
+    [
+        (get_name, set_name, sys::NFTA_TABLE_NAME, String, String),
+        (
+            get_userdata,
+            set_userdata,
+            sys::NFTA_TABLE_USERDATA,
+            VecU8,
+            Vec<u8>
+        ),
+        (get_flags, set_flags, sys::NFTA_TABLE_FLAGS, U32, u32)
+    ]
+);
 
+/*
 #[cfg(feature = "query")]
 /// A callback to parse the response for messages created with `get_tables_nlmsg`.
 pub fn get_tables_cb(
@@ -190,3 +171,4 @@ pub fn list_tables() -> Result<Vec<Table>, crate::query::Error> {
     )?;
     Ok(result)
 }
+*/

@@ -1,4 +1,5 @@
 use crate::expr::ExpressionWrapper;
+use crate::nlmsg::NlMsg;
 #[cfg(feature = "query")]
 use crate::query::{Nfgenmsg, ParseError};
 use crate::sys::{self, libc};
@@ -219,8 +220,8 @@ impl PartialEq for Rule {
     }
 }
 
-unsafe impl crate::NlMsg for Rule {
-    unsafe fn write(&self, buf: *mut c_void, seq: u32, msg_type: MsgType) {
+unsafe impl NlMsg for Rule {
+    unsafe fn write(&self, buf: &mut Vec<u8>, seq: u32, msg_type: MsgType) {
         let type_ = match msg_type {
             MsgType::Add => libc::NFT_MSG_NEWRULE,
             MsgType::Del => libc::NFT_MSG_DELRULE,
@@ -229,6 +230,7 @@ unsafe impl crate::NlMsg for Rule {
             MsgType::Add => (libc::NLM_F_CREATE | libc::NLM_F_APPEND | libc::NLM_F_EXCL) as u16,
             MsgType::Del => 0u16,
         } | libc::NLM_F_ACK as u16;
+        /*
         let header = sys::nftnl_nlmsg_build_hdr(
             buf as *mut c_char,
             type_ as u16,
@@ -237,6 +239,7 @@ unsafe impl crate::NlMsg for Rule {
             seq,
         );
         sys::nftnl_rule_nlmsg_build_payload(header, self.rule);
+        */
     }
 }
 

@@ -1,5 +1,7 @@
-use crate::{MsgType, NlMsg};
-use crate::sys::{self as sys, libc};
+use crate::nlmsg::{NfNetlinkObject, NfNetlinkWriter};
+use crate::sys::{self};
+use crate::{MsgType, ProtoFamily};
+use libc;
 use std::ffi::c_void;
 use std::os::raw::c_char;
 use std::ptr;
@@ -10,22 +12,15 @@ use thiserror::Error;
 #[error("Error while communicating with netlink")]
 pub struct NetlinkError(());
 
-#[cfg(feature = "query")]
-/// Check if the kernel supports batched netlink messages to netfilter.
-pub fn batch_is_supported() -> std::result::Result<bool, NetlinkError> {
-    match unsafe { sys::nftnl_batch_is_supported() } {
-        1 => Ok(true),
-        0 => Ok(false),
-        _ => Err(NetlinkError(())),
-    }
-}
-
 /// A batch of netfilter messages to be performed in one atomic operation. Corresponds to
 /// `nftnl_batch` in libnftnl.
 pub struct Batch {
-    pub(crate) batch: *mut sys::nftnl_batch,
-    pub(crate) seq: u32,
-    pub(crate) is_empty: bool,
+    buf: Box<Vec<u8>>,
+    // the 'static lifetime here is a cheat, as the writer can only be used as long
+    // as `self.buf` exists. This is why this member must never be exposed directly to
+    // the rest of the crate (let alone publicly).
+    writer: NfNetlinkWriter<'static>,
+    seq: u32,
 }
 
 impl Batch {
@@ -33,48 +28,38 @@ impl Batch {
     ///
     /// [default page size]: fn.default_batch_page_size.html
     pub fn new() -> Self {
-        Self::with_page_size(default_batch_page_size())
-    }
-
-    pub unsafe fn from_raw(batch: *mut sys::nftnl_batch, seq: u32) -> Self {
+        // TODO: use a pinned Box ?
+        let mut buf = Box::new(Vec::with_capacity(default_batch_page_size() as usize));
+        let mut writer = NfNetlinkWriter::new(unsafe {
+            std::mem::transmute(Box::as_mut(&mut buf) as *mut Vec<u8>)
+        });
+        writer.write_header(
+            libc::NFNL_MSG_BATCH_BEGIN as u16,
+            ProtoFamily::Unspec,
+            0,
+            0,
+            Some(libc::NFNL_SUBSYS_NFTABLES as u16),
+        );
         Batch {
-            batch,
-            seq,
-            // we assume this batch is not empty by default
-            is_empty: false,
+            buf,
+            writer,
+            seq: 1,
         }
     }
 
-    /// Creates a new nftnl batch with the given batch size.
-    pub fn with_page_size(batch_page_size: u32) -> Self {
-        let batch = try_alloc!(unsafe {
-            sys::nftnl_batch_alloc(batch_page_size, crate::nft_nlmsg_maxsize())
-        });
-        let mut this = Batch {
-            batch,
-            seq: 0,
-            is_empty: true,
-        };
-        this.write_begin_msg();
-        this
-    }
-
     /// Adds the given message to this batch.
-    pub fn add<T: NlMsg>(&mut self, msg: &T, msg_type: MsgType) {
+    pub fn add<T: NfNetlinkObject>(&mut self, msg: &T, msg_type: MsgType) {
         trace!("Writing NlMsg with seq {} to batch", self.seq);
-        unsafe { msg.write(self.current(), self.seq, msg_type) };
-        self.is_empty = false;
-        self.next()
+        msg.add_or_remove(&mut self.writer, msg_type, self.seq);
+        self.seq += 1;
     }
 
-    /// Adds all the messages in the given iterator to this batch. If any message fails to be
-    /// added the error for that failure is returned and all messages up until that message stay
-    /// added to the batch.
-    pub fn add_iter<T, I>(&mut self, msg_iter: I, msg_type: MsgType)
-    where
-        T: NlMsg,
-        I: Iterator<Item = T>,
-    {
+    /// Adds all the messages in the given iterator to this batch.
+    pub fn add_iter<T: NfNetlinkObject, I: Iterator<Item = T>>(
+        &mut self,
+        msg_iter: I,
+        msg_type: MsgType,
+    ) {
         for msg in msg_iter {
             self.add(&msg, msg_type);
         }
@@ -86,53 +71,52 @@ impl Batch {
     /// Return None if there is no object in the batch (this could block forever).
     ///
     /// [`FinalizedBatch`]: struct.FinalizedBatch.html
-    pub fn finalize(mut self) -> Option<FinalizedBatch> {
-        self.write_end_msg();
-        if self.is_empty {
-            return None;
+    pub fn finalize(mut self) -> FinalizedBatch {
+        self.writer.write_header(
+            libc::NFNL_MSG_BATCH_END as u16,
+            ProtoFamily::Unspec,
+            0,
+            self.seq,
+            Some(libc::NFNL_SUBSYS_NFTABLES as u16),
+        );
+        FinalizedBatch { batch: self }
+    }
+
+    /*
+        fn current(&self) -> *mut c_void {
+            unsafe { sys::nftnl_batch_buffer(self.batch) }
         }
-        Some(FinalizedBatch { batch: self })
-    }
 
-    fn current(&self) -> *mut c_void {
-        unsafe { sys::nftnl_batch_buffer(self.batch) }
-    }
-
-    fn next(&mut self) {
-        if unsafe { sys::nftnl_batch_update(self.batch) } < 0 {
-            // See try_alloc definition.
-            std::process::abort();
+        fn next(&mut self) {
+            if unsafe { sys::nftnl_batch_update(self.batch) } < 0 {
+                // See try_alloc definition.
+                std::process::abort();
+            }
+            self.seq += 1;
         }
-        self.seq += 1;
-    }
 
-    fn write_begin_msg(&mut self) {
-        unsafe { sys::nftnl_batch_begin(self.current() as *mut c_char, self.seq) };
-        self.next();
-    }
+        fn write_begin_msg(&mut self) {
+            unsafe { sys::nftnl_batch_begin(self.current() as *mut c_char, self.seq) };
+            self.next();
+        }
 
-    fn write_end_msg(&mut self) {
-        unsafe { sys::nftnl_batch_end(self.current() as *mut c_char, self.seq) };
-        self.next();
-    }
+        fn write_end_msg(&mut self) {
+            unsafe { sys::nftnl_batch_end(self.current() as *mut c_char, self.seq) };
+            self.next();
+        }
 
-    #[cfg(feature = "unsafe-raw-handles")]
-    /// Returns the raw handle.
-    pub fn as_ptr(&self) -> *const sys::nftnl_batch {
-        self.batch as *const sys::nftnl_batch
-    }
+        #[cfg(feature = "unsafe-raw-handles")]
+        /// Returns the raw handle.
+        pub fn as_ptr(&self) -> *const sys::nftnl_batch {
+            self.batch as *const sys::nftnl_batch
+        }
 
-    #[cfg(feature = "unsafe-raw-handles")]
-    /// Returns a mutable version of the raw handle.
-    pub fn as_mut_ptr(&mut self) -> *mut sys::nftnl_batch {
-        self.batch
-    }
-}
-
-impl Drop for Batch {
-    fn drop(&mut self) {
-        unsafe { sys::nftnl_batch_free(self.batch) };
-    }
+        #[cfg(feature = "unsafe-raw-handles")]
+        /// Returns a mutable version of the raw handle.
+        pub fn as_mut_ptr(&mut self) -> *mut sys::nftnl_batch {
+            self.batch
+        }
+    */
 }
 
 /// A wrapper over [`Batch`], guaranteed to start with a proper batch begin and end with a proper
@@ -146,6 +130,7 @@ pub struct FinalizedBatch {
     batch: Batch,
 }
 
+/*
 impl FinalizedBatch {
     /// Returns the iterator over byte buffers to send to netlink.
     pub fn iter(&mut self) -> Iter<'_> {
@@ -191,6 +176,7 @@ impl<'a> Iterator for Iter<'a> {
         })
     }
 }
+*/
 
 /// Selected batch page is 256 Kbytes long to load ruleset of half a million rules without hitting
 /// -EMSGSIZE due to large iovec.

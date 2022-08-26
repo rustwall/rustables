@@ -76,8 +76,8 @@ use thiserror::Error;
 extern crate log;
 
 pub mod sys;
+use libc;
 use std::{convert::TryFrom, ffi::c_void, ops::Deref};
-use sys::libc;
 
 macro_rules! try_alloc {
     ($e:expr) => {{
@@ -92,37 +92,40 @@ macro_rules! try_alloc {
 }
 
 mod batch;
-#[cfg(feature = "query")]
-pub use batch::{batch_is_supported, default_batch_page_size};
-pub use batch::{Batch, FinalizedBatch, NetlinkError};
+//#[cfg(feature = "query")]
+//pub use batch::{batch_is_supported, default_batch_page_size};
+//pub use batch::{Batch, FinalizedBatch, NetlinkError};
 
-pub mod expr;
+//pub mod expr;
 
 pub mod table;
 pub use table::Table;
-#[cfg(feature = "query")]
-pub use table::{get_tables_cb, list_tables};
+//#[cfg(feature = "query")]
+//pub use table::{get_tables_cb, list_tables};
+//
+//mod chain;
+//#[cfg(feature = "query")]
+//pub use chain::{get_chains_cb, list_chains_for_table};
+//pub use chain::{Chain, ChainType, Hook, Policy, Priority};
 
-mod chain;
-#[cfg(feature = "query")]
-pub use chain::{get_chains_cb, list_chains_for_table};
-pub use chain::{Chain, ChainType, Hook, Policy, Priority};
-
-mod chain_methods;
-pub use chain_methods::ChainMethods;
+//mod chain_methods;
+//pub use chain_methods::ChainMethods;
 
 pub mod query;
 
-mod rule;
-pub use rule::Rule;
-#[cfg(feature = "query")]
-pub use rule::{get_rules_cb, list_rules_for_chain};
+pub mod nlmsg;
+pub mod parser;
 
-mod rule_methods;
-pub use rule_methods::{iface_index, Error as MatchError, Protocol, RuleMethods};
+//mod rule;
+//pub use rule::Rule;
+//#[cfg(feature = "query")]
+//pub use rule::{get_rules_cb, list_rules_for_chain};
 
-pub mod set;
-pub use set::Set;
+//mod rule_methods;
+//pub use rule_methods::{iface_index, Error as MatchError, Protocol, RuleMethods};
+
+//pub mod set;
+//pub use set::Set;
 
 /// The type of the message as it's sent to netfilter. A message consists of an object, such as a
 /// [`Table`], [`Chain`] or [`Rule`] for example, and a [`MsgType`] to describe what to do with
@@ -142,7 +145,7 @@ pub enum MsgType {
 }
 
 /// Denotes a protocol. Used to specify which protocol a table or set belongs to.
-#[derive(Debug, Copy, Clone, Eq, PartialEq, Hash)]
+#[derive(Debug, Copy, Clone, Eq, PartialEq, PartialOrd, Ord, Hash)]
 #[repr(u16)]
 pub enum ProtoFamily {
     Unspec = libc::NFPROTO_UNSPEC as u16,
@@ -175,37 +178,4 @@ impl TryFrom<i32> for ProtoFamily {
             _ => Err(InvalidProtocolFamily),
         }
     }
-}
-
-/// Trait for all types in this crate that can serialize to a Netlink message.
-///
-/// # Unsafe
-///
-/// This trait is unsafe to implement because it must never serialize to anything larger than the
-/// largest possible netlink message. Internally the `nft_nlmsg_maxsize()` function is used to
-/// make sure the `buf` pointer passed to `write` always has room for the largest possible Netlink
-/// message.
-pub unsafe trait NlMsg {
-    /// Serializes the Netlink message to the buffer at `buf`. `buf` must have space for at least
-    /// `nft_nlmsg_maxsize()` bytes. This is not checked by the compiler, which is why this method
-    /// is unsafe.
-    unsafe fn write(&self, buf: *mut c_void, seq: u32, msg_type: MsgType);
-}
-
-unsafe impl<T, R> NlMsg for T
-where
-    T: Deref<Target = R>,
-    R: NlMsg,
-{
-    unsafe fn write(&self, buf: *mut c_void, seq: u32, msg_type: MsgType) {
-        self.deref().write(buf, seq, msg_type);
-    }
-}
-
-/// The largest nf_tables netlink message is the set element message, which contains the
-/// NFTA_SET_ELEM_LIST_ELEMENTS attribute. This attribute is a nest that describes the set
-/// elements. Given that the netlink attribute length (nla_len) is 16 bits, the largest message is
-/// a bit larger than 64 KBytes.
-pub fn nft_nlmsg_maxsize() -> u32 {
-    u32::from(::std::u16::MAX) + unsafe { libc::sysconf(libc::_SC_PAGESIZE) } as u32
 }

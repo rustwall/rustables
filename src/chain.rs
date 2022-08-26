@@ -1,3 +1,4 @@
+use crate::nlmsg::NlMsg;
 #[cfg(feature = "query")]
 use crate::query::{Nfgenmsg, ParseError};
 use crate::sys::{self as sys, libc};
@@ -215,7 +216,7 @@ impl PartialEq for Chain {
     }
 }
 
-unsafe impl crate::NlMsg for Chain {
+unsafe impl NlMsg for Chain {
     unsafe fn write(&self, buf: *mut c_void, seq: u32, msg_type: MsgType) {
         let raw_msg_type = match msg_type {
             MsgType::Add => libc::NFT_MSG_NEWCHAIN,

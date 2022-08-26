@@ -1,19 +1,21 @@
 #![allow(dead_code)]
 use libc::{nlmsghdr, AF_UNIX};
-use rustables::query::{parse_nlmsg, Nfgenmsg};
-use rustables::set::SetKey;
-use rustables::{nft_nlmsg_maxsize, Chain, MsgType, NlMsg, ProtoFamily, Rule, Set, Table};
-use std::ffi::{c_void, CStr};
-use std::rc::Rc;
+use rustables::nlmsg::{NfNetlinkObject, NfNetlinkWriter, Nfgenmsg};
+use rustables::parser::nft_nlmsg_maxsize;
+use rustables::query::parse_nlmsg;
+//use rustables::set::SetKey;
+use rustables::{MsgType, ProtoFamily, Table};
+//use rustables::{nft_nlmsg_maxsize, Chain, MsgType, NlMsg, ProtoFamily, Rule, Set, Table};
+use std::ffi::c_void;
 
-pub const TABLE_NAME: &[u8; 10] = b"mocktable\0";
-pub const CHAIN_NAME: &[u8; 10] = b"mockchain\0";
-pub const SET_NAME: &[u8; 8] = b"mockset\0";
+pub const TABLE_NAME: &'static str = "mocktable";
+pub const CHAIN_NAME: &'static str = "mockchain";
+pub const SET_NAME: &'static str = "mockset";
 
-pub const TABLE_USERDATA: &[u8; 14] = b"mocktabledata\0";
-pub const CHAIN_USERDATA: &[u8; 14] = b"mockchaindata\0";
-pub const RULE_USERDATA: &[u8; 13] = b"mockruledata\0";
-pub const SET_USERDATA: &[u8; 12] = b"mocksetdata\0";
+pub const TABLE_USERDATA: &'static str = "mocktabledata";
+pub const CHAIN_USERDATA: &'static str = "mockchaindata";
+pub const RULE_USERDATA: &'static str = "mockruledata";
+pub const SET_USERDATA: &'static str = "mocksetdata";
 
 pub const SET_ID: u32 = 123456;
 
@@ -82,17 +84,12 @@ impl NetlinkExpr {
 }
 
 pub fn get_test_table() -> Table {
-    Table::new(
-        &CStr::from_bytes_with_nul(TABLE_NAME).unwrap(),
-        ProtoFamily::Inet,
-    )
+    Table::new(TABLE_NAME, ProtoFamily::Inet)
 }
 
+/*
 pub fn get_test_chain() -> Chain {
-    Chain::new(
-        &CStr::from_bytes_with_nul(CHAIN_NAME).unwrap(),
-        Rc::new(get_test_table()),
-    )
+    Chain::new(CHAIN_NAME, Rc::new(get_test_table()))
 }
 
 pub fn get_test_rule() -> Rule {
@@ -100,38 +97,36 @@ pub fn get_test_rule() -> Rule {
 }
 
 pub fn get_test_set<T: SetKey>() -> Set<T> {
-    Set::new(
-        CStr::from_bytes_with_nul(SET_NAME).unwrap(),
-        SET_ID,
-        Rc::new(get_test_table()),
-    )
+    Set::new(SET_NAME, SET_ID, Rc::new(get_test_table()))
 }
+*/
 
 pub fn get_test_nlmsg_with_msg_type(
-    obj: &mut dyn NlMsg,
+    obj: &mut impl NfNetlinkObject,
     msg_type: MsgType,
 ) -> (nlmsghdr, Nfgenmsg, Vec<u8>) {
-    let mut buf = vec![0u8; nft_nlmsg_maxsize() as usize];
-    unsafe {
-        obj.write(buf.as_mut_ptr() as *mut c_void, 0, msg_type);
+    let mut buf = Vec::with_capacity(nft_nlmsg_maxsize() as usize);
+    let mut writer = NfNetlinkWriter::new(&mut buf);
+    obj.add_or_remove(&mut writer, msg_type, 0);
 
-        let (nlmsghdr, msg) = parse_nlmsg(&buf, 0, 0).expect("Couldn't parse the message");
+    println!("{:?}", &buf);
 
-        let (nfgenmsg, raw_value) = match msg {
-            rustables::query::NlMsg::NfGenMsg(nfgenmsg, raw_value) => (nfgenmsg, raw_value),
-            _ => panic!("Invalid return value type, expected a valid message"),
-        };
+    let (hdr, msg) = rustables::parser::parse_nlmsg(&buf).expect("Couldn't parse the message");
 
-        // sanity checks on the global message (this should be very similar/factorisable for the
-        // most part in other tests)
-        // TODO: check the messages flags
-        assert_eq!(nfgenmsg.family, AF_UNIX as u8);
-        assert_eq!(nfgenmsg.res_id.to_be(), 0);
+    let (nfgenmsg, raw_value) = match msg {
+        rustables::parser::NlMsg::NfGenMsg(nfgenmsg, raw_value) => (nfgenmsg, raw_value),
+        _ => panic!("Invalid return value type, expected a valid message"),
+    };
 
-        (*nlmsghdr, *nfgenmsg, raw_value.to_owned())
-    }
+    // sanity checks on the global message (this should be very similar/factorisable for the
+    // most part in other tests)
+    // TODO: check the messages flags
+    assert_eq!(nfgenmsg.family, AF_UNIX as u8);
+    assert_eq!(nfgenmsg.res_id.to_be(), 0);
+
+    (hdr, *nfgenmsg, raw_value.to_owned())
 }
 
-pub fn get_test_nlmsg(obj: &mut dyn NlMsg) -> (nlmsghdr, Nfgenmsg, Vec<u8>) {
+pub fn get_test_nlmsg(obj: &mut impl NfNetlinkObject) -> (nlmsghdr, Nfgenmsg, Vec<u8>) {
     get_test_nlmsg_with_msg_type(obj, MsgType::Add)
 }
