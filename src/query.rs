@@ -21,7 +21,7 @@ pub fn get_list_of_objects<Error>(
     setup_cb: Option<&dyn Fn(&mut libc::nlmsghdr) -> Result<(), Error>>,
 ) -> Result<Vec<u8>, Error> {
     let mut buffer = vec![0; nft_nlmsg_maxsize() as usize];
-    let mut writer = &mut NfNetlinkWriter::new(&mut buffer);
+    let mut writer = NfNetlinkWriter::new(&mut buffer);
     writer.write_header(
         msg_type,
         ProtoFamily::Unspec,
@@ -106,7 +106,7 @@ mod inner {
             }
             let mut buf = &msg_buffer.as_slice()[0..nb_recv];
             loop {
-                let (nlmsghdr, msg) = unsafe { parse_nlmsg(&buf) }?;
+                let (nlmsghdr, msg) = parse_nlmsg(&buf)?;
                 match msg {
                     NlMsg::Done => {
                         return Ok(());
@@ -119,7 +119,7 @@ mod inner {
                     NlMsg::Noop => {}
                     NlMsg::NfGenMsg(genmsg, data) => {
                         if let Some(cb) = cb {
-                            cb(&nlmsghdr, &genmsg, &data, working_data);
+                            cb(&nlmsghdr, &genmsg, &data, working_data)?;
                         }
                     }
                 }

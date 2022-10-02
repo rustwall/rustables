@@ -7,7 +7,8 @@ use std::{
 };
 
 use libc::{
-    nlattr, nlmsgerr, nlmsghdr, NFNETLINK_V0, NFNL_SUBSYS_NFTABLES, NLA_TYPE_MASK, NLMSG_MIN_TYPE,
+    nlattr, nlmsgerr, nlmsghdr, NFNETLINK_V0, NFNL_MSG_BATCH_BEGIN, NFNL_MSG_BATCH_END,
+    NFNL_SUBSYS_NFTABLES, NLA_TYPE_MASK, NLMSG_DONE, NLMSG_ERROR, NLMSG_MIN_TYPE, NLMSG_NOOP,
     NLM_F_DUMP_INTR,
 };
 use thiserror::Error;
@@ -119,6 +120,8 @@ pub fn get_nlmsghdr(buf: &[u8]) -> Result<nlmsghdr, DecodeError> {
 
     Ok(nlmsghdr)
 }
+
+#[derive(Debug)]
 pub enum NlMsg<'a> {
     Done,
     Noop,
@@ -131,16 +134,16 @@ pub fn parse_nlmsg<'a>(buf: &'a [u8]) -> Result<(nlmsghdr, NlMsg<'a>), DecodeErr
     // - nlmsghdr (contains the message size and type)
     // - struct nlmsgerr OR nfgenmsg (nftables header that describes the message family)
     // - the raw value that we want to validate (if the previous part is nfgenmsg)
-    let nlmsghdr = get_nlmsghdr(buf)?;
+    let hdr = get_nlmsghdr(buf)?;
 
     let size_of_hdr = pad_netlink_object::<nlmsghdr>();
 
-    if nlmsghdr.nlmsg_type < NLMSG_MIN_TYPE as u16 {
-        match nlmsghdr.nlmsg_type as libc::c_int {
-            NLMSG_NOOP => return Ok((nlmsghdr, NlMsg::Noop)),
-            NLMSG_ERROR => {
-                if nlmsghdr.nlmsg_len as usize > buf.len()
-                    || (nlmsghdr.nlmsg_len as usize) < size_of_hdr + size_of::<nlmsgerr>()
+    if hdr.nlmsg_type < NLMSG_MIN_TYPE as u16 {
+        match hdr.nlmsg_type as libc::c_int {
+            x if x == NLMSG_NOOP => return Ok((hdr, NlMsg::Noop)),
+            x if x == NLMSG_ERROR => {
+                if hdr.nlmsg_len as usize > buf.len()
+                    || (hdr.nlmsg_len as usize) < size_of_hdr + size_of::<nlmsgerr>()
                 {
                     return Err(DecodeError::NlMsgTooSmall);
                 }
@@ -150,38 +153,40 @@ pub fn parse_nlmsg<'a>(buf: &'a [u8]) -> Result<(nlmsghdr, NlMsg<'a>), DecodeErr
                 };
                 // some APIs return negative values, while other return positive values
                 err.error = err.error.abs();
-                return Ok((nlmsghdr, NlMsg::Error(err)));
+                return Ok((hdr, NlMsg::Error(err)));
             }
-            NLMSG_DONE => return Ok((nlmsghdr, NlMsg::Done)),
+            x if x == NLMSG_DONE => return Ok((hdr, NlMsg::Done)),
             x => return Err(DecodeError::UnsupportedType(x as u16)),
         }
     }
 
-    let subsys = get_subsystem_from_nlmsghdr_type(nlmsghdr.nlmsg_type);
-    if subsys != NFNL_SUBSYS_NFTABLES as u8 {
-        return Err(DecodeError::InvalidSubsystem(subsys));
+    // batch messages are not specific to the nftables subsystem
+    if hdr.nlmsg_type != NFNL_MSG_BATCH_BEGIN as u16 && hdr.nlmsg_type != NFNL_MSG_BATCH_END as u16
+    {
+        // verify that we are decoding nftables messages
+        let subsys = get_subsystem_from_nlmsghdr_type(hdr.nlmsg_type);
+        if subsys != NFNL_SUBSYS_NFTABLES as u8 {
+            return Err(DecodeError::InvalidSubsystem(subsys));
+        }
     }
 
     let size_of_nfgenmsg = pad_netlink_object::<Nfgenmsg>();
-    if nlmsghdr.nlmsg_len as usize > buf.len()
-        || (nlmsghdr.nlmsg_len as usize) < size_of_hdr + size_of_nfgenmsg
+    if hdr.nlmsg_len as usize > buf.len()
+        || (hdr.nlmsg_len as usize) < size_of_hdr + size_of_nfgenmsg
     {
         return Err(DecodeError::NlMsgTooSmall);
     }
 
     let nfgenmsg_ptr = buf[size_of_hdr..size_of_hdr + size_of_nfgenmsg].as_ptr() as *const Nfgenmsg;
     let nfgenmsg = unsafe { *nfgenmsg_ptr };
-    let subsys = get_subsystem_from_nlmsghdr_type(nlmsghdr.nlmsg_type);
-    if subsys != NFNL_SUBSYS_NFTABLES as u8 {
-        return Err(DecodeError::InvalidSubsystem(subsys));
-    }
+
     if nfgenmsg.version != NFNETLINK_V0 as u8 {
         return Err(DecodeError::InvalidVersion(nfgenmsg.version));
     }
 
-    let raw_value = &buf[size_of_hdr + size_of_nfgenmsg..nlmsghdr.nlmsg_len as usize];
+    let raw_value = &buf[size_of_hdr + size_of_nfgenmsg..hdr.nlmsg_len as usize];
 
-    Ok((nlmsghdr, NlMsg::NfGenMsg(nfgenmsg, raw_value)))
+    Ok((hdr, NlMsg::NfGenMsg(nfgenmsg, raw_value)))
 }
 
 pub type NetlinkType = u16;

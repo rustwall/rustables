@@ -1,7 +1,8 @@
 use std::{collections::HashMap, fmt::Debug, marker::PhantomData, mem::size_of, ops::Deref};
 
 use libc::{
-    nlmsgerr, nlmsghdr, NFNETLINK_V0, NFNL_SUBSYS_NFTABLES, NLMSG_MIN_TYPE, NLM_F_DUMP_INTR,
+    nlmsgerr, nlmsghdr, NFNETLINK_V0, NFNL_MSG_BATCH_BEGIN, NFNL_MSG_BATCH_END,
+    NFNL_SUBSYS_NFTABLES, NLMSG_MIN_TYPE, NLM_F_DUMP_INTR,
 };
 use thiserror::Error;
 
@@ -58,7 +59,11 @@ impl<'a> NfNetlinkWriter<'a> {
         //let mut hdr = &mut unsafe { *(nlmsghdr_buf.as_mut_ptr() as *mut nlmsghdr) };
 
         hdr.nlmsg_len = (nlmsghdr_len + nfgenmsg_len) as u32;
-        hdr.nlmsg_type = ((NFNL_SUBSYS_NFTABLES as u16) << 8) | msg_type;
+        hdr.nlmsg_type = msg_type;
+        // batch messages are not specific to the nftables subsystem
+        if msg_type != NFNL_MSG_BATCH_BEGIN as u16 && msg_type != NFNL_MSG_BATCH_END as u16 {
+            hdr.nlmsg_type |= (NFNL_SUBSYS_NFTABLES as u16) << 8;
+        }
         hdr.nlmsg_flags = libc::NLM_F_REQUEST as u16 | flags;
         hdr.nlmsg_seq = seq;
 

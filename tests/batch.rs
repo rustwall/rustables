@@ -14,16 +14,14 @@ fn batch_empty() {
     let buf = batch.finalize();
 
     let (hdr, msg) = parse_nlmsg(&buf).expect("Invalid nlmsg message");
-    let op = get_operation_from_nlmsghdr_type(hdr.nlmsg_type) as i32;
-    assert_eq!(op, NFNL_MSG_BATCH_BEGIN);
+    assert_eq!(hdr.nlmsg_type, NFNL_MSG_BATCH_BEGIN as u16);
     let (_nfgenmsg, attrs, remaining_data) =
         parse_object(hdr, msg, &buf).expect("Could not parse the batch message");
 
     assert_eq!(attrs.get_raw_data(), []);
 
     let (hdr, msg) = parse_nlmsg(&remaining_data).expect("Invalid nlmsg message");
-    let op = get_operation_from_nlmsghdr_type(hdr.nlmsg_type) as i32;
-    assert_eq!(op, NFNL_MSG_BATCH_END);
+    assert_eq!(hdr.nlmsg_type, NFNL_MSG_BATCH_END as u16);
     let (_nfgenmsg, attrs, remaining_data) =
         parse_object(hdr, msg, &remaining_data).expect("Could not parse the batch message");
 
@@ -55,8 +53,7 @@ fn batch_with_objects() {
     let buf = batch.finalize();
 
     let (hdr, msg) = parse_nlmsg(&buf).expect("Invalid nlmsg message");
-    let op = get_operation_from_nlmsghdr_type(hdr.nlmsg_type) as i32;
-    assert_eq!(op, NFNL_MSG_BATCH_BEGIN);
+    assert_eq!(hdr.nlmsg_type, NFNL_MSG_BATCH_BEGIN as u16);
     let (_nfgenmsg, attrs, mut remaining_data) =
         parse_object(hdr, msg, &buf).expect("Could not parse the batch message");
 
@@ -71,8 +68,7 @@ fn batch_with_objects() {
     }
 
     let (hdr, msg) = parse_nlmsg(&remaining_data).expect("Invalid nlmsg message");
-    let op = get_operation_from_nlmsghdr_type(hdr.nlmsg_type) as i32;
-    assert_eq!(op, NFNL_MSG_BATCH_END);
+    assert_eq!(hdr.nlmsg_type, NFNL_MSG_BATCH_END as u16);
     let (_nfgenmsg, attrs, remaining_data) =
         parse_object(hdr, msg, &remaining_data).expect("Could not parse the batch message");
 

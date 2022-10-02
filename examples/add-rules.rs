@@ -37,25 +37,26 @@
 //! ```
 
 use ipnetwork::{IpNetwork, Ipv4Network};
+use rustables::{query::send_batch, Batch, ProtoFamily, Table};
 //use rustables::{nft_expr, query::send_batch, sys::libc, Batch, Chain, ProtoFamily, Rule, Table};
 use std::{ffi::CString, io, net::Ipv4Addr, rc::Rc};
-//
-//const TABLE_NAME: &str = "example-table";
-//const OUT_CHAIN_NAME: &str = "chain-for-outgoing-packets";
-//const IN_CHAIN_NAME: &str = "chain-for-incoming-packets";
+
+const TABLE_NAME: &str = "example-table";
+const OUT_CHAIN_NAME: &str = "chain-for-outgoing-packets";
+const IN_CHAIN_NAME: &str = "chain-for-incoming-packets";
 
 fn main() -> Result<(), Error> {
-    //    // Create a batch. This is used to store all the netlink messages we will later send.
-    //    // Creating a new batch also automatically writes the initial batch begin message needed
-    //    // to tell netlink this is a single transaction that might arrive over multiple netlink packets.
-    //    let mut batch = Batch::new();
-    //
-    //    // Create a netfilter table operating on both IPv4 and IPv6 (ProtoFamily::Inet)
-    //    let table = Rc::new(Table::new(TABLE_NAME, ProtoFamily::Inet));
-    //    // Add the table to the batch with the `MsgType::Add` type, thus instructing netfilter to add
-    //    // this table under its `ProtoFamily::Inet` ruleset.
-    //    batch.add(&Rc::clone(&table), rustables::MsgType::Add);
-    //
+    // Create a batch. This is used to store all the netlink messages we will later send.
+    // Creating a new batch also automatically writes the initial batch begin message needed
+    // to tell netlink this is a single transaction that might arrive over multiple netlink packets.
+    let mut batch = Batch::new();
+
+    // Create a netfilter table operating on both IPv4 and IPv6 (ProtoFamily::Inet)
+    let table = Table::new(TABLE_NAME, ProtoFamily::Inet);
+    // Add the table to the batch with the `MsgType::Add` type, thus instructing netfilter to add
+    // this table under its `ProtoFamily::Inet` ruleset.
+    batch.add(&table, rustables::MsgType::Add);
+
     //    // Create input and output chains under the table we created above.
     //    // Hook the chains to the input and output event hooks, with highest priority (priority zero).
     //    // See the `Chain::set_hook` documentation for details.
@@ -163,22 +164,13 @@ fn main() -> Result<(), Error> {
     //    allow_router_solicitation.add_expr(&nft_expr!(verdict accept));
     //
     //    batch.add(&allow_router_solicitation, rustables::MsgType::Add);
-    //
-    //    // === FINALIZE THE TRANSACTION AND SEND THE DATA TO NETFILTER ===
-    //
-    //    // Finalize the batch. This means the batch end message is written into the batch, telling
-    //    // netfilter the we reached the end of the transaction message. It's also converted to a type
-    //    // that implements `IntoIterator<Item = &'a [u8]>`, thus allowing us to get the raw netlink data
-    //    // out so it can be sent over a netlink socket to netfilter.
-    //    match batch.finalize() {
-    //        Some(mut finalized_batch) => {
-    //            // Send the entire batch and process any returned messages.
-    //            send_batch(&mut finalized_batch)?;
-    //            Ok(())
-    //        }
-    //        None => todo!(),
-    //    }
-    Ok(())
+
+    // === FINALIZE THE TRANSACTION AND SEND THE DATA TO NETFILTER ===
+
+    // Finalize the batch and send it. This means the batch end message is written into the batch, telling
+    // netfilter the we reached the end of the transaction message. It's also converted to a
+    // Vec<u8>, containing the raw netlink data so it can be sent over a netlink socket to netfilter.
+    Ok(send_batch(batch)?)
 }
 
 // Look up the interface index for a given interface name.
