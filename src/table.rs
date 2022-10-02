@@ -3,13 +3,11 @@ use std::fmt::Debug;
 
 use crate::nlmsg::{NfNetlinkObject, NfNetlinkWriter};
 use crate::parser::{
-    expect_msgtype_in_nlmsg, parse_nlmsg, Attribute, DecodeError, NfNetlinkAttributeReader,
-    NfNetlinkAttributes, NlMsg, SerializeNfNetlink,
+    get_operation_from_nlmsghdr_type, parse_nlmsg, parse_object, Attribute, DecodeError,
+    NfNetlinkAttributeReader, NfNetlinkAttributes, NlMsg, SerializeNfNetlink,
 };
 use crate::sys::{self, NFTA_OBJ_TABLE, NFTA_TABLE_FLAGS, NFTA_TABLE_NAME};
 use crate::{impl_attr_getters_and_setters, MsgType, ProtoFamily};
-#[cfg(feature = "query")]
-use crate::{parser::Nfgenmsg, query::ParseError};
 use libc;
 
 /// Abstraction of `nftnl_table`, the top level container in netfilter. A table has a protocol
@@ -69,6 +67,7 @@ impl NfNetlinkObject for Table {
         } as u16;
         writer.write_header(raw_msg_type, self.family, libc::NLM_F_ACK as u16, seq, None);
         self.inner.serialize(writer);
+        writer.finalize_writing_object();
     }
 
     fn decode_attribute(attr_type: u16, buf: &[u8]) -> Result<Attribute, DecodeError> {
@@ -84,18 +83,25 @@ impl NfNetlinkObject for Table {
         }
     }
 
-    fn deserialize(buf: &[u8]) -> Result<(&[u8], Self), DecodeError> {
-        let (hdr, nfgenmsg, content, mut attrs) =
-            expect_msgtype_in_nlmsg(buf, libc::NFT_MSG_NEWTABLE as u8)?;
+    fn deserialize(buf: &[u8]) -> Result<(Self, &[u8]), DecodeError> {
+        let (hdr, msg) = parse_nlmsg(buf)?;
 
-        let (remaining_buf, inner) = attrs.decode::<Table>()?;
+        let op = get_operation_from_nlmsghdr_type(hdr.nlmsg_type) as i32;
+
+        if op != libc::NFT_MSG_NEWTABLE && op != libc::NFT_MSG_DELTABLE {
+            return Err(DecodeError::UnexpectedType(hdr.nlmsg_type));
+        }
+
+        let (nfgenmsg, attrs, remaining_data) = parse_object(hdr, msg, buf)?;
+
+        let inner = attrs.decode::<Table>()?;
 
         Ok((
-            remaining_buf,
             Table {
                 inner,
                 family: ProtoFamily::try_from(nfgenmsg.family as i32)?,
             },
+            remaining_data,
         ))
     }
 }

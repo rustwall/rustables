@@ -314,9 +314,11 @@ impl<'a> NfNetlinkAttributeReader<'a> {
         })
     }
 
-    pub fn decode<T: NfNetlinkObject>(
-        mut self,
-    ) -> Result<(&'a [u8], NfNetlinkAttributes), DecodeError> {
+    pub fn get_raw_data(&self) -> &'a [u8] {
+        &self.buf[self.pos..]
+    }
+
+    pub fn decode<T: NfNetlinkObject>(mut self) -> Result<NfNetlinkAttributes, DecodeError> {
         while self.remaining_size > pad_netlink_object::<nlattr>() {
             let nlattr =
                 unsafe { *transmute::<*const u8, *const nlattr>(self.buf[self.pos..].as_ptr()) };
@@ -337,29 +339,25 @@ impl<'a> NfNetlinkAttributeReader<'a> {
             self.remaining_size -= pad_netlink_object_with_variable_size(nlattr.nla_len as usize);
         }
 
-        Ok((&self.buf[self.pos..], self.attrs))
+        Ok(self.attrs)
     }
 }
 
-pub fn expect_msgtype_in_nlmsg<'a>(
+pub fn parse_object<'a>(
+    hdr: nlmsghdr,
+    msg: NlMsg<'a>,
     buf: &'a [u8],
-    nlmsg_type: u8,
-) -> Result<(nlmsghdr, Nfgenmsg, &'a [u8], NfNetlinkAttributeReader<'a>), DecodeError> {
-    let (hdr, msg) = parse_nlmsg(buf)?;
-
-    if get_operation_from_nlmsghdr_type(hdr.nlmsg_type) != nlmsg_type {
-        return Err(DecodeError::UnexpectedType(hdr.nlmsg_type));
-    }
-
+) -> Result<(Nfgenmsg, NfNetlinkAttributeReader<'a>, &'a [u8]), DecodeError> {
     let remaining_size = hdr.nlmsg_len as usize
         - pad_netlink_object_with_variable_size(size_of::<nlmsghdr>() + size_of::<Nfgenmsg>());
 
+    let remaining_data = &buf[pad_netlink_object_with_variable_size(hdr.nlmsg_len as usize)..];
+
     match msg {
         NlMsg::NfGenMsg(nfgenmsg, content) => Ok((
-            hdr,
             nfgenmsg,
-            content,
             NfNetlinkAttributeReader::new(content, remaining_size)?,
+            remaining_data,
         )),
         _ => Err(DecodeError::UnexpectedType(hdr.nlmsg_type)),
     }

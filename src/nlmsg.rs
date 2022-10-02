@@ -13,24 +13,6 @@ use crate::{
     MsgType, ProtoFamily,
 };
 
-/*
-/// Trait for all types in this crate that can serialize to a Netlink message.
-pub trait NlMsg {
-    /// Serializes the Netlink message to the buffer at `buf`.
-    fn write(&self, buf: &mut Vec<u8>, msg_type: MsgType, seq: u32);
-}
-
-impl<T, R> NlMsg for T
-where
-    T: Deref<Target = R>,
-    R: NlMsg,
-{
-    fn write(&self, buf: &mut Vec<u8>, msg_type: MsgType, seq: u32) {
-        self.deref().write(buf, msg_type, seq);
-    }
-}
-*/
-
 pub struct NfNetlinkWriter<'a> {
     buf: &'a mut Vec<u8>,
     headers: HeaderStack<'a>,
@@ -99,6 +81,10 @@ impl<'a> NfNetlinkWriter<'a> {
             None
         }
     }
+
+    pub fn finalize_writing_object(&mut self) {
+        self.headers.pop_level();
+    }
 }
 
 struct HeaderStack<'a> {
@@ -126,6 +112,10 @@ impl<'a> HeaderStack<'a> {
     fn add_level(&mut self, hdr: *mut nlmsghdr, nfgenmsg: Option<*mut Nfgenmsg>) {
         self.stack.push((hdr, nfgenmsg));
     }
+
+    fn pop_level(&mut self) {
+        self.stack.pop();
+    }
 }
 
 pub trait NfNetlinkObject: Sized {
@@ -133,5 +123,5 @@ pub trait NfNetlinkObject: Sized {
 
     fn decode_attribute(attr_type: u16, buf: &[u8]) -> Result<Attribute, DecodeError>;
 
-    fn deserialize(buf: &[u8]) -> Result<(&[u8], Self), DecodeError>;
+    fn deserialize(buf: &[u8]) -> Result<(Self, &[u8]), DecodeError>;
 }

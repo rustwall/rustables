@@ -92,9 +92,7 @@ macro_rules! try_alloc {
 }
 
 mod batch;
-//#[cfg(feature = "query")]
-//pub use batch::{batch_is_supported, default_batch_page_size};
-//pub use batch::{Batch, FinalizedBatch, NetlinkError};
+pub use batch::{default_batch_page_size, Batch};
 
 //pub mod expr;
 

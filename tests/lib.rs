@@ -1,12 +1,14 @@
 #![allow(dead_code)]
+use std::ffi::CString;
+
 use libc::{nlmsghdr, AF_UNIX};
-use rustables::nlmsg::{NfNetlinkObject, NfNetlinkWriter, Nfgenmsg};
-use rustables::parser::nft_nlmsg_maxsize;
-use rustables::query::parse_nlmsg;
+use rustables::nlmsg::{NfNetlinkObject, NfNetlinkWriter};
+use rustables::parser::Nfgenmsg;
 //use rustables::set::SetKey;
+use rustables::sys::*;
 use rustables::{MsgType, ProtoFamily, Table};
+
 //use rustables::{nft_nlmsg_maxsize, Chain, MsgType, NlMsg, ProtoFamily, Rule, Set, Table};
-use std::ffi::c_void;
 
 pub const TABLE_NAME: &'static str = "mocktable";
 pub const CHAIN_NAME: &'static str = "mockchain";
@@ -25,7 +27,7 @@ type NetLinkType = u16;
 #[error("empty data")]
 pub struct EmptyDataError;
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub enum NetlinkExpr {
     Nested(NetLinkType, Vec<NetlinkExpr>),
     Final(NetLinkType, Vec<u8>),
@@ -81,10 +83,50 @@ impl NetlinkExpr {
             }
         }
     }
+
+    pub fn sort(self) -> Self {
+        match self {
+            NetlinkExpr::Final(_, _) => self,
+            NetlinkExpr::Nested(ty, mut exprs) => {
+                exprs.sort();
+                NetlinkExpr::Nested(ty, exprs)
+            }
+            NetlinkExpr::List(mut exprs) => {
+                exprs.sort();
+                NetlinkExpr::List(exprs)
+            }
+        }
+    }
 }
 
 pub fn get_test_table() -> Table {
     Table::new(TABLE_NAME, ProtoFamily::Inet)
+}
+
+pub fn get_test_table_raw_expr() -> NetlinkExpr {
+    NetlinkExpr::List(vec![
+        NetlinkExpr::Final(NFTA_TABLE_FLAGS, 0u32.to_be_bytes().to_vec()),
+        NetlinkExpr::Final(
+            NFTA_TABLE_NAME,
+            CString::new(TABLE_NAME).unwrap().to_bytes().to_vec(),
+        ),
+    ])
+    .sort()
+}
+
+pub fn get_test_table_with_userdata_raw_expr() -> NetlinkExpr {
+    NetlinkExpr::List(vec![
+        NetlinkExpr::Final(NFTA_TABLE_FLAGS, 0u32.to_be_bytes().to_vec()),
+        NetlinkExpr::Final(
+            NFTA_TABLE_NAME,
+            CString::new(TABLE_NAME).unwrap().to_bytes().to_vec(),
+        ),
+        NetlinkExpr::Final(
+            NFTA_TABLE_USERDATA,
+            CString::new(TABLE_USERDATA).unwrap().to_bytes().to_vec(),
+        ),
+    ])
+    .sort()
 }
 
 /*
@@ -101,17 +143,16 @@ pub fn get_test_set<T: SetKey>() -> Set<T> {
 }
 */
 
-pub fn get_test_nlmsg_with_msg_type(
+pub fn get_test_nlmsg_with_msg_type<'a>(
+    buf: &'a mut Vec<u8>,
     obj: &mut impl NfNetlinkObject,
     msg_type: MsgType,
-) -> (nlmsghdr, Nfgenmsg, Vec<u8>) {
-    let mut buf = Vec::with_capacity(nft_nlmsg_maxsize() as usize);
-    let mut writer = NfNetlinkWriter::new(&mut buf);
+) -> (nlmsghdr, Nfgenmsg, &'a [u8]) {
+    let mut writer = NfNetlinkWriter::new(buf);
     obj.add_or_remove(&mut writer, msg_type, 0);
 
-    println!("{:?}", &buf);
-
-    let (hdr, msg) = rustables::parser::parse_nlmsg(&buf).expect("Couldn't parse the message");
+    let (hdr, msg) =
+        rustables::parser::parse_nlmsg(buf.as_slice()).expect("Couldn't parse the message");
 
     let (nfgenmsg, raw_value) = match msg {
         rustables::parser::NlMsg::NfGenMsg(nfgenmsg, raw_value) => (nfgenmsg, raw_value),
@@ -124,9 +165,12 @@ pub fn get_test_nlmsg_with_msg_type(
     assert_eq!(nfgenmsg.family, AF_UNIX as u8);
     assert_eq!(nfgenmsg.res_id.to_be(), 0);
 
-    (hdr, *nfgenmsg, raw_value.to_owned())
+    (hdr, nfgenmsg, raw_value)
 }
 
-pub fn get_test_nlmsg(obj: &mut impl NfNetlinkObject) -> (nlmsghdr, Nfgenmsg, Vec<u8>) {
-    get_test_nlmsg_with_msg_type(obj, MsgType::Add)
+pub fn get_test_nlmsg<'a>(
+    buf: &'a mut Vec<u8>,
+    obj: &mut impl NfNetlinkObject,
+) -> (nlmsghdr, Nfgenmsg, &'a [u8]) {
+    get_test_nlmsg_with_msg_type(buf, obj, MsgType::Add)
 }
