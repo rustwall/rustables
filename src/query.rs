@@ -37,182 +37,148 @@ pub fn get_list_of_objects<Error>(
     Ok(buffer)
 }
 
-#[cfg(feature = "query")]
-mod inner {
-    use std::os::unix::prelude::RawFd;
+use std::os::unix::prelude::RawFd;
 
-    use nix::{
-        errno::Errno,
-        sys::socket::{
-            self, AddressFamily, MsgFlags, NetlinkAddr, SockAddr, SockFlag, SockProtocol, SockType,
-        },
-    };
+use nix::{
+    errno::Errno,
+    sys::socket::{
+        self, AddressFamily, MsgFlags, NetlinkAddr, SockAddr, SockFlag, SockProtocol, SockType,
+    },
+};
 
-    use crate::{
-        batch::Batch,
-        parser::{parse_nlmsg, DecodeError, NlMsg},
-    };
+use crate::{
+    batch::Batch,
+    parser::{parse_nlmsg, DecodeError, NlMsg},
+};
 
-    use super::*;
+#[derive(thiserror::Error, Debug)]
+pub enum Error {
+    #[error("Unable to open netlink socket to netfilter")]
+    NetlinkOpenError(#[source] nix::Error),
 
-    #[derive(thiserror::Error, Debug)]
-    pub enum Error {
-        #[error("Unable to open netlink socket to netfilter")]
-        NetlinkOpenError(#[source] nix::Error),
+    #[error("Unable to send netlink command to netfilter")]
+    NetlinkSendError(#[source] nix::Error),
 
-        #[error("Unable to send netlink command to netfilter")]
-        NetlinkSendError(#[source] nix::Error),
+    #[error("Error while reading from netlink socket")]
+    NetlinkRecvError(#[source] nix::Error),
 
-        #[error("Error while reading from netlink socket")]
-        NetlinkRecvError(#[source] nix::Error),
+    #[error("Error while processing an incoming netlink message")]
+    ProcessNetlinkError(#[from] DecodeError),
 
-        #[error("Error while processing an incoming netlink message")]
-        ProcessNetlinkError(#[from] DecodeError),
+    #[error("Error received from the kernel")]
+    NetlinkError(nlmsgerr),
 
-        #[error("Error received from the kernel")]
-        NetlinkError(nlmsgerr),
+    #[error("Custom error when customizing the query")]
+    InitError(#[from] Box<dyn std::error::Error + Send + 'static>),
 
-        #[error("Custom error when customizing the query")]
-        InitError(#[from] Box<dyn std::error::Error + Send + 'static>),
+    #[error("Couldn't allocate a netlink object, out of memory ?")]
+    NetlinkAllocationFailed,
 
-        #[error("Couldn't allocate a netlink object, out of memory ?")]
-        NetlinkAllocationFailed,
+    #[error("This socket is not a netlink socket")]
+    NotNetlinkSocket,
 
-        #[error("This socket is not a netlink socket")]
-        NotNetlinkSocket,
+    #[error("Couldn't retrieve information on a socket")]
+    RetrievingSocketInfoFailed,
 
-        #[error("Couldn't retrieve information on a socket")]
-        RetrievingSocketInfoFailed,
+    #[error("Only a part of the message was sent")]
+    TruncatedSend,
 
-        #[error("Only a part of the message was sent")]
-        TruncatedSend,
+    #[error("Couldn't close the socket")]
+    CloseFailed(#[source] Errno),
+}
 
-        #[error("Couldn't close the socket")]
-        CloseFailed(#[source] Errno),
-    }
+pub(crate) fn recv_and_process_until_seq<'a, T>(
+    sock: RawFd,
+    max_seq: u32,
+    cb: Option<&dyn Fn(&nlmsghdr, &Nfgenmsg, &[u8], &mut T) -> Result<(), Error>>,
+    working_data: &'a mut T,
+) -> Result<(), Error> {
+    let mut msg_buffer = vec![0; nft_nlmsg_maxsize() as usize];
 
-    fn recv_and_process<'a, T>(
-        sock: RawFd,
-        cb: Option<&dyn Fn(&nlmsghdr, &Nfgenmsg, &[u8], &mut T) -> Result<(), Error>>,
-        working_data: &'a mut T,
-    ) -> Result<(), Error> {
-        let mut msg_buffer = vec![0; nft_nlmsg_maxsize() as usize];
-
+    loop {
+        let nb_recv = socket::recv(sock, &mut msg_buffer, MsgFlags::empty())
+            .map_err(Error::NetlinkRecvError)?;
+        if nb_recv <= 0 {
+            return Ok(());
+        }
+        let mut buf = &msg_buffer.as_slice()[0..nb_recv];
         loop {
-            let nb_recv = socket::recv(sock, &mut msg_buffer, MsgFlags::empty())
-                .map_err(Error::NetlinkRecvError)?;
-            if nb_recv <= 0 {
+            let (nlmsghdr, msg) = parse_nlmsg(&buf)?;
+            match msg {
+                NlMsg::Done => {
+                    return Ok(());
+                }
+                NlMsg::Error(e) => {
+                    if e.error != 0 {
+                        return Err(Error::NetlinkError(e));
+                    }
+                }
+                NlMsg::Noop => {}
+                NlMsg::NfGenMsg(genmsg, data) => {
+                    if let Some(cb) = cb {
+                        cb(&nlmsghdr, &genmsg, &data, working_data)?;
+                    }
+                }
+            }
+
+            // netlink messages are 4bytes aligned
+            let aligned_length = ((nlmsghdr.nlmsg_len + 3) & !3u32) as usize;
+
+            // retrieve the next message
+            buf = &buf[aligned_length..];
+
+            if nlmsghdr.nlmsg_seq >= max_seq {
                 return Ok(());
             }
-            let mut buf = &msg_buffer.as_slice()[0..nb_recv];
-            loop {
-                let (nlmsghdr, msg) = parse_nlmsg(&buf)?;
-                match msg {
-                    NlMsg::Done => {
-                        return Ok(());
-                    }
-                    NlMsg::Error(e) => {
-                        if e.error != 0 {
-                            return Err(Error::NetlinkError(e));
-                        }
-                    }
-                    NlMsg::Noop => {}
-                    NlMsg::NfGenMsg(genmsg, data) => {
-                        if let Some(cb) = cb {
-                            cb(&nlmsghdr, &genmsg, &data, working_data)?;
-                        }
-                    }
-                }
 
-                // netlink messages are 4bytes aligned
-                let aligned_length = ((nlmsghdr.nlmsg_len + 3) & !3u32) as usize;
-
-                // retrieve the next message
-                buf = &buf[aligned_length..];
-
-                // exit the loop when we consumed all the buffer
-                if buf.len() == 0 {
-                    break;
-                }
+            // exit the loop and try to receive further messages when we consumed all the buffer
+            if buf.len() == 0 {
+                break;
             }
         }
-    }
-
-    fn socket_close_wrapper(
-        sock: RawFd,
-        cb: impl FnOnce(RawFd) -> Result<(), Error>,
-    ) -> Result<(), Error> {
-        let ret = cb(sock);
-
-        // we don't need to shutdown the socket (in fact, Linux doesn't support that operation;
-        // and return EOPNOTSUPP if we try)
-        nix::unistd::close(sock).map_err(Error::CloseFailed)?;
-
-        ret
-    }
-
-    /// Lists objects of a certain type (e.g. libc::NFT_MSG_GETTABLE) with the help of a helper
-    /// function called by mnl::cb_run2.
-    /// The callback expects a tuple of additional data (supplied as an argument to this function)
-    /// and of the output vector, to which it should append the parsed object it received.
-    pub fn list_objects_with_data<'a, T>(
-        data_type: u16,
-        cb: &dyn Fn(&libc::nlmsghdr, &Nfgenmsg, &[u8], &mut T) -> Result<(), Error>,
-        working_data: &'a mut T,
-        req_hdr_customize: Option<&dyn Fn(&mut libc::nlmsghdr) -> Result<(), Error>>,
-    ) -> Result<(), Error> {
-        debug!("listing objects of kind {}", data_type);
-        let sock = socket::socket(
-            AddressFamily::Netlink,
-            SockType::Raw,
-            SockFlag::empty(),
-            SockProtocol::NetlinkNetFilter,
-        )
-        .map_err(Error::NetlinkOpenError)?;
-
-        let seq = 0;
-
-        let chains_buf = get_list_of_objects(data_type, seq, req_hdr_customize)?;
-        socket::send(sock, &chains_buf, MsgFlags::empty()).map_err(Error::NetlinkSendError)?;
-
-        Ok(socket_close_wrapper(sock, move |sock| {
-            recv_and_process(sock, Some(cb), working_data)
-        })?)
-    }
-
-    pub fn send_batch(batch: Batch) -> Result<(), Error> {
-        let sock = socket::socket(
-            AddressFamily::Netlink,
-            SockType::Raw,
-            SockFlag::empty(),
-            SockProtocol::NetlinkNetFilter,
-        )
-        .map_err(Error::NetlinkOpenError)?;
-
-        let seq = 0;
-        let portid = 0;
-
-        let addr = SockAddr::Netlink(NetlinkAddr::new(portid, 0));
-        // while this bind() is not strictly necessary, strace have trouble decoding the messages
-        // if we don't
-        socket::bind(sock, &addr).expect("bind");
-        //match socket::getsockname(sock).map_err(|_| Error::RetrievingSocketInfoFailed)? {
-        //    SockAddr::Netlink(addr) => addr.0.nl_pid,
-        //    _ => return Err(Error::NotNetlinkSocket),
-        //};
-
-        let to_send = batch.finalize();
-        let mut sent = 0;
-        while sent != to_send.len() {
-            sent += socket::send(sock, &to_send[sent..], MsgFlags::empty())
-                .map_err(Error::NetlinkSendError)?;
-        }
-
-        Ok(socket_close_wrapper(sock, move |sock| {
-            recv_and_process(sock, None, &mut ())
-        })?)
     }
 }
 
-#[cfg(feature = "query")]
-pub use inner::*;
+pub(crate) fn socket_close_wrapper(
+    sock: RawFd,
+    cb: impl FnOnce(RawFd) -> Result<(), Error>,
+) -> Result<(), Error> {
+    let ret = cb(sock);
+
+    // we don't need to shutdown the socket (in fact, Linux doesn't support that operation;
+    // and return EOPNOTSUPP if we try)
+    nix::unistd::close(sock).map_err(Error::CloseFailed)?;
+
+    ret
+}
+
+/*
+/// Lists objects of a certain type (e.g. libc::NFT_MSG_GETTABLE) with the help of a helper
+/// function called by mnl::cb_run2.
+/// The callback expects a tuple of additional data (supplied as an argument to this function)
+/// and of the output vector, to which it should append the parsed object it received.
+pub fn list_objects_with_data<'a, T>(
+    data_type: u16,
+    cb: &dyn Fn(&libc::nlmsghdr, &Nfgenmsg, &[u8], &mut T) -> Result<(), Error>,
+    working_data: &'a mut T,
+    req_hdr_customize: Option<&dyn Fn(&mut libc::nlmsghdr) -> Result<(), Error>>,
+) -> Result<(), Error> {
+    debug!("listing objects of kind {}", data_type);
+    let sock = socket::socket(
+        AddressFamily::Netlink,
+        SockType::Raw,
+        SockFlag::empty(),
+        SockProtocol::NetlinkNetFilter,
+    )
+    .map_err(Error::NetlinkOpenError)?;
+
+    let seq = 0;
+
+    let chains_buf = get_list_of_objects(data_type, seq, req_hdr_customize)?;
+    socket::send(sock, &chains_buf, MsgFlags::empty()).map_err(Error::NetlinkSendError)?;
+
+    Ok(socket_close_wrapper(sock, move |sock| {
+        recv_and_process(sock, Some(cb), working_data)
+    })?)
+}
+*/

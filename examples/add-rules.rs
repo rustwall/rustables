@@ -37,7 +37,7 @@
 //! ```
 
 use ipnetwork::{IpNetwork, Ipv4Network};
-use rustables::{query::send_batch, Batch, ProtoFamily, Table};
+use rustables::{Batch, ProtoFamily, Table};
 //use rustables::{nft_expr, query::send_batch, sys::libc, Batch, Chain, ProtoFamily, Rule, Table};
 use std::{ffi::CString, io, net::Ipv4Addr, rc::Rc};
 
@@ -55,6 +55,10 @@ fn main() -> Result<(), Error> {
     let table = Table::new(TABLE_NAME, ProtoFamily::Inet);
     // Add the table to the batch with the `MsgType::Add` type, thus instructing netfilter to add
     // this table under its `ProtoFamily::Inet` ruleset.
+    batch.add(&table, rustables::MsgType::Add);
+
+    let table = Table::new("lool", ProtoFamily::Inet);
+
     batch.add(&table, rustables::MsgType::Add);
 
     //    // Create input and output chains under the table we created above.
@@ -170,7 +174,7 @@ fn main() -> Result<(), Error> {
     // Finalize the batch and send it. This means the batch end message is written into the batch, telling
     // netfilter the we reached the end of the transaction message. It's also converted to a
     // Vec<u8>, containing the raw netlink data so it can be sent over a netlink socket to netfilter.
-    Ok(send_batch(batch)?)
+    Ok(batch.send()?)
 }
 
 // Look up the interface index for a given interface name.

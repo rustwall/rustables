@@ -5,6 +5,11 @@ use thiserror::Error;
 use crate::nlmsg::{NfNetlinkObject, NfNetlinkWriter};
 use crate::{MsgType, ProtoFamily};
 
+use crate::query::Error;
+use nix::sys::socket::{
+    self, AddressFamily, MsgFlags, NetlinkAddr, SockAddr, SockFlag, SockProtocol, SockType,
+};
+
 /// Error while communicating with netlink.
 #[derive(Error, Debug)]
 #[error("Error while communicating with netlink")]
@@ -30,18 +35,19 @@ impl Batch {
         let mut writer = NfNetlinkWriter::new(unsafe {
             std::mem::transmute(Box::as_mut(&mut buf) as *mut Vec<u8>)
         });
+        let seq = 0;
         writer.write_header(
             libc::NFNL_MSG_BATCH_BEGIN as u16,
             ProtoFamily::Unspec,
             0,
-            0,
+            seq,
             Some(libc::NFNL_SUBSYS_NFTABLES as u16),
         );
         writer.finalize_writing_object();
         Batch {
             buf,
             writer,
-            seq: 1,
+            seq: seq + 1,
         }
     }
 
@@ -79,6 +85,37 @@ impl Batch {
         );
         self.writer.finalize_writing_object();
         *self.buf
+    }
+
+    #[cfg(feature = "query")]
+    pub fn send(mut self) -> Result<(), Error> {
+        use crate::query::{recv_and_process_until_seq, socket_close_wrapper};
+
+        let sock = socket::socket(
+            AddressFamily::Netlink,
+            SockType::Raw,
+            SockFlag::empty(),
+            SockProtocol::NetlinkNetFilter,
+        )
+        .map_err(Error::NetlinkOpenError)?;
+
+        let max_seq = self.seq - 1;
+
+        let addr = SockAddr::Netlink(NetlinkAddr::new(0, 0));
+        // while this bind() is not strictly necessary, strace have trouble decoding the messages
+        // if we don't
+        socket::bind(sock, &addr).expect("bind");
+
+        let to_send = self.finalize();
+        let mut sent = 0;
+        while sent != to_send.len() {
+            sent += socket::send(sock, &to_send[sent..], MsgFlags::empty())
+                .map_err(Error::NetlinkSendError)?;
+        }
+
+        Ok(socket_close_wrapper(sock, move |sock| {
+            recv_and_process_until_seq(sock, max_seq, None, &mut ())
+        })?)
     }
 }
 
