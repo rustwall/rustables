@@ -1,9 +1,10 @@
-use crate::nlmsg::NlMsg;
-#[cfg(feature = "query")]
-use crate::query::{Nfgenmsg, ParseError};
-use crate::sys::{self as sys, libc};
-use crate::{MsgType, Table};
-#[cfg(feature = "query")]
+use crate::nlmsg::{
+    AttributeDecoder, NfNetlinkAttribute, NfNetlinkAttributes, NfNetlinkDeserializable,
+    NfNetlinkObject, NfNetlinkWriter,
+};
+use crate::parser::{DecodeError, NestedAttribute, NfNetlinkAttributeReader};
+use crate::sys::{self, NFT_MSG_DELCHAIN, NFT_MSG_NEWCHAIN, NLM_F_ACK};
+use crate::{impl_attr_getters_and_setters, MsgType, ProtoFamily, Table};
 use std::convert::TryFrom;
 use std::{
     ffi::{c_void, CStr, CString},
@@ -15,24 +16,80 @@ use std::{
 pub type Priority = i32;
 
 /// The netfilter event hooks a chain can register for.
-#[derive(Debug, Copy, Clone, Eq, PartialEq, Hash)]
-#[repr(u16)]
-pub enum Hook {
+#[derive(Debug, Copy, Clone, Eq, PartialEq, PartialOrd, Ord, Hash)]
+#[repr(u32)]
+pub enum HookClass {
     /// Hook into the pre-routing stage of netfilter. Corresponds to `NF_INET_PRE_ROUTING`.
-    PreRouting = libc::NF_INET_PRE_ROUTING as u16,
+    PreRouting = libc::NF_INET_PRE_ROUTING as u32,
     /// Hook into the input stage of netfilter. Corresponds to `NF_INET_LOCAL_IN`.
-    In = libc::NF_INET_LOCAL_IN as u16,
+    In = libc::NF_INET_LOCAL_IN as u32,
     /// Hook into the forward stage of netfilter. Corresponds to `NF_INET_FORWARD`.
-    Forward = libc::NF_INET_FORWARD as u16,
+    Forward = libc::NF_INET_FORWARD as u32,
     /// Hook into the output stage of netfilter. Corresponds to `NF_INET_LOCAL_OUT`.
-    Out = libc::NF_INET_LOCAL_OUT as u16,
+    Out = libc::NF_INET_LOCAL_OUT as u32,
     /// Hook into the post-routing stage of netfilter. Corresponds to `NF_INET_POST_ROUTING`.
-    PostRouting = libc::NF_INET_POST_ROUTING as u16,
+    PostRouting = libc::NF_INET_POST_ROUTING as u32,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Hook {
+    inner: NestedAttribute,
+}
+
+impl Hook {
+    fn new(class: HookClass, priority: Priority) -> Self {
+        Hook {
+            inner: NestedAttribute::new(),
+        }
+        .with_hook_class(class as u32)
+        .with_hook_priority(priority as u32)
+    }
+}
+
+impl_attr_getters_and_setters!(
+    Hook,
+    [
+        // Define the action netfilter will apply to packets processed by this chain, but that did not match any rules in it.
+        (
+            get_hook_class,
+            set_hook_class,
+            with_hook_class,
+            sys::NFTA_HOOK_HOOKNUM,
+            U32,
+            u32
+        ),
+        (
+            get_hook_priority,
+            set_hook_priority,
+            with_hook_priority,
+            sys::NFTA_HOOK_PRIORITY,
+            U32,
+            u32
+        )
+    ]
+);
+
+impl NfNetlinkAttribute for Hook {
+    fn get_size(&self) -> usize {
+        self.inner.get_size()
+    }
+
+    unsafe fn write_payload(&self, addr: *mut u8) {
+        self.inner.write_payload(addr)
+    }
+}
+
+impl NfNetlinkDeserializable for Hook {
+    fn deserialize(buf: &[u8]) -> Result<(Self, &[u8]), DecodeError> {
+        let reader = NfNetlinkAttributeReader::new(buf, buf.len())?;
+        let inner = reader.decode::<Self>()?;
+        Ok((Hook { inner }, &[]))
+    }
 }
 
 /// A chain policy. Decides what to do with a packet that was processed by the chain but did not
 /// match any rules.
-#[derive(Debug, Copy, Clone, Eq, PartialEq, Hash)]
+#[derive(Debug, Copy, Clone, Eq, PartialEq, PartialOrd, Ord, Hash)]
 #[repr(u32)]
 pub enum Policy {
     /// Accept the packet.
@@ -73,37 +130,28 @@ impl ChainType {
 /// [`Table`]: struct.Table.html
 /// [`Rule`]: struct.Rule.html
 /// [`set_hook`]: #method.set_hook
+#[derive(Debug, PartialEq, Eq)]
 pub struct Chain {
-    pub(crate) chain: *mut sys::nftnl_chain,
-    pub(crate) table: Rc<Table>,
+    inner: NfNetlinkAttributes,
 }
 
 impl Chain {
-    /// Creates a new chain instance inside the given [`Table`] and with the given name.
+    /// Creates a new chain instance inside the given [`Table`].
     ///
     /// [`Table`]: struct.Table.html
-    pub fn new<T: AsRef<CStr>>(name: &T, table: Rc<Table>) -> Chain {
-        unsafe {
-            let chain = try_alloc!(sys::nftnl_chain_alloc());
-            sys::nftnl_chain_set_u32(
-                chain,
-                sys::NFTNL_CHAIN_FAMILY as u16,
-                table.get_family() as u32,
-            );
-            sys::nftnl_chain_set_str(
-                chain,
-                sys::NFTNL_CHAIN_TABLE as u16,
-                table.get_name().as_ptr(),
-            );
-            sys::nftnl_chain_set_str(chain, sys::NFTNL_CHAIN_NAME as u16, name.as_ref().as_ptr());
-            Chain { chain, table }
+    pub fn new<T: AsRef<CStr>>(table: &Table) -> Chain {
+        let mut chain = Chain {
+            inner: NfNetlinkAttributes::new(),
+        };
+
+        if let Some(table_name) = table.get_name() {
+            chain.set_table(table_name);
         }
+
+        chain
     }
 
-    pub unsafe fn from_raw(chain: *mut sys::nftnl_chain, table: Rc<Table>) -> Self {
-        Chain { chain, table }
-    }
-
+    /*
     /// Sets the hook and priority for this chain. Without calling this method the chain will
     /// become a "regular chain" without any hook and will thus not receive any traffic unless
     /// some rule forward packets to it via goto or jump verdicts.
@@ -112,62 +160,12 @@ impl Chain {
     /// hook and is thus a "base chain". A "base chain" is an entry point for packets from the
     /// networking stack.
     pub fn set_hook(&mut self, hook: Hook, priority: Priority) {
-        unsafe {
-            sys::nftnl_chain_set_u32(self.chain, sys::NFTNL_CHAIN_HOOKNUM as u16, hook as u32);
-            sys::nftnl_chain_set_s32(self.chain, sys::NFTNL_CHAIN_PRIO as u16, priority);
-        }
+        self.set_hook_type(hook);
+        self.set_hook_priority(priority);
     }
+    */
 
-    /// Set the type of a base chain. This only applies if the chain has been registered
-    /// with a hook by calling `set_hook`.
-    pub fn set_type(&mut self, chain_type: ChainType) {
-        unsafe {
-            sys::nftnl_chain_set_str(
-                self.chain,
-                sys::NFTNL_CHAIN_TYPE as u16,
-                chain_type.as_c_str().as_ptr() as *const c_char,
-            );
-        }
-    }
-
-    /// Sets the default policy for this chain. That means what action netfilter will apply to
-    /// packets processed by this chain, but that did not match any rules in it.
-    pub fn set_policy(&mut self, policy: Policy) {
-        unsafe {
-            sys::nftnl_chain_set_u32(self.chain, sys::NFTNL_CHAIN_POLICY as u16, policy as u32);
-        }
-    }
-
-    /// Returns the userdata of this chain.
-    pub fn get_userdata(&self) -> Option<&CStr> {
-        unsafe {
-            let ptr = sys::nftnl_chain_get_str(self.chain, sys::NFTNL_CHAIN_USERDATA as u16);
-            if ptr == std::ptr::null() {
-                return None;
-            }
-            Some(CStr::from_ptr(ptr))
-        }
-    }
-
-    /// Updates the userdata of this chain.
-    pub fn set_userdata(&self, data: &CStr) {
-        unsafe {
-            sys::nftnl_chain_set_str(self.chain, sys::NFTNL_CHAIN_USERDATA as u16, data.as_ptr());
-        }
-    }
-
-    /// Returns the name of this chain.
-    pub fn get_name(&self) -> &CStr {
-        unsafe {
-            let ptr = sys::nftnl_chain_get_str(self.chain, sys::NFTNL_CHAIN_NAME as u16);
-            if ptr.is_null() {
-                panic!("Impossible situation: retrieving the name of a chain failed")
-            } else {
-                CStr::from_ptr(ptr)
-            }
-        }
-    }
-
+    /*
     /// Returns a textual description of the chain.
     pub fn get_str(&self) -> CString {
         let mut descr_buf = vec![0i8; 4096];
@@ -182,27 +180,10 @@ impl Chain {
             CStr::from_ptr(descr_buf.as_ptr() as *mut c_char).to_owned()
         }
     }
-
-    /// Returns a reference to the [`Table`] this chain belongs to.
-    ///
-    /// [`Table`]: struct.Table.html
-    pub fn get_table(&self) -> Rc<Table> {
-        self.table.clone()
-    }
-
-    #[cfg(feature = "unsafe-raw-handles")]
-    /// Returns the raw handle.
-    pub fn as_ptr(&self) -> *const sys::nftnl_chain {
-        self.chain as *const sys::nftnl_chain
-    }
-
-    #[cfg(feature = "unsafe-raw-handles")]
-    /// Returns a mutable version of the raw handle.
-    pub fn as_mut_ptr(&mut self) -> *mut sys::nftnl_chain {
-        self.chain
-    }
+    */
 }
 
+/*
 impl fmt::Debug for Chain {
     /// Returns a string representation of the chain.
     fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -215,7 +196,64 @@ impl PartialEq for Chain {
         self.get_table() == other.get_table() && self.get_name() == other.get_name()
     }
 }
+*/
 
+/*
+impl NfNetlinkObject for Chain {
+    fn add_or_remove<'a>(&self, writer: &mut NfNetlinkWriter<'a>, msg_type: MsgType, seq: u32) {
+        let raw_msg_type = match msg_type {
+            MsgType::Add => NFT_MSG_NEWCHAIN,
+            MsgType::Del => NFT_MSG_DELCHAIN,
+        } as u16;
+        writer.write_header(
+            raw_msg_type,
+            ProtoFamily::Unspec,
+            NLM_F_ACK as u16,
+            seq,
+            None,
+        );
+        self.inner.serialize(writer);
+        writer.finalize_writing_object();
+    }
+
+    fn decode_attribute(attr_type: u16, buf: &[u8]) -> Result<AttributeType, DecodeError> {
+        match attr_type {
+            NFTA_TABLE_NAME => Ok(AttributeType::String(String::from_utf8(buf.to_vec())?)),
+            NFTA_TABLE_FLAGS => {
+                let val = [buf[0], buf[1], buf[2], buf[3]];
+
+                Ok(AttributeType::U32(u32::from_ne_bytes(val)))
+            }
+            NFTA_TABLE_USERDATA => Ok(AttributeType::VecU8(buf.to_vec())),
+            _ => Err(DecodeError::UnsupportedAttributeType(attr_type)),
+        }
+    }
+
+    fn deserialize(buf: &[u8]) -> Result<(Self, &[u8]), DecodeError> {
+        let (hdr, msg) = parse_nlmsg(buf)?;
+
+        let op = get_operation_from_nlmsghdr_type(hdr.nlmsg_type) as u32;
+
+        if op != NFT_MSG_NEWTABLE && op != NFT_MSG_DELTABLE {
+            return Err(DecodeError::UnexpectedType(hdr.nlmsg_type));
+        }
+
+        let (nfgenmsg, attrs, remaining_data) = parse_object(hdr, msg, buf)?;
+
+        let inner = attrs.decode::<Table>()?;
+
+        Ok((
+            Table {
+                inner,
+                family: ProtoFamily::try_from(nfgenmsg.family as i32)?,
+            },
+            remaining_data,
+        ))
+    }
+}
+*/
+
+/*
 unsafe impl NlMsg for Chain {
     unsafe fn write(&self, buf: *mut c_void, seq: u32, msg_type: MsgType) {
         let raw_msg_type = match msg_type {
@@ -243,7 +281,6 @@ impl Drop for Chain {
     }
 }
 
-#[cfg(feature = "query")]
 pub fn get_chains_cb<'a>(
     header: &libc::nlmsghdr,
     _genmsg: &Nfgenmsg,
@@ -302,15 +339,38 @@ pub fn get_chains_cb<'a>(
 
     Ok(())
 }
+*/
 
-#[cfg(feature = "query")]
-pub fn list_chains_for_table(table: Rc<Table>) -> Result<Vec<Chain>, crate::query::Error> {
+impl_attr_getters_and_setters!(
+    Chain,
+    [
+        (get_flags, set_flags, with_flags, sys::NFTA_CHAIN_FLAGS, U32, u32),
+        (get_name, set_name, with_name, sys::NFTA_CHAIN_NAME, String, String),
+        (set_hook, get_hook, with_hook, sys::NFTA_CHAIN_HOOK, ChainHook, Hook),
+        (get_policy, set_policy, with_policy, sys::NFTA_CHAIN_POLICY, U32, u32),
+        (get_table, set_table, with_table, sys::NFTA_CHAIN_TABLE, String, String),
+        // This only applies if the chain has been registered with a hook by calling `set_hook`.
+        (get_type, set_type, with_type, sys::NFTA_CHAIN_TYPE, String, String),
+        (
+            get_userdata,
+            set_userdata,
+            with_userdata,
+            sys::NFTA_CHAIN_USERDATA,
+            VecU8,
+            Vec<u8>
+        )
+    ]
+);
+
+/*
+pub fn list_chains_for_table(table: &Table) -> Result<Vec<Chain>, crate::query::Error> {
     let mut result = Vec::new();
     crate::query::list_objects_with_data(
         libc::NFT_MSG_GETCHAIN as u16,
         &get_chains_cb,
-        &mut (&table, &mut result),
         None,
+        &mut (&table, &mut result),
     )?;
     Ok(result)
 }
+*/

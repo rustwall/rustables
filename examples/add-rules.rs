@@ -37,7 +37,7 @@
 //! ```
 
 use ipnetwork::{IpNetwork, Ipv4Network};
-use rustables::{Batch, ProtoFamily, Table};
+use rustables::{table::list_tables, Batch, ProtoFamily, Table};
 //use rustables::{nft_expr, query::send_batch, sys::libc, Batch, Chain, ProtoFamily, Rule, Table};
 use std::{ffi::CString, io, net::Ipv4Addr, rc::Rc};
 
@@ -46,6 +46,7 @@ const OUT_CHAIN_NAME: &str = "chain-for-outgoing-packets";
 const IN_CHAIN_NAME: &str = "chain-for-incoming-packets";
 
 fn main() -> Result<(), Error> {
+    /*
     // Create a batch. This is used to store all the netlink messages we will later send.
     // Creating a new batch also automatically writes the initial batch begin message needed
     // to tell netlink this is a single transaction that might arrive over multiple netlink packets.
@@ -175,6 +176,10 @@ fn main() -> Result<(), Error> {
     // netfilter the we reached the end of the transaction message. It's also converted to a
     // Vec<u8>, containing the raw netlink data so it can be sent over a netlink socket to netfilter.
     Ok(batch.send()?)
+        */
+
+    println!("{:?}", list_tables());
+    Ok(())
 }
 
 // Look up the interface index for a given interface name.

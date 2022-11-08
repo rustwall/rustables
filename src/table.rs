@@ -1,10 +1,13 @@
 use std::convert::TryFrom;
 use std::fmt::Debug;
 
-use crate::nlmsg::{NfNetlinkObject, NfNetlinkWriter};
+use crate::nlmsg::{
+    AttributeDecoder, NfNetlinkAttributes, NfNetlinkDeserializable, NfNetlinkObject,
+    NfNetlinkSerializable, NfNetlinkWriter,
+};
 use crate::parser::{
-    get_operation_from_nlmsghdr_type, parse_nlmsg, parse_object, Attribute, DecodeError,
-    NfNetlinkAttributeReader, NfNetlinkAttributes, Nfgenmsg, NlMsg, SerializeNfNetlink,
+    get_operation_from_nlmsghdr_type, parse_nlmsg, parse_object, DecodeError,
+    NfNetlinkAttributeReader,
 };
 use crate::sys::{
     self, NFTA_OBJ_TABLE, NFTA_TABLE_FLAGS, NFTA_TABLE_NAME, NFT_MSG_DELTABLE, NFT_MSG_GETTABLE,
@@ -12,7 +15,7 @@ use crate::sys::{
 };
 use crate::{impl_attr_getters_and_setters, MsgType, ProtoFamily};
 
-/// Abstraction of `nftnl_table`, the top level container in netfilter. A table has a protocol
+/// Abstraction of a `nftnl_table`, the top level container in netfilter. A table has a protocol
 /// family and contains [`Chain`]s that in turn hold the rules.
 ///
 /// [`Chain`]: struct.Chain.html
@@ -65,20 +68,9 @@ impl NfNetlinkObject for Table {
         self.inner.serialize(writer);
         writer.finalize_writing_object();
     }
+}
 
-    fn decode_attribute(attr_type: u16, buf: &[u8]) -> Result<Attribute, DecodeError> {
-        match attr_type {
-            NFTA_TABLE_NAME => Ok(Attribute::String(String::from_utf8(buf.to_vec())?)),
-            NFTA_TABLE_FLAGS => {
-                let val = [buf[0], buf[1], buf[2], buf[3]];
-
-                Ok(Attribute::U32(u32::from_ne_bytes(val)))
-            }
-            NFTA_TABLE_USERDATA => Ok(Attribute::VecU8(buf.to_vec())),
-            _ => Err(DecodeError::UnsupportedAttributeType(attr_type)),
-        }
-    }
-
+impl NfNetlinkDeserializable for Table {
     fn deserialize(buf: &[u8]) -> Result<(Self, &[u8]), DecodeError> {
         let (hdr, msg) = parse_nlmsg(buf)?;
 
@@ -102,9 +94,27 @@ impl NfNetlinkObject for Table {
     }
 }
 
+/*
+impl AttributeDecoder for Table {
+    fn decode_attribute(attr_type: u16, buf: &[u8]) -> Result<AttributeType, DecodeError> {
+        match attr_type {
+            NFTA_TABLE_NAME => Ok(AttributeType::String(String::from_utf8(buf.to_vec())?)),
+            NFTA_TABLE_FLAGS => {
+                let val = [buf[0], buf[1], buf[2], buf[3]];
+
+                Ok(AttributeType::U32(u32::from_ne_bytes(val)))
+            }
+            NFTA_TABLE_USERDATA => Ok(AttributeType::VecU8(buf.to_vec())),
+            _ => Err(DecodeError::UnsupportedAttributeType(attr_type)),
+        }
+    }
+}
+*/
+
 impl_attr_getters_and_setters!(
     Table,
     [
+        (get_flags, set_flags, with_flags, sys::NFTA_TABLE_FLAGS, U32, u32),
         (get_name, set_name, with_name, sys::NFTA_TABLE_NAME, String, String),
         (
             get_userdata,
@@ -113,8 +123,7 @@ impl_attr_getters_and_setters!(
             sys::NFTA_TABLE_USERDATA,
             VecU8,
             Vec<u8>
-        ),
-        (get_flags, set_flags, with_flags, sys::NFTA_TABLE_FLAGS, U32, u32)
+        )
     ]
 );
 

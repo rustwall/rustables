@@ -1,4 +1,5 @@
 use std::{
+    any::TypeId,
     collections::HashMap,
     fmt::Debug,
     mem::{size_of, transmute},
@@ -8,7 +9,10 @@ use std::{
 use thiserror::Error;
 
 use crate::{
-    nlmsg::{NfNetlinkObject, NfNetlinkWriter},
+    nlmsg::{
+        AttributeDecoder, NetlinkType, NfNetlinkAttribute, NfNetlinkAttributes,
+        NfNetlinkDeserializable, NfNetlinkObject, NfNetlinkSerializable, NfNetlinkWriter,
+    },
     sys::{
         nlattr, nlmsgerr, nlmsghdr, NFNETLINK_V0, NFNL_MSG_BATCH_BEGIN, NFNL_MSG_BATCH_END,
         NFNL_SUBSYS_NFTABLES, NLA_TYPE_MASK, NLMSG_ALIGNTO, NLMSG_DONE, NLMSG_ERROR,
@@ -24,6 +28,9 @@ pub enum DecodeError {
 
     #[error("The message is too small")]
     NlMsgTooSmall,
+
+    #[error("The message holds unexpected data")]
+    InvalidDataSize,
 
     #[error("Invalid subsystem, expected NFTABLES")]
     InvalidSubsystem(u8),
@@ -71,13 +78,13 @@ pub fn nft_nlmsg_maxsize() -> u32 {
 }
 
 #[inline]
-pub fn pad_netlink_object_with_variable_size(size: usize) -> usize {
+pub const fn pad_netlink_object_with_variable_size(size: usize) -> usize {
     // align on a 4 bytes boundary
     (size + (NLMSG_ALIGNTO as usize - 1)) & !(NLMSG_ALIGNTO as usize - 1)
 }
 
 #[inline]
-pub fn pad_netlink_object<T>() -> usize {
+pub const fn pad_netlink_object<T>() -> usize {
     let size = size_of::<T>();
     pad_netlink_object_with_variable_size(size)
 }
@@ -185,20 +192,9 @@ pub fn parse_nlmsg<'a>(buf: &'a [u8]) -> Result<(nlmsghdr, NlMsg<'a>), DecodeErr
     Ok((hdr, NlMsg::NfGenMsg(nfgenmsg, raw_value)))
 }
 
-pub type NetlinkType = u16;
-
-pub trait NfNetlinkAttribute: Debug + Sized {
-    fn get_size(&self) -> usize {
-        size_of::<Self>()
-    }
-
-    // example body: std::ptr::copy_nonoverlapping(self as *const Self as *const u8, addr, self.get_size());
-    unsafe fn write_payload(&self, addr: *mut u8);
-}
-
 /// Write the attribute, preceded by a `libc::nlattr`
 // rewrite of `mnl_attr_put`
-fn write_attribute<'a>(ty: NetlinkType, obj: &Attribute, writer: &mut NfNetlinkWriter<'a>) {
+fn write_attribute<'a>(ty: NetlinkType, obj: &AttributeType, writer: &mut NfNetlinkWriter<'a>) {
     // copy the header
     let header_len = pad_netlink_object::<libc::nlattr>();
     let header = libc::nlattr {
@@ -223,15 +219,15 @@ fn write_attribute<'a>(ty: NetlinkType, obj: &Attribute, writer: &mut NfNetlinkW
     }
 }
 
-impl NfNetlinkAttribute for ProtoFamily {
-    unsafe fn write_payload(&self, addr: *mut u8) {
-        *(addr as *mut u32) = *self as u32;
-    }
-}
-
 impl NfNetlinkAttribute for u8 {
     unsafe fn write_payload(&self, addr: *mut u8) {
         *addr = *self;
+    }
+}
+
+impl NfNetlinkDeserializable for u8 {
+    fn deserialize(buf: &[u8]) -> Result<(Self, &[u8]), DecodeError> {
+        Ok((buf[0], &buf[1..]))
     }
 }
 
@@ -241,9 +237,39 @@ impl NfNetlinkAttribute for u16 {
     }
 }
 
+impl NfNetlinkDeserializable for u16 {
+    fn deserialize(buf: &[u8]) -> Result<(Self, &[u8]), DecodeError> {
+        Ok((u16::from_be_bytes([buf[0], buf[1]]), &buf[2..]))
+    }
+}
+
+impl NfNetlinkAttribute for i32 {
+    unsafe fn write_payload(&self, addr: *mut u8) {
+        *(addr as *mut Self) = *self;
+    }
+}
+
+impl NfNetlinkDeserializable for i32 {
+    fn deserialize(buf: &[u8]) -> Result<(Self, &[u8]), DecodeError> {
+        Ok((
+            i32::from_be_bytes([buf[0], buf[1], buf[2], buf[3]]),
+            &buf[4..],
+        ))
+    }
+}
+
 impl NfNetlinkAttribute for u32 {
     unsafe fn write_payload(&self, addr: *mut u8) {
         *(addr as *mut Self) = *self;
+    }
+}
+
+impl NfNetlinkDeserializable for u32 {
+    fn deserialize(buf: &[u8]) -> Result<(Self, &[u8]), DecodeError> {
+        Ok((
+            u32::from_be_bytes([buf[0], buf[1], buf[2], buf[3]]),
+            &buf[4..],
+        ))
     }
 }
 
@@ -253,6 +279,18 @@ impl NfNetlinkAttribute for u64 {
     }
 }
 
+impl NfNetlinkDeserializable for u64 {
+    fn deserialize(buf: &[u8]) -> Result<(Self, &[u8]), DecodeError> {
+        Ok((
+            u64::from_be_bytes([
+                buf[0], buf[1], buf[2], buf[3], buf[4], buf[5], buf[6], buf[7],
+            ]),
+            &buf[8..],
+        ))
+    }
+}
+
+// TODO: safe handling for null-delimited strings
 impl NfNetlinkAttribute for String {
     fn get_size(&self) -> usize {
         self.len()
@@ -260,6 +298,12 @@ impl NfNetlinkAttribute for String {
 
     unsafe fn write_payload(&self, addr: *mut u8) {
         std::ptr::copy_nonoverlapping(self.as_bytes().as_ptr(), addr, self.len());
+    }
+}
+
+impl NfNetlinkDeserializable for String {
+    fn deserialize(buf: &[u8]) -> Result<(Self, &[u8]), DecodeError> {
+        Ok((String::from_utf8(buf.to_vec())?, &[]))
     }
 }
 
@@ -273,24 +317,38 @@ impl NfNetlinkAttribute for Vec<u8> {
     }
 }
 
-#[derive(Debug, PartialEq, Eq)]
-pub struct NfNetlinkAttributes {
-    attributes: HashMap<NetlinkType, Attribute>,
+impl NfNetlinkDeserializable for Vec<u8> {
+    fn deserialize(buf: &[u8]) -> Result<(Self, &[u8]), DecodeError> {
+        Ok((buf.to_vec(), &[]))
+    }
 }
 
-impl NfNetlinkAttributes {
-    pub fn new() -> Self {
-        NfNetlinkAttributes {
-            attributes: HashMap::new(),
+pub type NestedAttribute = NfNetlinkAttributes;
+
+// parts of the NfNetlinkAttribute trait we need for handling nested objects
+impl NestedAttribute {
+    pub fn get_size(&self) -> usize {
+        let mut size = 0;
+
+        for (_type, attr) in self.attributes.iter() {
+            // Attribute header + attribute value
+            size += pad_netlink_object::<nlattr>()
+                + pad_netlink_object_with_variable_size(attr.get_size());
         }
+
+        size
     }
 
-    pub fn set_attr(&mut self, ty: NetlinkType, obj: Attribute) {
-        self.attributes.insert(ty, obj);
-    }
-
-    pub fn get_attr(&self, ty: NetlinkType) -> Option<&Attribute> {
-        self.attributes.get(&ty)
+    pub unsafe fn write_payload(&self, mut addr: *mut u8) {
+        for (ty, attr) in self.attributes.iter() {
+            *(addr as *mut nlattr) = nlattr {
+                nla_len: attr.get_size() as u16,
+                nla_type: *ty,
+            };
+            addr = addr.offset(pad_netlink_object::<nlattr>() as isize);
+            attr.write_payload(addr);
+            addr = addr.offset(pad_netlink_object_with_variable_size(attr.get_size()) as isize);
+        }
     }
 }
 
@@ -319,7 +377,9 @@ impl<'a> NfNetlinkAttributeReader<'a> {
         &self.buf[self.pos..]
     }
 
-    pub fn decode<T: NfNetlinkObject>(mut self) -> Result<NfNetlinkAttributes, DecodeError> {
+    pub fn decode<T: AttributeDecoder + 'static>(
+        mut self,
+    ) -> Result<NfNetlinkAttributes, DecodeError> {
         while self.remaining_size > pad_netlink_object::<nlattr>() {
             let nlattr =
                 unsafe { *transmute::<*const u8, *const nlattr>(self.buf[self.pos..].as_ptr()) };
@@ -328,19 +388,28 @@ impl<'a> NfNetlinkAttributeReader<'a> {
 
             self.pos += pad_netlink_object::<nlattr>();
             let attr_remaining_size = nlattr.nla_len as usize - pad_netlink_object::<nlattr>();
-            self.attrs.set_attr(
+            match T::decode_attribute(
                 nla_type,
-                T::decode_attribute(
-                    nla_type,
-                    &self.buf[self.pos..self.pos + attr_remaining_size],
-                )?,
-            );
+                &self.buf[self.pos..self.pos + attr_remaining_size],
+            ) {
+                Ok(x) => self.attrs.set_attr(nla_type, x),
+                Err(DecodeError::UnsupportedAttributeType(t)) => info!(
+                    "Ignore attribute type {} for type id {:?}",
+                    t,
+                    TypeId::of::<T>()
+                ),
+                Err(e) => return Err(e),
+            }
             self.pos += pad_netlink_object_with_variable_size(attr_remaining_size);
 
             self.remaining_size -= pad_netlink_object_with_variable_size(nlattr.nla_len as usize);
         }
 
-        Ok(self.attrs)
+        if self.remaining_size != 0 {
+            Err(DecodeError::InvalidDataSize)
+        } else {
+            Ok(self.attrs)
+        }
     }
 }
 
@@ -364,11 +433,7 @@ pub fn parse_object<'a>(
     }
 }
 
-pub trait SerializeNfNetlink {
-    fn serialize<'a>(&self, writer: &mut NfNetlinkWriter<'a>);
-}
-
-impl SerializeNfNetlink for NfNetlinkAttributes {
+impl NfNetlinkSerializable for NfNetlinkAttributes {
     fn serialize<'a>(&self, writer: &mut NfNetlinkWriter<'a>) {
         // TODO: improve performance by not sorting this
         let mut keys: Vec<&NetlinkType> = self.attributes.keys().collect();
@@ -379,9 +444,9 @@ impl SerializeNfNetlink for NfNetlinkAttributes {
     }
 }
 
-macro_rules! impl_attribute {
+macro_rules! impl_attribute_holder {
     ($enum_name:ident, $([$internal_name:ident, $type:ty]),+) => {
-        #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+        #[derive(Debug, Clone, PartialEq, Eq)]
         pub enum $enum_name {
             $(
                 $internal_name($type),
@@ -403,7 +468,6 @@ macro_rules! impl_attribute {
                         $enum_name::$internal_name(val) => val.write_payload(addr)
                     ),+
                  }
-
             }
         }
 
@@ -421,15 +485,16 @@ macro_rules! impl_attribute {
     };
 }
 
-impl_attribute!(
-    Attribute,
+impl_attribute_holder!(
+    AttributeType,
     [String, String],
     [U8, u8],
     [U16, u16],
+    [I32, i32],
     [U32, u32],
     [U64, u64],
     [VecU8, Vec<u8>],
-    [ProtoFamily, ProtoFamily]
+    [ChainHook, crate::chain::Hook]
 );
 
 #[macro_export]
@@ -439,20 +504,40 @@ macro_rules! impl_attr_getters_and_setters {
             $(
                 #[allow(dead_code)]
                 pub fn $getter_name(&self) -> Option<&$type> {
-                    self.inner.get_attr($attr_name as $crate::parser::NetlinkType).map(|x| x.$internal_name()).flatten()
+                    self.inner.get_attr($attr_name as $crate::nlmsg::NetlinkType).map(|x| x.$internal_name()).flatten()
                 }
 
                 #[allow(dead_code)]
                 pub fn $setter_name(&mut self, val: impl Into<$type>) {
-                    self.inner.set_attr($attr_name as $crate::parser::NetlinkType, $crate::parser::Attribute::$internal_name(val.into()));
+                    self.inner.set_attr($attr_name as $crate::nlmsg::NetlinkType, $crate::parser::AttributeType::$internal_name(val.into()));
                 }
 
                 #[allow(dead_code)]
                 pub fn $in_place_edit_name(mut self, val: impl Into<$type>) -> Self {
-                    self.inner.set_attr($attr_name as $crate::parser::NetlinkType, $crate::parser::Attribute::$internal_name(val.into()));
+                    self.inner.set_attr($attr_name as $crate::nlmsg::NetlinkType, $crate::parser::AttributeType::$internal_name(val.into()));
                     self
                 }
+
             )+
+        }
+
+        impl $crate::nlmsg::AttributeDecoder for $struct {
+            #[allow(dead_code)]
+            fn decode_attribute(attr_type: u16, buf: &[u8]) -> Result<$crate::parser::AttributeType, $crate::parser::DecodeError> {
+                use $crate::nlmsg::NfNetlinkDeserializable;
+                match attr_type {
+                    $(
+                        x if x == $attr_name => {
+                            let (val, remaining) = <$type>::deserialize(buf)?;
+                            if remaining.len() != 0 {
+                                return Err($crate::parser::DecodeError::InvalidDataSize);
+                            }
+                            Ok($crate::parser::AttributeType::$internal_name(val))
+                        },
+                    )+
+                    _ => Err($crate::parser::DecodeError::UnsupportedAttributeType(attr_type)),
+                }
+            }
         }
     };
 }

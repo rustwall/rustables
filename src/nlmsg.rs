@@ -1,15 +1,18 @@
-use std::{collections::HashMap, fmt::Debug, marker::PhantomData, mem::size_of, ops::Deref};
-
-use libc::{
-    nlmsgerr, nlmsghdr, NFNETLINK_V0, NFNL_MSG_BATCH_BEGIN, NFNL_MSG_BATCH_END,
-    NFNL_SUBSYS_NFTABLES, NLMSG_MIN_TYPE, NLM_F_DUMP_INTR,
+use std::{
+    collections::HashMap,
+    fmt::Debug,
+    marker::PhantomData,
+    mem::{size_of, transmute},
 };
-use thiserror::Error;
 
 use crate::{
     parser::{
-        pad_netlink_object, pad_netlink_object_with_variable_size, Attribute, DecodeError,
-        NfNetlinkAttributes, Nfgenmsg,
+        pad_netlink_object, pad_netlink_object_with_variable_size, AttributeType, DecodeError,
+        Nfgenmsg,
+    },
+    sys::{
+        nlattr, nlmsghdr, NFNETLINK_V0, NFNL_MSG_BATCH_BEGIN, NFNL_MSG_BATCH_END,
+        NFNL_SUBSYS_NFTABLES, NLA_TYPE_MASK,
     },
     MsgType, ProtoFamily,
 };
@@ -123,10 +126,50 @@ impl<'a> HeaderStack<'a> {
     }
 }
 
-pub trait NfNetlinkObject: Sized {
-    fn add_or_remove<'a>(&self, writer: &mut NfNetlinkWriter<'a>, msg_type: MsgType, seq: u32);
+pub trait AttributeDecoder {
+    fn decode_attribute(attr_type: u16, buf: &[u8]) -> Result<AttributeType, DecodeError>;
+}
 
-    fn decode_attribute(attr_type: u16, buf: &[u8]) -> Result<Attribute, DecodeError>;
-
+pub trait NfNetlinkDeserializable: Sized {
     fn deserialize(buf: &[u8]) -> Result<(Self, &[u8]), DecodeError>;
+}
+
+pub trait NfNetlinkObject: Sized + AttributeDecoder + NfNetlinkDeserializable {
+    fn add_or_remove<'a>(&self, writer: &mut NfNetlinkWriter<'a>, msg_type: MsgType, seq: u32);
+}
+
+pub trait NfNetlinkSerializable {
+    fn serialize<'a>(&self, writer: &mut NfNetlinkWriter<'a>);
+}
+
+pub type NetlinkType = u16;
+
+pub trait NfNetlinkAttribute: Debug + Sized {
+    fn get_size(&self) -> usize {
+        size_of::<Self>()
+    }
+
+    // example body: std::ptr::copy_nonoverlapping(self as *const Self as *const u8, addr, self.get_size());
+    unsafe fn write_payload(&self, addr: *mut u8);
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct NfNetlinkAttributes {
+    pub attributes: HashMap<NetlinkType, AttributeType>,
+}
+
+impl NfNetlinkAttributes {
+    pub fn new() -> Self {
+        NfNetlinkAttributes {
+            attributes: HashMap::new(),
+        }
+    }
+
+    pub fn set_attr(&mut self, ty: NetlinkType, obj: AttributeType) {
+        self.attributes.insert(ty, obj);
+    }
+
+    pub fn get_attr(&self, ty: NetlinkType) -> Option<&AttributeType> {
+        self.attributes.get(&ty)
+    }
 }

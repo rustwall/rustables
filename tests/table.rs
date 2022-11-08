@@ -1,6 +1,6 @@
 mod sys;
 use rustables::{
-    nlmsg::NfNetlinkObject,
+    nlmsg::NfNetlinkDeserializable,
     parser::{get_operation_from_nlmsghdr_type, nft_nlmsg_maxsize},
     MsgType, Table,
 };

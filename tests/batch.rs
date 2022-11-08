@@ -1,6 +1,7 @@
 mod sys;
 use libc::NFNL_MSG_BATCH_BEGIN;
 use nix::libc::NFNL_MSG_BATCH_END;
+use rustables::nlmsg::NfNetlinkDeserializable;
 use rustables::nlmsg::NfNetlinkObject;
 use rustables::parser::{get_operation_from_nlmsghdr_type, parse_nlmsg, parse_object};
 use rustables::{Batch, MsgType, Table};

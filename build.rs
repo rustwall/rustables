@@ -4,7 +4,6 @@ use bindgen;
 use lazy_static::lazy_static;
 use regex::{Captures, Regex};
 use std::borrow::Cow;
-use std::env;
 use std::fs::File;
 use std::io::Write;
 use std::path::PathBuf;
@@ -14,11 +13,6 @@ const SYS_BINDINGS_FILE: &str = "src/sys.rs";
 
 fn main() {
     generate_sys();
-}
-
-fn get_env(var: &'static str) -> Option<PathBuf> {
-    println!("cargo:rerun-if-env-changed={}", var);
-    env::var_os(var).map(PathBuf::from)
 }
 
 /// `bindgen`erate a rust sys file from the C kernel headers of the nf_tables capabilities.

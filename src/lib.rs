@@ -100,7 +100,7 @@ pub mod table;
 pub use table::Table;
 //pub use table::{get_tables_cb, list_tables};
 //
-//mod chain;
+mod chain;
 //pub use chain::{get_chains_cb, list_chains_for_table};
 //pub use chain::{Chain, ChainType, Hook, Policy, Priority};
 
@@ -141,17 +141,17 @@ pub enum MsgType {
 
 /// Denotes a protocol. Used to specify which protocol a table or set belongs to.
 #[derive(Debug, Copy, Clone, Eq, PartialEq, PartialOrd, Ord, Hash)]
-#[repr(u16)]
+#[repr(u32)]
 pub enum ProtoFamily {
-    Unspec = libc::NFPROTO_UNSPEC as u16,
+    Unspec = libc::NFPROTO_UNSPEC as u32,
     /// Inet - Means both IPv4 and IPv6
-    Inet = libc::NFPROTO_INET as u16,
-    Ipv4 = libc::NFPROTO_IPV4 as u16,
-    Arp = libc::NFPROTO_ARP as u16,
-    NetDev = libc::NFPROTO_NETDEV as u16,
-    Bridge = libc::NFPROTO_BRIDGE as u16,
-    Ipv6 = libc::NFPROTO_IPV6 as u16,
-    DecNet = libc::NFPROTO_DECNET as u16,
+    Inet = libc::NFPROTO_INET as u32,
+    Ipv4 = libc::NFPROTO_IPV4 as u32,
+    Arp = libc::NFPROTO_ARP as u32,
+    NetDev = libc::NFPROTO_NETDEV as u32,
+    Bridge = libc::NFPROTO_BRIDGE as u32,
+    Ipv6 = libc::NFPROTO_IPV6 as u32,
+    DecNet = libc::NFPROTO_DECNET as u32,
 }
 
 #[derive(Error, Debug)]
