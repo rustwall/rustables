@@ -87,9 +87,8 @@ impl Batch {
         *self.buf
     }
 
-    #[cfg(feature = "query")]
     pub fn send(mut self) -> Result<(), Error> {
-        use crate::query::{recv_and_process_until_seq, socket_close_wrapper};
+        use crate::query::{recv_and_process, socket_close_wrapper};
 
         let sock = socket::socket(
             AddressFamily::Netlink,
@@ -114,7 +113,7 @@ impl Batch {
         }
 
         Ok(socket_close_wrapper(sock, move |sock| {
-            recv_and_process_until_seq(sock, max_seq, None, &mut ())
+            recv_and_process(sock, Some(max_seq), None, &mut ())
         })?)
     }
 }

@@ -1,55 +1,18 @@
-use std::mem::size_of;
+use std::os::unix::prelude::RawFd;
 
 use crate::{
-    nlmsg::NfNetlinkWriter,
-    parser::{nft_nlmsg_maxsize, Nfgenmsg},
-    sys, ProtoFamily,
+    nlmsg::{NfNetlinkObject, NfNetlinkWriter},
+    parser::{nft_nlmsg_maxsize, pad_netlink_object_with_variable_size},
+    sys::{nlmsgerr, NLM_F_DUMP, NLM_F_MULTI},
+    ProtoFamily,
 };
-use libc::{
-    nlmsgerr, nlmsghdr, NFNETLINK_V0, NFNL_SUBSYS_NFTABLES, NLMSG_DONE, NLMSG_ERROR,
-    NLMSG_MIN_TYPE, NLMSG_NOOP, NLM_F_DUMP_INTR,
-};
-
-/// Returns a buffer containing a netlink message which requests a list of all the netfilter
-/// matching objects (e.g. tables, chains, rules, ...).
-/// Supply the type of objects to retrieve (e.g. libc::NFT_MSG_GETTABLE), and optionally a callback
-/// to execute on the header, to set parameters for example.
-/// To pass arbitrary data inside that callback, please use a closure.
-pub fn get_list_of_objects<Error>(
-    msg_type: u16,
-    seq: u32,
-    setup_cb: Option<&dyn Fn(&mut libc::nlmsghdr) -> Result<(), Error>>,
-) -> Result<Vec<u8>, Error> {
-    let mut buffer = vec![0; nft_nlmsg_maxsize() as usize];
-    let mut writer = NfNetlinkWriter::new(&mut buffer);
-    writer.write_header(
-        msg_type,
-        ProtoFamily::Unspec,
-        (libc::NLM_F_ROOT | libc::NLM_F_MATCH) as u16,
-        seq,
-        None,
-    );
-    if let Some(cb) = setup_cb {
-        cb(writer
-            .get_current_header()
-            .expect("Fatal error: mising header"))?;
-    }
-    Ok(buffer)
-}
-
-use std::os::unix::prelude::RawFd;
 
 use nix::{
     errno::Errno,
-    sys::socket::{
-        self, AddressFamily, MsgFlags, NetlinkAddr, SockAddr, SockFlag, SockProtocol, SockType,
-    },
+    sys::socket::{self, AddressFamily, MsgFlags, SockFlag, SockProtocol, SockType},
 };
 
-use crate::{
-    batch::Batch,
-    parser::{parse_nlmsg, DecodeError, NlMsg},
-};
+use crate::parser::{parse_nlmsg, DecodeError, NlMsg};
 
 #[derive(thiserror::Error, Debug)]
 pub enum Error {
@@ -83,27 +46,45 @@ pub enum Error {
     #[error("Only a part of the message was sent")]
     TruncatedSend,
 
+    #[error("Got a message without the NLM_F_MULTI flag, but a maximum sequence number was not specified")]
+    UndecidableMessageTermination,
+
     #[error("Couldn't close the socket")]
     CloseFailed(#[source] Errno),
 }
 
-pub(crate) fn recv_and_process_until_seq<'a, T>(
+pub(crate) fn recv_and_process<'a, T>(
     sock: RawFd,
-    max_seq: u32,
-    cb: Option<&dyn Fn(&nlmsghdr, &Nfgenmsg, &[u8], &mut T) -> Result<(), Error>>,
+    max_seq: Option<u32>,
+    cb: Option<&dyn Fn(&[u8], &mut T) -> Result<(), Error>>,
     working_data: &'a mut T,
 ) -> Result<(), Error> {
-    let mut msg_buffer = vec![0; nft_nlmsg_maxsize() as usize];
+    let mut msg_buffer = vec![0; 2 * nft_nlmsg_maxsize() as usize];
+    let mut buf_start = 0;
+    let mut end_pos = 0;
 
     loop {
-        let nb_recv = socket::recv(sock, &mut msg_buffer, MsgFlags::empty())
+        let nb_recv = socket::recv(sock, &mut msg_buffer[end_pos..], MsgFlags::empty())
             .map_err(Error::NetlinkRecvError)?;
         if nb_recv <= 0 {
             return Ok(());
         }
-        let mut buf = &msg_buffer.as_slice()[0..nb_recv];
+        end_pos += nb_recv;
         loop {
+            let buf = &msg_buffer.as_slice()[buf_start..end_pos];
+            // exit the loop and try to receive further messages when we consumed all the buffer
+            if buf.len() == 0 {
+                break;
+            }
+
+            debug!("calling parse_nlmsg");
             let (nlmsghdr, msg) = parse_nlmsg(&buf)?;
+            debug!("Got a valid netlink message: {:?} {:?}", nlmsghdr, msg);
+            // we cannot know when a message will end if we are not receiving messages ending with an
+            // NlMsg::Done marker, and if a maximum sequence number wasn't specified either
+            if max_seq.is_none() && nlmsghdr.nlmsg_flags & NLM_F_MULTI as u16 == 0 {
+                return Err(Error::UndecidableMessageTermination);
+            }
             match msg {
                 NlMsg::Done => {
                     return Ok(());
@@ -114,55 +95,88 @@ pub(crate) fn recv_and_process_until_seq<'a, T>(
                     }
                 }
                 NlMsg::Noop => {}
-                NlMsg::NfGenMsg(genmsg, data) => {
+                NlMsg::NfGenMsg(_genmsg, _data) => {
                     if let Some(cb) = cb {
-                        cb(&nlmsghdr, &genmsg, &data, working_data)?;
+                        cb(&buf[0..nlmsghdr.nlmsg_len as usize], working_data)?;
                     }
                 }
             }
 
-            // netlink messages are 4bytes aligned
-            let aligned_length = ((nlmsghdr.nlmsg_len + 3) & !3u32) as usize;
-
             // retrieve the next message
-            buf = &buf[aligned_length..];
-
-            if nlmsghdr.nlmsg_seq >= max_seq {
-                return Ok(());
+            if let Some(max_seq) = max_seq {
+                if nlmsghdr.nlmsg_seq >= max_seq {
+                    return Ok(());
+                }
             }
 
-            // exit the loop and try to receive further messages when we consumed all the buffer
-            if buf.len() == 0 {
-                break;
+            // netlink messages are 4bytes aligned
+            let aligned_length = pad_netlink_object_with_variable_size(nlmsghdr.nlmsg_len as usize);
+            buf_start += aligned_length;
+        }
+        // Ensure that we always have nft_nlmsg_maxsize() free space available in the buffer.
+        // We achieve this by relocating the buffer content at the beginning of the buffer
+        if end_pos >= nft_nlmsg_maxsize() as usize {
+            if buf_start < end_pos {
+                unsafe {
+                    std::ptr::copy(
+                        msg_buffer[buf_start..end_pos].as_ptr(),
+                        msg_buffer.as_mut_ptr(),
+                        end_pos - buf_start,
+                    );
+                }
             }
+            end_pos = end_pos - buf_start;
+            buf_start = 0;
         }
     }
 }
 
-pub(crate) fn socket_close_wrapper(
+pub(crate) fn socket_close_wrapper<E>(
     sock: RawFd,
-    cb: impl FnOnce(RawFd) -> Result<(), Error>,
-) -> Result<(), Error> {
+    cb: impl FnOnce(RawFd) -> Result<(), E>,
+) -> Result<(), Error>
+where
+    Error: From<E>,
+{
     let ret = cb(sock);
 
     // we don't need to shutdown the socket (in fact, Linux doesn't support that operation;
     // and return EOPNOTSUPP if we try)
     nix::unistd::close(sock).map_err(Error::CloseFailed)?;
 
-    ret
+    Ok(ret?)
 }
 
-/*
+/// Returns a buffer containing a netlink message which requests a list of all the netfilter
+/// matching objects (e.g. tables, chains, rules, ...).
+/// Supply the type of objects to retrieve (e.g. libc::NFT_MSG_GETTABLE), and a search filter.
+pub fn get_list_of_objects<T>(msg_type: u16, seq: u32, filter: Option<&T>) -> Result<Vec<u8>, Error>
+where
+    T: NfNetlinkObject,
+{
+    let mut buffer = Vec::new();
+    let mut writer = NfNetlinkWriter::new(&mut buffer);
+    writer.write_header(msg_type, ProtoFamily::Unspec, NLM_F_DUMP as u16, seq, None);
+    writer.finalize_writing_object();
+    if let Some(filter) = filter {
+        filter.add_or_remove(&mut writer, crate::MsgType::Add, 0);
+    }
+    Ok(buffer)
+}
+
 /// Lists objects of a certain type (e.g. libc::NFT_MSG_GETTABLE) with the help of a helper
 /// function called by mnl::cb_run2.
 /// The callback expects a tuple of additional data (supplied as an argument to this function)
 /// and of the output vector, to which it should append the parsed object it received.
-pub fn list_objects_with_data<'a, T>(
+pub fn list_objects_with_data<'a, Object, Accumulator>(
     data_type: u16,
-    cb: &dyn Fn(&libc::nlmsghdr, &Nfgenmsg, &[u8], &mut T) -> Result<(), Error>,
-    working_data: &'a mut T,
-    req_hdr_customize: Option<&dyn Fn(&mut libc::nlmsghdr) -> Result<(), Error>>,
-) -> Result<(), Error> {
+    cb: &dyn Fn(Object, &mut Accumulator) -> Result<(), Error>,
+    filter: Option<&Object>,
+    working_data: &'a mut Accumulator,
+) -> Result<(), Error>
+where
+    Object: NfNetlinkObject,
+{
     debug!("listing objects of kind {}", data_type);
     let sock = socket::socket(
         AddressFamily::Netlink,
@@ -174,11 +188,18 @@ pub fn list_objects_with_data<'a, T>(
 
     let seq = 0;
 
-    let chains_buf = get_list_of_objects(data_type, seq, req_hdr_customize)?;
+    let chains_buf = get_list_of_objects(data_type, seq, filter)?;
     socket::send(sock, &chains_buf, MsgFlags::empty()).map_err(Error::NetlinkSendError)?;
 
-    Ok(socket_close_wrapper(sock, move |sock| {
-        recv_and_process(sock, Some(cb), working_data)
-    })?)
+    socket_close_wrapper(sock, move |sock| {
+        // the kernel should return NLM_F_MULTI objects
+        recv_and_process(
+            sock,
+            None,
+            Some(&|buf: &[u8], working_data: &mut Accumulator| {
+                cb(Object::deserialize(buf)?.0, working_data)
+            }),
+            working_data,
+        )
+    })
 }
-*/

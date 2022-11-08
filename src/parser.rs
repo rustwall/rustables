@@ -1,20 +1,19 @@
 use std::{
     collections::HashMap,
     fmt::Debug,
-    mem::{self, size_of, transmute},
-    str::Utf8Error,
+    mem::{size_of, transmute},
     string::FromUtf8Error,
 };
 
-use libc::{
-    nlattr, nlmsgerr, nlmsghdr, NFNETLINK_V0, NFNL_MSG_BATCH_BEGIN, NFNL_MSG_BATCH_END,
-    NFNL_SUBSYS_NFTABLES, NLA_TYPE_MASK, NLMSG_DONE, NLMSG_ERROR, NLMSG_MIN_TYPE, NLMSG_NOOP,
-    NLM_F_DUMP_INTR,
-};
 use thiserror::Error;
 
 use crate::{
     nlmsg::{NfNetlinkObject, NfNetlinkWriter},
+    sys::{
+        nlattr, nlmsgerr, nlmsghdr, NFNETLINK_V0, NFNL_MSG_BATCH_BEGIN, NFNL_MSG_BATCH_END,
+        NFNL_SUBSYS_NFTABLES, NLA_TYPE_MASK, NLMSG_ALIGNTO, NLMSG_DONE, NLMSG_ERROR,
+        NLMSG_MIN_TYPE, NLMSG_NOOP, NLM_F_DUMP_INTR,
+    },
     InvalidProtocolFamily, ProtoFamily,
 };
 
@@ -74,13 +73,12 @@ pub fn nft_nlmsg_maxsize() -> u32 {
 #[inline]
 pub fn pad_netlink_object_with_variable_size(size: usize) -> usize {
     // align on a 4 bytes boundary
-    (size + 3) & (!3)
+    (size + (NLMSG_ALIGNTO as usize - 1)) & !(NLMSG_ALIGNTO as usize - 1)
 }
 
 #[inline]
 pub fn pad_netlink_object<T>() -> usize {
     let size = size_of::<T>();
-    // align on a 4 bytes boundary
     pad_netlink_object_with_variable_size(size)
 }
 
@@ -139,12 +137,10 @@ pub fn parse_nlmsg<'a>(buf: &'a [u8]) -> Result<(nlmsghdr, NlMsg<'a>), DecodeErr
     let size_of_hdr = pad_netlink_object::<nlmsghdr>();
 
     if hdr.nlmsg_type < NLMSG_MIN_TYPE as u16 {
-        match hdr.nlmsg_type as libc::c_int {
+        match hdr.nlmsg_type as u32 {
             x if x == NLMSG_NOOP => return Ok((hdr, NlMsg::Noop)),
             x if x == NLMSG_ERROR => {
-                if hdr.nlmsg_len as usize > buf.len()
-                    || (hdr.nlmsg_len as usize) < size_of_hdr + size_of::<nlmsgerr>()
-                {
+                if (hdr.nlmsg_len as usize) < size_of_hdr + size_of::<nlmsgerr>() {
                     return Err(DecodeError::NlMsgTooSmall);
                 }
                 let mut err = unsafe {
@@ -196,8 +192,8 @@ pub trait NfNetlinkAttribute: Debug + Sized {
         size_of::<Self>()
     }
 
-    unsafe fn write_payload(&self, addr: *mut u8);
     // example body: std::ptr::copy_nonoverlapping(self as *const Self as *const u8, addr, self.get_size());
+    unsafe fn write_payload(&self, addr: *mut u8);
 }
 
 /// Write the attribute, preceded by a `libc::nlattr`
@@ -438,7 +434,7 @@ impl_attribute!(
 
 #[macro_export]
 macro_rules! impl_attr_getters_and_setters {
-    ($struct:ident, [$(($getter_name:ident, $setter_name:ident, $attr_name:expr, $internal_name:ident, $type:ty)),+]) => {
+    ($struct:ident, [$(($getter_name:ident, $setter_name:ident, $in_place_edit_name:ident, $attr_name:expr, $internal_name:ident, $type:ty)),+]) => {
         impl $struct {
             $(
                 #[allow(dead_code)]
@@ -447,8 +443,14 @@ macro_rules! impl_attr_getters_and_setters {
                 }
 
                 #[allow(dead_code)]
-                pub fn $setter_name(&mut self, val: $type) {
-                    self.inner.set_attr($attr_name as $crate::parser::NetlinkType, $crate::parser::Attribute::$internal_name(val));
+                pub fn $setter_name(&mut self, val: impl Into<$type>) {
+                    self.inner.set_attr($attr_name as $crate::parser::NetlinkType, $crate::parser::Attribute::$internal_name(val.into()));
+                }
+
+                #[allow(dead_code)]
+                pub fn $in_place_edit_name(mut self, val: impl Into<$type>) -> Self {
+                    self.inner.set_attr($attr_name as $crate::parser::NetlinkType, $crate::parser::Attribute::$internal_name(val.into()));
+                    self
                 }
             )+
         }

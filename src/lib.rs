@@ -98,11 +98,9 @@ pub use batch::{default_batch_page_size, Batch};
 
 pub mod table;
 pub use table::Table;
-//#[cfg(feature = "query")]
 //pub use table::{get_tables_cb, list_tables};
 //
 //mod chain;
-//#[cfg(feature = "query")]
 //pub use chain::{get_chains_cb, list_chains_for_table};
 //pub use chain::{Chain, ChainType, Hook, Policy, Priority};
 
@@ -116,7 +114,6 @@ pub mod parser;
 
 //mod rule;
 //pub use rule::Rule;
-//#[cfg(feature = "query")]
 //pub use rule::{get_rules_cb, list_rules_for_chain};
 
 //mod rule_methods;

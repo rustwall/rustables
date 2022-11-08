@@ -1,7 +1,7 @@
 #![allow(dead_code)]
 use std::ffi::CString;
 
-use libc::{nlmsghdr, AF_UNIX};
+use libc::AF_UNIX;
 use rustables::nlmsg::{NfNetlinkObject, NfNetlinkWriter};
 use rustables::parser::Nfgenmsg;
 //use rustables::set::SetKey;
@@ -100,7 +100,9 @@ impl NetlinkExpr {
 }
 
 pub fn get_test_table() -> Table {
-    Table::new(TABLE_NAME, ProtoFamily::Inet)
+    Table::new(ProtoFamily::Inet)
+        .with_name(TABLE_NAME)
+        .with_flags(0u32)
 }
 
 pub fn get_test_table_raw_expr() -> NetlinkExpr {

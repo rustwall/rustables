@@ -12,8 +12,6 @@ categories = ["network-programming", "os::unix-apis", "api-bindings"]
 edition = "2018"
 
 [features]
-query = []
-unsafe-raw-handles = []
 
 [dependencies]
 bitflags = "1.0"
@@ -23,9 +21,6 @@ libc = "0.2.43"
 nix = "0.23"
 ipnetwork = "0.16"
 serde = { version = "1.0", features = ["derive"] }
-
-[dev-dependencies]
-rustables = { path = ".", features = ["query"] }
 
 [build-dependencies]
 bindgen = "0.53.1"
