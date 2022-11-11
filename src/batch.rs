@@ -3,6 +3,7 @@ use libc;
 use thiserror::Error;
 
 use crate::nlmsg::{NfNetlinkObject, NfNetlinkWriter};
+use crate::sys::NFNL_SUBSYS_NFTABLES;
 use crate::{MsgType, ProtoFamily};
 
 use crate::query::Error;
@@ -81,7 +82,7 @@ impl Batch {
             ProtoFamily::Unspec,
             0,
             self.seq,
-            Some(libc::NFNL_SUBSYS_NFTABLES as u16),
+            Some(NFNL_SUBSYS_NFTABLES as u16),
         );
         self.writer.finalize_writing_object();
         *self.buf

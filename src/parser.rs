@@ -1,7 +1,7 @@
 use std::{
     any::TypeId,
     collections::HashMap,
-    fmt::Debug,
+    fmt::{Debug, DebugStruct},
     mem::{size_of, transmute},
     string::FromUtf8Error,
 };
@@ -14,9 +14,9 @@ use crate::{
         NfNetlinkDeserializable, NfNetlinkObject, NfNetlinkSerializable, NfNetlinkWriter,
     },
     sys::{
-        nlattr, nlmsgerr, nlmsghdr, NFNETLINK_V0, NFNL_MSG_BATCH_BEGIN, NFNL_MSG_BATCH_END,
-        NFNL_SUBSYS_NFTABLES, NLA_TYPE_MASK, NLMSG_ALIGNTO, NLMSG_DONE, NLMSG_ERROR,
-        NLMSG_MIN_TYPE, NLMSG_NOOP, NLM_F_DUMP_INTR,
+        nfgenmsg, nlattr, nlmsgerr, nlmsghdr, NFNETLINK_V0, NFNL_MSG_BATCH_BEGIN,
+        NFNL_MSG_BATCH_END, NFNL_SUBSYS_NFTABLES, NLA_TYPE_MASK, NLMSG_ALIGNTO, NLMSG_DONE,
+        NLMSG_ERROR, NLMSG_MIN_TYPE, NLMSG_NOOP, NLM_F_DUMP_INTR,
     },
     InvalidProtocolFamily, ProtoFamily,
 };
@@ -52,6 +52,9 @@ pub enum DecodeError {
 
     #[error("Invalid attribute type")]
     InvalidAttributeType,
+
+    #[error("Invalid type for a chain")]
+    UnknownChainType,
 
     #[error("Unsupported attribute type")]
     UnsupportedAttributeType(u16),
@@ -89,14 +92,6 @@ pub const fn pad_netlink_object<T>() -> usize {
     pad_netlink_object_with_variable_size(size)
 }
 
-#[repr(C)]
-#[derive(Debug, Clone, Copy)]
-pub struct Nfgenmsg {
-    pub family: u8,  /* AF_xxx */
-    pub version: u8, /* nfnetlink version */
-    pub res_id: u16, /* resource id */
-}
-
 pub fn get_subsystem_from_nlmsghdr_type(x: u16) -> u8 {
     ((x & 0xff00) >> 8) as u8
 }
@@ -126,12 +121,12 @@ pub fn get_nlmsghdr(buf: &[u8]) -> Result<nlmsghdr, DecodeError> {
     Ok(nlmsghdr)
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum NlMsg<'a> {
     Done,
     Noop,
     Error(nlmsgerr),
-    NfGenMsg(Nfgenmsg, &'a [u8]),
+    NfGenMsg(nfgenmsg, &'a [u8]),
 }
 
 pub fn parse_nlmsg<'a>(buf: &'a [u8]) -> Result<(nlmsghdr, NlMsg<'a>), DecodeError> {
@@ -173,14 +168,14 @@ pub fn parse_nlmsg<'a>(buf: &'a [u8]) -> Result<(nlmsghdr, NlMsg<'a>), DecodeErr
         }
     }
 
-    let size_of_nfgenmsg = pad_netlink_object::<Nfgenmsg>();
+    let size_of_nfgenmsg = pad_netlink_object::<nfgenmsg>();
     if hdr.nlmsg_len as usize > buf.len()
         || (hdr.nlmsg_len as usize) < size_of_hdr + size_of_nfgenmsg
     {
         return Err(DecodeError::NlMsgTooSmall);
     }
 
-    let nfgenmsg_ptr = buf[size_of_hdr..size_of_hdr + size_of_nfgenmsg].as_ptr() as *const Nfgenmsg;
+    let nfgenmsg_ptr = buf[size_of_hdr..size_of_hdr + size_of_nfgenmsg].as_ptr() as *const nfgenmsg;
     let nfgenmsg = unsafe { *nfgenmsg_ptr };
 
     if nfgenmsg.version != NFNETLINK_V0 as u8 {
@@ -302,7 +297,11 @@ impl NfNetlinkAttribute for String {
 }
 
 impl NfNetlinkDeserializable for String {
-    fn deserialize(buf: &[u8]) -> Result<(Self, &[u8]), DecodeError> {
+    fn deserialize(mut buf: &[u8]) -> Result<(Self, &[u8]), DecodeError> {
+        // ignore the NULL byte terminator, if any
+        if buf.len() > 0 && buf[buf.len() - 1] == 0 {
+            buf = &buf[..buf.len() - 1];
+        }
         Ok((String::from_utf8(buf.to_vec())?, &[]))
     }
 }
@@ -394,7 +393,7 @@ impl<'a> NfNetlinkAttributeReader<'a> {
             ) {
                 Ok(x) => self.attrs.set_attr(nla_type, x),
                 Err(DecodeError::UnsupportedAttributeType(t)) => info!(
-                    "Ignore attribute type {} for type id {:?}",
+                    "Ignore attribute type {} for type identified by {:?}",
                     t,
                     TypeId::of::<T>()
                 ),
@@ -410,26 +409,6 @@ impl<'a> NfNetlinkAttributeReader<'a> {
         } else {
             Ok(self.attrs)
         }
-    }
-}
-
-pub fn parse_object<'a>(
-    hdr: nlmsghdr,
-    msg: NlMsg<'a>,
-    buf: &'a [u8],
-) -> Result<(Nfgenmsg, NfNetlinkAttributeReader<'a>, &'a [u8]), DecodeError> {
-    let remaining_size = hdr.nlmsg_len as usize
-        - pad_netlink_object_with_variable_size(size_of::<nlmsghdr>() + size_of::<Nfgenmsg>());
-
-    let remaining_data = &buf[pad_netlink_object_with_variable_size(hdr.nlmsg_len as usize)..];
-
-    match msg {
-        NlMsg::NfGenMsg(nfgenmsg, content) => Ok((
-            nfgenmsg,
-            NfNetlinkAttributeReader::new(content, remaining_size)?,
-            remaining_data,
-        )),
-        _ => Err(DecodeError::UnexpectedType(hdr.nlmsg_type)),
     }
 }
 
@@ -483,6 +462,13 @@ macro_rules! impl_attribute_holder {
             )+
         }
     };
+}
+
+pub trait InnerFormat {
+    fn inner_format_struct<'a, 'b: 'a>(
+        &'a self,
+        s: DebugStruct<'a, 'b>,
+    ) -> Result<DebugStruct<'a, 'b>, std::fmt::Error>;
 }
 
 impl_attribute_holder!(
@@ -539,5 +525,58 @@ macro_rules! impl_attr_getters_and_setters {
                 }
             }
         }
+
+
+        impl $crate::parser::InnerFormat for $struct {
+            fn inner_format_struct<'a, 'b: 'a>(&'a self, mut s: std::fmt::DebugStruct<'a, 'b>) -> Result<std::fmt::DebugStruct<'a, 'b>, std::fmt::Error> {
+                $(
+                    // Rewrite attributes names to be readable: 'sys::NFTA_CHAIN_NAME' -> 'name'
+                    // Performance must be terrible, but this is the Debug impl anyway, so that
+                    // must mean we can afford to be slow, right? ;)
+                    if let Some(val) = self.$getter_name() {
+                        let mut attr = stringify!($attr_name);
+                        if let Some((nfta_idx, _match )) = attr.rmatch_indices("NFTA_").next() {
+                            if let Some(underscore_idx) = &attr[nfta_idx+5..].find('_') {
+                                attr = &attr[nfta_idx+underscore_idx+6..];
+                            }
+                        }
+                        let attr = attr.to_lowercase();
+                        s.field(&attr, val);
+                    }
+                )+
+                Ok(s)
+            }
+        }
     };
+}
+
+pub fn parse_object<T: AttributeDecoder + 'static>(
+    buf: &[u8],
+    add_obj: u32,
+    del_obj: u32,
+) -> Result<(NfNetlinkAttributes, nfgenmsg, &[u8]), DecodeError> {
+    let (hdr, msg) = parse_nlmsg(buf)?;
+
+    let op = get_operation_from_nlmsghdr_type(hdr.nlmsg_type) as u32;
+
+    if op != add_obj && op != del_obj {
+        return Err(DecodeError::UnexpectedType(hdr.nlmsg_type));
+    }
+
+    let obj_size = hdr.nlmsg_len as usize
+        - pad_netlink_object_with_variable_size(size_of::<nlmsghdr>() + size_of::<nfgenmsg>());
+
+    let remaining_data_offset = pad_netlink_object_with_variable_size(hdr.nlmsg_len as usize);
+    let remaining_data = &buf[remaining_data_offset..];
+
+    let (nfgenmsg, attrs) = match msg {
+        NlMsg::NfGenMsg(nfgenmsg, content) => {
+            (nfgenmsg, NfNetlinkAttributeReader::new(content, obj_size)?)
+        }
+        _ => return Err(DecodeError::UnexpectedType(hdr.nlmsg_type)),
+    };
+
+    let inner = attrs.decode::<T>()?;
+
+    Ok((inner, nfgenmsg, remaining_data))
 }

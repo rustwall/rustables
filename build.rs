@@ -24,6 +24,8 @@ fn generate_sys() {
         .header(SYS_HEADER_FILE)
         .generate_comments(false)
         .prepend_enum_name(false)
+        .layout_tests(false)
+        .derive_partialeq(true)
         .raw_line("#![allow(non_camel_case_types, dead_code)]\n\n")
         // Tell cargo to invalidate the built crate whenever any of the
         // included header files changed.

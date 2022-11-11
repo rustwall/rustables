@@ -3,9 +3,8 @@ use std::ffi::CString;
 
 use libc::AF_UNIX;
 use rustables::nlmsg::{NfNetlinkObject, NfNetlinkWriter};
-use rustables::parser::Nfgenmsg;
 //use rustables::set::SetKey;
-use rustables::sys::*;
+use rustables::{sys::*, Chain};
 use rustables::{MsgType, ProtoFamily, Table};
 
 //use rustables::{nft_nlmsg_maxsize, Chain, MsgType, NlMsg, ProtoFamily, Rule, Set, Table};
@@ -131,11 +130,11 @@ pub fn get_test_table_with_userdata_raw_expr() -> NetlinkExpr {
     .sort()
 }
 
-/*
 pub fn get_test_chain() -> Chain {
-    Chain::new(CHAIN_NAME, Rc::new(get_test_table()))
+    Chain::new(&get_test_table()).with_name(CHAIN_NAME)
 }
 
+/*
 pub fn get_test_rule() -> Rule {
     Rule::new(Rc::new(get_test_chain()))
 }
@@ -149,7 +148,7 @@ pub fn get_test_nlmsg_with_msg_type<'a>(
     buf: &'a mut Vec<u8>,
     obj: &mut impl NfNetlinkObject,
     msg_type: MsgType,
-) -> (nlmsghdr, Nfgenmsg, &'a [u8]) {
+) -> (nlmsghdr, nfgenmsg, &'a [u8]) {
     let mut writer = NfNetlinkWriter::new(buf);
     obj.add_or_remove(&mut writer, msg_type, 0);
 
@@ -164,7 +163,6 @@ pub fn get_test_nlmsg_with_msg_type<'a>(
     // sanity checks on the global message (this should be very similar/factorisable for the
     // most part in other tests)
     // TODO: check the messages flags
-    assert_eq!(nfgenmsg.family, AF_UNIX as u8);
     assert_eq!(nfgenmsg.res_id.to_be(), 0);
 
     (hdr, nfgenmsg, raw_value)
@@ -173,6 +171,6 @@ pub fn get_test_nlmsg_with_msg_type<'a>(
 pub fn get_test_nlmsg<'a>(
     buf: &'a mut Vec<u8>,
     obj: &mut impl NfNetlinkObject,
-) -> (nlmsghdr, Nfgenmsg, &'a [u8]) {
+) -> (nlmsghdr, nfgenmsg, &'a [u8]) {
     get_test_nlmsg_with_msg_type(buf, obj, MsgType::Add)
 }

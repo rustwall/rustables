@@ -37,7 +37,7 @@
 //! ```
 
 use ipnetwork::{IpNetwork, Ipv4Network};
-use rustables::{table::list_tables, Batch, ProtoFamily, Table};
+use rustables::{list_chains_for_table, list_tables, Batch, ProtoFamily, Table};
 //use rustables::{nft_expr, query::send_batch, sys::libc, Batch, Chain, ProtoFamily, Rule, Table};
 use std::{ffi::CString, io, net::Ipv4Addr, rc::Rc};
 
@@ -178,7 +178,10 @@ fn main() -> Result<(), Error> {
     Ok(batch.send()?)
         */
 
-    println!("{:?}", list_tables());
+    env_logger::init();
+    let tables = list_tables()?;
+    println!("{:?}", tables);
+    println!("{:?}", list_chains_for_table(&tables[0]));
     Ok(())
 }
 

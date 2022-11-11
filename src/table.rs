@@ -5,10 +5,7 @@ use crate::nlmsg::{
     AttributeDecoder, NfNetlinkAttributes, NfNetlinkDeserializable, NfNetlinkObject,
     NfNetlinkSerializable, NfNetlinkWriter,
 };
-use crate::parser::{
-    get_operation_from_nlmsghdr_type, parse_nlmsg, parse_object, DecodeError,
-    NfNetlinkAttributeReader,
-};
+use crate::parser::{parse_object, DecodeError, InnerFormat};
 use crate::sys::{
     self, NFTA_OBJ_TABLE, NFTA_TABLE_FLAGS, NFTA_TABLE_NAME, NFT_MSG_DELTABLE, NFT_MSG_GETTABLE,
     NFT_MSG_NEWTABLE, NLM_F_ACK,
@@ -19,7 +16,7 @@ use crate::{impl_attr_getters_and_setters, MsgType, ProtoFamily};
 /// family and contains [`Chain`]s that in turn hold the rules.
 ///
 /// [`Chain`]: struct.Chain.html
-#[derive(Debug, PartialEq, Eq)]
+#[derive(PartialEq, Eq)]
 pub struct Table {
     inner: NfNetlinkAttributes,
     family: ProtoFamily,
@@ -58,6 +55,14 @@ impl PartialEq for Table {
 }
 */
 
+impl Debug for Table {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let mut res = f.debug_struct("Table");
+        res.field("family", &self.family);
+        self.inner_format_struct(res)?.finish()
+    }
+}
+
 impl NfNetlinkObject for Table {
     fn add_or_remove<'a>(&self, writer: &mut NfNetlinkWriter<'a>, msg_type: MsgType, seq: u32) {
         let raw_msg_type = match msg_type {
@@ -72,44 +77,18 @@ impl NfNetlinkObject for Table {
 
 impl NfNetlinkDeserializable for Table {
     fn deserialize(buf: &[u8]) -> Result<(Self, &[u8]), DecodeError> {
-        let (hdr, msg) = parse_nlmsg(buf)?;
-
-        let op = get_operation_from_nlmsghdr_type(hdr.nlmsg_type) as u32;
-
-        if op != NFT_MSG_NEWTABLE && op != NFT_MSG_DELTABLE {
-            return Err(DecodeError::UnexpectedType(hdr.nlmsg_type));
-        }
-
-        let (nfgenmsg, attrs, remaining_data) = parse_object(hdr, msg, buf)?;
-
-        let inner = attrs.decode::<Table>()?;
+        let (inner, nfgenmsg, remaining_data) =
+            parse_object::<Self>(buf, NFT_MSG_NEWTABLE, NFT_MSG_DELTABLE)?;
 
         Ok((
-            Table {
+            Self {
                 inner,
-                family: ProtoFamily::try_from(nfgenmsg.family as i32)?,
+                family: ProtoFamily::try_from(nfgenmsg.nfgen_family as i32)?,
             },
             remaining_data,
         ))
     }
 }
-
-/*
-impl AttributeDecoder for Table {
-    fn decode_attribute(attr_type: u16, buf: &[u8]) -> Result<AttributeType, DecodeError> {
-        match attr_type {
-            NFTA_TABLE_NAME => Ok(AttributeType::String(String::from_utf8(buf.to_vec())?)),
-            NFTA_TABLE_FLAGS => {
-                let val = [buf[0], buf[1], buf[2], buf[3]];
-
-                Ok(AttributeType::U32(u32::from_ne_bytes(val)))
-            }
-            NFTA_TABLE_USERDATA => Ok(AttributeType::VecU8(buf.to_vec())),
-            _ => Err(DecodeError::UnsupportedAttributeType(attr_type)),
-        }
-    }
-}
-*/
 
 impl_attr_getters_and_setters!(
     Table,
