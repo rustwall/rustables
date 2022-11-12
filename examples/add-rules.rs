@@ -38,7 +38,7 @@
 
 use ipnetwork::{IpNetwork, Ipv4Network};
 use rustables::{
-    chain::HookClass, list_chains_for_table, list_tables, Batch, Chain, ChainPolicy, Hook, MsgType,
+    list_chains_for_table, list_tables, Batch, Chain, ChainPolicy, Hook, HookClass, MsgType,
     ProtocolFamily, Table,
 };
 //use rustables::{nft_expr, query::send_batch, sys::libc, Batch, Chain,  Rule, Table};

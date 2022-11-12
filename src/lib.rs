@@ -97,13 +97,13 @@ pub use batch::{default_batch_page_size, Batch};
 
 //pub mod expr;
 
-pub mod table;
+mod table;
 pub use table::list_tables;
 pub use table::Table;
 
-pub mod chain;
+mod chain;
 pub use chain::list_chains_for_table;
-pub use chain::{Chain, ChainPolicy, ChainPriority, ChainType, Hook};
+pub use chain::{Chain, ChainPolicy, ChainPriority, ChainType, Hook, HookClass};
 
 //mod chain_methods;
 //pub use chain_methods::ChainMethods;

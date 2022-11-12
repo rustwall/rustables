@@ -26,7 +26,7 @@ type NetLinkType = u16;
 #[error("empty data")]
 pub struct EmptyDataError;
 
-#[derive(Debug, Clone, Eq, PartialOrd, Ord)]
+#[derive(Debug, Clone, Eq, Ord)]
 pub enum NetlinkExpr {
     Nested(NetLinkType, Vec<NetlinkExpr>),
     Final(NetLinkType, Vec<u8>),
@@ -35,7 +35,7 @@ pub enum NetlinkExpr {
 
 impl NetlinkExpr {
     pub fn to_raw(self) -> Vec<u8> {
-        match self {
+        match self.sort() {
             NetlinkExpr::Final(ty, val) => {
                 let len = val.len() + 4;
                 let mut res = Vec::with_capacity(len);
@@ -105,6 +105,20 @@ impl PartialEq for NetlinkExpr {
             (NetlinkExpr::Final(k1, v1), NetlinkExpr::Final(k2, v2)) => k1 == k2 && v1 == v2,
             (NetlinkExpr::List(v1), NetlinkExpr::List(v2)) => v1 == v2,
             _ => false,
+        }
+    }
+}
+
+impl PartialOrd for NetlinkExpr {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        match (self, other) {
+            (
+                NetlinkExpr::Nested(k1, _) | NetlinkExpr::Final(k1, _),
+                NetlinkExpr::Nested(k2, _) | NetlinkExpr::Final(k2, _),
+            ) => k1.partial_cmp(k2),
+            (NetlinkExpr::List(v1), NetlinkExpr::List(v2)) => v1.partial_cmp(v2),
+            (_, NetlinkExpr::List(_)) => Some(std::cmp::Ordering::Less),
+            (NetlinkExpr::List(_), _) => Some(std::cmp::Ordering::Greater),
         }
     }
 }

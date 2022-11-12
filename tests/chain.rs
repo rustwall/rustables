@@ -1,5 +1,5 @@
 mod sys;
-use rustables::{parser::get_operation_from_nlmsghdr_type, MsgType};
+use rustables::{parser::get_operation_from_nlmsghdr_type, ChainType, Hook, HookClass, MsgType};
 use sys::*;
 
 mod lib;
@@ -22,6 +22,44 @@ fn new_empty_chain() {
         NetlinkExpr::List(vec![
             NetlinkExpr::Final(NFTA_CHAIN_TABLE, TABLE_NAME.as_bytes().to_vec()),
             NetlinkExpr::Final(NFTA_CHAIN_NAME, CHAIN_NAME.as_bytes().to_vec()),
+        ])
+        .to_raw()
+    );
+}
+
+#[test]
+fn new_empty_chain_with_hook_and_type() {
+    let mut chain = get_test_chain()
+        .with_hook(Hook::new(HookClass::In, 0))
+        .with_type(ChainType::Filter);
+
+    let mut buf = Vec::new();
+    let (nlmsghdr, _nfgenmsg, raw_expr) = get_test_nlmsg(&mut buf, &mut chain);
+    assert_eq!(
+        get_operation_from_nlmsghdr_type(nlmsghdr.nlmsg_type),
+        NFT_MSG_NEWCHAIN as u8
+    );
+    assert_eq!(nlmsghdr.nlmsg_len, 84);
+
+    assert_eq!(
+        raw_expr,
+        NetlinkExpr::List(vec![
+            NetlinkExpr::Final(NFTA_CHAIN_TABLE, TABLE_NAME.as_bytes().to_vec()),
+            NetlinkExpr::Final(NFTA_CHAIN_NAME, CHAIN_NAME.as_bytes().to_vec()),
+            NetlinkExpr::Final(NFTA_CHAIN_TYPE, "filter".as_bytes().to_vec()),
+            NetlinkExpr::Nested(
+                NFTA_CHAIN_HOOK,
+                vec![
+                    NetlinkExpr::List(vec![NetlinkExpr::Final(
+                        NFTA_HOOK_HOOKNUM,
+                        vec![0, 0, 0, 1]
+                    )]),
+                    NetlinkExpr::List(vec![NetlinkExpr::Final(
+                        NFTA_HOOK_PRIORITY,
+                        vec![0, 0, 0, 0]
+                    )])
+                ]
+            ),
         ])
         .to_raw()
     );
