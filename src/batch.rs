@@ -4,7 +4,7 @@ use thiserror::Error;
 
 use crate::nlmsg::{NfNetlinkObject, NfNetlinkWriter};
 use crate::sys::NFNL_SUBSYS_NFTABLES;
-use crate::{MsgType, ProtoFamily};
+use crate::{MsgType, ProtocolFamily};
 
 use crate::query::Error;
 use nix::sys::socket::{
@@ -39,7 +39,7 @@ impl Batch {
         let seq = 0;
         writer.write_header(
             libc::NFNL_MSG_BATCH_BEGIN as u16,
-            ProtoFamily::Unspec,
+            ProtocolFamily::Unspec,
             0,
             seq,
             Some(libc::NFNL_SUBSYS_NFTABLES as u16),
@@ -79,7 +79,7 @@ impl Batch {
     pub fn finalize(mut self) -> Vec<u8> {
         self.writer.write_header(
             libc::NFNL_MSG_BATCH_END as u16,
-            ProtoFamily::Unspec,
+            ProtocolFamily::Unspec,
             0,
             self.seq,
             Some(NFNL_SUBSYS_NFTABLES as u16),

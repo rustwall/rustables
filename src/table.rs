@@ -2,15 +2,14 @@ use std::convert::TryFrom;
 use std::fmt::Debug;
 
 use crate::nlmsg::{
-    AttributeDecoder, NfNetlinkAttributes, NfNetlinkDeserializable, NfNetlinkObject,
-    NfNetlinkSerializable, NfNetlinkWriter,
+    NfNetlinkAttributes, NfNetlinkDeserializable, NfNetlinkObject, NfNetlinkWriter,
 };
 use crate::parser::{parse_object, DecodeError, InnerFormat};
 use crate::sys::{
-    self, NFTA_OBJ_TABLE, NFTA_TABLE_FLAGS, NFTA_TABLE_NAME, NFT_MSG_DELTABLE, NFT_MSG_GETTABLE,
-    NFT_MSG_NEWTABLE, NLM_F_ACK,
+    self, NFNL_SUBSYS_NFTABLES, NFTA_OBJ_TABLE, NFTA_TABLE_FLAGS, NFTA_TABLE_NAME,
+    NFT_MSG_DELTABLE, NFT_MSG_GETTABLE, NFT_MSG_NEWTABLE, NLM_F_ACK,
 };
-use crate::{impl_attr_getters_and_setters, MsgType, ProtoFamily};
+use crate::{impl_attr_getters_and_setters, MsgType, ProtocolFamily};
 
 /// Abstraction of a `nftnl_table`, the top level container in netfilter. A table has a protocol
 /// family and contains [`Chain`]s that in turn hold the rules.
@@ -19,15 +18,19 @@ use crate::{impl_attr_getters_and_setters, MsgType, ProtoFamily};
 #[derive(PartialEq, Eq)]
 pub struct Table {
     inner: NfNetlinkAttributes,
-    family: ProtoFamily,
+    family: ProtocolFamily,
 }
 
 impl Table {
-    pub fn new(family: ProtoFamily) -> Table {
+    pub fn new(family: ProtocolFamily) -> Table {
         Table {
             inner: NfNetlinkAttributes::new(),
             family,
         }
+    }
+
+    pub fn get_family(&self) -> ProtocolFamily {
+        self.family
     }
 
     /*
@@ -83,7 +86,7 @@ impl NfNetlinkDeserializable for Table {
         Ok((
             Self {
                 inner,
-                family: ProtoFamily::try_from(nfgenmsg.nfgen_family as i32)?,
+                family: ProtocolFamily::try_from(nfgenmsg.nfgen_family as i32)?,
             },
             remaining_data,
         ))

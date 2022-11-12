@@ -5,9 +5,9 @@ use libc::AF_UNIX;
 use rustables::nlmsg::{NfNetlinkObject, NfNetlinkWriter};
 //use rustables::set::SetKey;
 use rustables::{sys::*, Chain};
-use rustables::{MsgType, ProtoFamily, Table};
+use rustables::{MsgType, ProtocolFamily, Table};
 
-//use rustables::{nft_nlmsg_maxsize, Chain, MsgType, NlMsg, ProtoFamily, Rule, Set, Table};
+//use rustables::{nft_nlmsg_maxsize, Chain, MsgType, NlMsg, Rule, Set, Table};
 
 pub const TABLE_NAME: &'static str = "mocktable";
 pub const CHAIN_NAME: &'static str = "mockchain";
@@ -26,7 +26,7 @@ type NetLinkType = u16;
 #[error("empty data")]
 pub struct EmptyDataError;
 
-#[derive(Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Clone, Eq, PartialOrd, Ord)]
 pub enum NetlinkExpr {
     Nested(NetLinkType, Vec<NetlinkExpr>),
     Final(NetLinkType, Vec<u8>),
@@ -64,7 +64,7 @@ impl NetlinkExpr {
 
                 // set the "NESTED" flag
                 res.extend(&(len as u16).to_le_bytes());
-                res.extend(&(ty | 0x8000).to_le_bytes());
+                res.extend(&(ty | NLA_F_NESTED as u16).to_le_bytes());
                 res.extend(sub);
 
                 res
@@ -98,8 +98,19 @@ impl NetlinkExpr {
     }
 }
 
+impl PartialEq for NetlinkExpr {
+    fn eq(&self, other: &Self) -> bool {
+        match (self.clone().sort(), other.clone().sort()) {
+            (NetlinkExpr::Nested(k1, v1), NetlinkExpr::Nested(k2, v2)) => k1 == k2 && v1 == v2,
+            (NetlinkExpr::Final(k1, v1), NetlinkExpr::Final(k2, v2)) => k1 == k2 && v1 == v2,
+            (NetlinkExpr::List(v1), NetlinkExpr::List(v2)) => v1 == v2,
+            _ => false,
+        }
+    }
+}
+
 pub fn get_test_table() -> Table {
-    Table::new(ProtoFamily::Inet)
+    Table::new(ProtocolFamily::Inet)
         .with_name(TABLE_NAME)
         .with_flags(0u32)
 }

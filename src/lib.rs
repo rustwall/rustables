@@ -70,6 +70,7 @@
 //! [`nftables`]: https://netfilter.org/projects/nftables/
 //! [`build.rs`]: https://gitlab.com/rustwall/rustables/-/blob/master/build.rs
 
+use parser::DecodeError;
 use thiserror::Error;
 
 #[macro_use]
@@ -102,7 +103,7 @@ pub use table::Table;
 
 pub mod chain;
 pub use chain::list_chains_for_table;
-pub use chain::{Chain, ChainType, Hook, Policy, Priority};
+pub use chain::{Chain, ChainPolicy, ChainPriority, ChainType, Hook};
 
 //mod chain_methods;
 //pub use chain_methods::ChainMethods;
@@ -141,36 +142,32 @@ pub enum MsgType {
 
 /// Denotes a protocol. Used to specify which protocol a table or set belongs to.
 #[derive(Debug, Copy, Clone, Eq, PartialEq, PartialOrd, Ord, Hash)]
-#[repr(u32)]
-pub enum ProtoFamily {
-    Unspec = libc::NFPROTO_UNSPEC as u32,
+#[repr(i32)]
+pub enum ProtocolFamily {
+    Unspec = libc::NFPROTO_UNSPEC,
     /// Inet - Means both IPv4 and IPv6
-    Inet = libc::NFPROTO_INET as u32,
-    Ipv4 = libc::NFPROTO_IPV4 as u32,
-    Arp = libc::NFPROTO_ARP as u32,
-    NetDev = libc::NFPROTO_NETDEV as u32,
-    Bridge = libc::NFPROTO_BRIDGE as u32,
-    Ipv6 = libc::NFPROTO_IPV6 as u32,
-    DecNet = libc::NFPROTO_DECNET as u32,
+    Inet = libc::NFPROTO_INET,
+    Ipv4 = libc::NFPROTO_IPV4,
+    Arp = libc::NFPROTO_ARP,
+    NetDev = libc::NFPROTO_NETDEV,
+    Bridge = libc::NFPROTO_BRIDGE,
+    Ipv6 = libc::NFPROTO_IPV6,
+    DecNet = libc::NFPROTO_DECNET,
 }
 
-#[derive(Error, Debug)]
-#[error("Couldn't find a matching protocol")]
-pub struct InvalidProtocolFamily;
-
-impl TryFrom<i32> for ProtoFamily {
-    type Error = InvalidProtocolFamily;
+impl TryFrom<i32> for ProtocolFamily {
+    type Error = DecodeError;
     fn try_from(value: i32) -> Result<Self, Self::Error> {
         match value {
-            libc::NFPROTO_UNSPEC => Ok(ProtoFamily::Unspec),
-            libc::NFPROTO_INET => Ok(ProtoFamily::Inet),
-            libc::NFPROTO_IPV4 => Ok(ProtoFamily::Ipv4),
-            libc::NFPROTO_ARP => Ok(ProtoFamily::Arp),
-            libc::NFPROTO_NETDEV => Ok(ProtoFamily::NetDev),
-            libc::NFPROTO_BRIDGE => Ok(ProtoFamily::Bridge),
-            libc::NFPROTO_IPV6 => Ok(ProtoFamily::Ipv6),
-            libc::NFPROTO_DECNET => Ok(ProtoFamily::DecNet),
-            _ => Err(InvalidProtocolFamily),
+            libc::NFPROTO_UNSPEC => Ok(ProtocolFamily::Unspec),
+            libc::NFPROTO_INET => Ok(ProtocolFamily::Inet),
+            libc::NFPROTO_IPV4 => Ok(ProtocolFamily::Ipv4),
+            libc::NFPROTO_ARP => Ok(ProtocolFamily::Arp),
+            libc::NFPROTO_NETDEV => Ok(ProtocolFamily::NetDev),
+            libc::NFPROTO_BRIDGE => Ok(ProtocolFamily::Bridge),
+            libc::NFPROTO_IPV6 => Ok(ProtocolFamily::Ipv6),
+            libc::NFPROTO_DECNET => Ok(ProtocolFamily::DecNet),
+            _ => Err(DecodeError::InvalidProtocolFamily(value)),
         }
     }
 }

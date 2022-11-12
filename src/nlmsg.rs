@@ -1,19 +1,14 @@
-use std::{
-    collections::HashMap,
-    fmt::Debug,
-    marker::PhantomData,
-    mem::{size_of, transmute},
-};
+use std::{collections::BTreeMap, fmt::Debug, mem::size_of};
 
 use crate::{
     parser::{
         pad_netlink_object, pad_netlink_object_with_variable_size, AttributeType, DecodeError,
     },
     sys::{
-        nfgenmsg, nlattr, nlmsghdr, NFNETLINK_V0, NFNL_MSG_BATCH_BEGIN, NFNL_MSG_BATCH_END,
+        nfgenmsg, nlmsghdr, NFNETLINK_V0, NFNL_MSG_BATCH_BEGIN, NFNL_MSG_BATCH_END,
         NFNL_SUBSYS_NFTABLES,
     },
-    MsgType, ProtoFamily,
+    MsgType, ProtocolFamily,
 };
 
 pub struct NfNetlinkWriter<'a> {
@@ -49,7 +44,7 @@ impl<'a> NfNetlinkWriter<'a> {
     pub fn write_header(
         &mut self,
         msg_type: u16,
-        family: ProtoFamily,
+        family: ProtocolFamily,
         flags: u16,
         seq: u32,
         ressource_id: Option<u16>,
@@ -103,13 +98,14 @@ pub trait NfNetlinkObject: Sized + AttributeDecoder + NfNetlinkDeserializable {
     fn add_or_remove<'a>(&self, writer: &mut NfNetlinkWriter<'a>, msg_type: MsgType, seq: u32);
 }
 
-pub trait NfNetlinkSerializable {
-    fn serialize<'a>(&self, writer: &mut NfNetlinkWriter<'a>);
-}
-
 pub type NetlinkType = u16;
 
 pub trait NfNetlinkAttribute: Debug + Sized {
+    // is it a nested argument that must be marked with a NLA_F_NESTED flag?
+    fn is_nested(&self) -> bool {
+        false
+    }
+
     fn get_size(&self) -> usize {
         size_of::<Self>()
     }
@@ -120,13 +116,13 @@ pub trait NfNetlinkAttribute: Debug + Sized {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct NfNetlinkAttributes {
-    pub attributes: HashMap<NetlinkType, AttributeType>,
+    pub attributes: BTreeMap<NetlinkType, AttributeType>,
 }
 
 impl NfNetlinkAttributes {
     pub fn new() -> Self {
         NfNetlinkAttributes {
-            attributes: HashMap::new(),
+            attributes: BTreeMap::new(),
         }
     }
 
@@ -136,5 +132,12 @@ impl NfNetlinkAttributes {
 
     pub fn get_attr(&self, ty: NetlinkType) -> Option<&AttributeType> {
         self.attributes.get(&ty)
+    }
+
+    pub fn serialize<'a>(&self, writer: &mut NfNetlinkWriter<'a>) {
+        let buf = writer.add_data_zeroed(self.get_size());
+        unsafe {
+            self.write_payload(buf.as_mut_ptr());
+        }
     }
 }

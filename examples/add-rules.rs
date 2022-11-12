@@ -37,8 +37,11 @@
 //! ```
 
 use ipnetwork::{IpNetwork, Ipv4Network};
-use rustables::{list_chains_for_table, list_tables, Batch, ProtoFamily, Table};
-//use rustables::{nft_expr, query::send_batch, sys::libc, Batch, Chain, ProtoFamily, Rule, Table};
+use rustables::{
+    chain::HookClass, list_chains_for_table, list_tables, Batch, Chain, ChainPolicy, Hook, MsgType,
+    ProtocolFamily, Table,
+};
+//use rustables::{nft_expr, query::send_batch, sys::libc, Batch, Chain,  Rule, Table};
 use std::{ffi::CString, io, net::Ipv4Addr, rc::Rc};
 
 const TABLE_NAME: &str = "example-table";
@@ -46,44 +49,35 @@ const OUT_CHAIN_NAME: &str = "chain-for-outgoing-packets";
 const IN_CHAIN_NAME: &str = "chain-for-incoming-packets";
 
 fn main() -> Result<(), Error> {
-    /*
     // Create a batch. This is used to store all the netlink messages we will later send.
     // Creating a new batch also automatically writes the initial batch begin message needed
     // to tell netlink this is a single transaction that might arrive over multiple netlink packets.
     let mut batch = Batch::new();
 
     // Create a netfilter table operating on both IPv4 and IPv6 (ProtoFamily::Inet)
-    let table = Table::new(TABLE_NAME, ProtoFamily::Inet);
+    let table = Table::new(ProtocolFamily::Inet).with_name(TABLE_NAME);
     // Add the table to the batch with the `MsgType::Add` type, thus instructing netfilter to add
-    // this table under its `ProtoFamily::Inet` ruleset.
-    batch.add(&table, rustables::MsgType::Add);
+    // this table under its `ProtocolFamily::Inet` ruleset.
+    batch.add(&table, MsgType::Add);
 
-    let table = Table::new("lool", ProtoFamily::Inet);
+    // Create input and output chains under the table we created above.
+    // Hook the chains to the input and output event hooks, with highest priority (priority zero).
+    let mut out_chain = Chain::new(&table).with_name(OUT_CHAIN_NAME);
+    let mut in_chain = Chain::new(&table).with_name(IN_CHAIN_NAME);
 
-    batch.add(&table, rustables::MsgType::Add);
+    out_chain.set_hook(Hook::new(HookClass::Out, 0));
+    in_chain.set_hook(Hook::new(HookClass::In, 0));
 
-    //    // Create input and output chains under the table we created above.
-    //    // Hook the chains to the input and output event hooks, with highest priority (priority zero).
-    //    // See the `Chain::set_hook` documentation for details.
-    //    let mut out_chain = Chain::new(OUT_CHAIN_NAME, Rc::clone(&table));
-    //    let mut in_chain = Chain::new(IN_CHAIN_NAME, Rc::clone(&table));
-    //
-    //    out_chain.set_hook(rustables::Hook::Out, 0);
-    //    in_chain.set_hook(rustables::Hook::In, 0);
-    //
-    //    // Set the default policies on the chains. If no rule matches a packet processed by the
-    //    // `out_chain` or the `in_chain` it will accept the packet.
-    //    out_chain.set_policy(rustables::Policy::Accept);
-    //    in_chain.set_policy(rustables::Policy::Accept);
-    //
-    //    let out_chain = Rc::new(out_chain);
-    //    let in_chain = Rc::new(in_chain);
-    //
-    //    // Add the two chains to the batch with the `MsgType` to tell netfilter to create the chains
-    //    // under the table.
-    //    batch.add(&Rc::clone(&out_chain), rustables::MsgType::Add);
-    //    batch.add(&Rc::clone(&in_chain), rustables::MsgType::Add);
-    //
+    // Set the default policies on the chains. If no rule matches a packet processed by the
+    // `out_chain` or the `in_chain` it will accept the packet.
+    out_chain.set_policy(ChainPolicy::Accept);
+    in_chain.set_policy(ChainPolicy::Accept);
+
+    // Add the two chains to the batch with the `MsgType` to tell netfilter to create the chains
+    // under the table.
+    batch.add(&out_chain, MsgType::Add);
+    batch.add(&in_chain, MsgType::Add);
+
     //    // === ADD RULE ALLOWING ALL TRAFFIC TO THE LOOPBACK DEVICE ===
     //
     //    // Create a new rule object under the input chain.
@@ -175,14 +169,8 @@ fn main() -> Result<(), Error> {
     // Finalize the batch and send it. This means the batch end message is written into the batch, telling
     // netfilter the we reached the end of the transaction message. It's also converted to a
     // Vec<u8>, containing the raw netlink data so it can be sent over a netlink socket to netfilter.
+    // Finally, the batch is sent over to the kernel.
     Ok(batch.send()?)
-        */
-
-    env_logger::init();
-    let tables = list_tables()?;
-    println!("{:?}", tables);
-    println!("{:?}", list_chains_for_table(&tables[0]));
-    Ok(())
 }
 
 // Look up the interface index for a given interface name.

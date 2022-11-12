@@ -4,7 +4,7 @@ use crate::{
     nlmsg::{NfNetlinkObject, NfNetlinkWriter},
     parser::{nft_nlmsg_maxsize, pad_netlink_object_with_variable_size},
     sys::{nlmsgerr, NLM_F_DUMP, NLM_F_MULTI},
-    ProtoFamily,
+    ProtocolFamily,
 };
 
 use nix::{
@@ -156,7 +156,13 @@ where
 {
     let mut buffer = Vec::new();
     let mut writer = NfNetlinkWriter::new(&mut buffer);
-    writer.write_header(msg_type, ProtoFamily::Unspec, NLM_F_DUMP as u16, seq, None);
+    writer.write_header(
+        msg_type,
+        ProtocolFamily::Unspec,
+        NLM_F_DUMP as u16,
+        seq,
+        None,
+    );
     writer.finalize_writing_object();
     if let Some(filter) = filter {
         filter.add_or_remove(&mut writer, crate::MsgType::Add, 0);

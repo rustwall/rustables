@@ -1,6 +1,6 @@
 use std::{
     any::TypeId,
-    collections::HashMap,
+    convert::TryFrom,
     fmt::{Debug, DebugStruct},
     mem::{size_of, transmute},
     string::FromUtf8Error,
@@ -11,14 +11,14 @@ use thiserror::Error;
 use crate::{
     nlmsg::{
         AttributeDecoder, NetlinkType, NfNetlinkAttribute, NfNetlinkAttributes,
-        NfNetlinkDeserializable, NfNetlinkObject, NfNetlinkSerializable, NfNetlinkWriter,
+        NfNetlinkDeserializable, NfNetlinkWriter,
     },
     sys::{
         nfgenmsg, nlattr, nlmsgerr, nlmsghdr, NFNETLINK_V0, NFNL_MSG_BATCH_BEGIN,
-        NFNL_MSG_BATCH_END, NFNL_SUBSYS_NFTABLES, NLA_TYPE_MASK, NLMSG_ALIGNTO, NLMSG_DONE,
-        NLMSG_ERROR, NLMSG_MIN_TYPE, NLMSG_NOOP, NLM_F_DUMP_INTR,
+        NFNL_MSG_BATCH_END, NFNL_SUBSYS_NFTABLES, NLA_F_NESTED, NLA_TYPE_MASK, NLMSG_ALIGNTO,
+        NLMSG_DONE, NLMSG_ERROR, NLMSG_MIN_TYPE, NLMSG_NOOP, NLM_F_DUMP_INTR,
     },
-    InvalidProtocolFamily, ProtoFamily,
+    ProtocolFamily,
 };
 
 #[derive(Error, Debug)]
@@ -56,6 +56,9 @@ pub enum DecodeError {
     #[error("Invalid type for a chain")]
     UnknownChainType,
 
+    #[error("Invalid policy for a chain")]
+    UnknownChainPolicy,
+
     #[error("Unsupported attribute type")]
     UnsupportedAttributeType(u16),
 
@@ -66,7 +69,7 @@ pub enum DecodeError {
     StringDecodeFailure(#[from] FromUtf8Error),
 
     #[error("Invalid value for a protocol family")]
-    InvalidProtocolFamily(#[from] InvalidProtocolFamily),
+    InvalidProtocolFamily(i32),
 
     #[error("A custom error occured")]
     Custom(Box<dyn std::error::Error + 'static>),
@@ -189,29 +192,21 @@ pub fn parse_nlmsg<'a>(buf: &'a [u8]) -> Result<(nlmsghdr, NlMsg<'a>), DecodeErr
 
 /// Write the attribute, preceded by a `libc::nlattr`
 // rewrite of `mnl_attr_put`
-fn write_attribute<'a>(ty: NetlinkType, obj: &AttributeType, writer: &mut NfNetlinkWriter<'a>) {
-    // copy the header
+unsafe fn write_attribute<'a>(ty: NetlinkType, obj: &AttributeType, mut buf: *mut u8) {
     let header_len = pad_netlink_object::<libc::nlattr>();
-    let header = libc::nlattr {
+    // copy the header
+    *(buf as *mut nlattr) = nlattr {
         // nla_len contains the header size + the unpadded attribute length
         nla_len: (header_len + obj.get_size() as usize) as u16,
-        nla_type: ty,
+        nla_type: if obj.is_nested() {
+            ty | NLA_F_NESTED as u16
+        } else {
+            ty
+        },
     };
-
-    let buf = writer.add_data_zeroed(header_len);
-    unsafe {
-        std::ptr::copy_nonoverlapping(
-            &header as *const libc::nlattr as *const u8,
-            buf.as_mut_ptr(),
-            header_len as usize,
-        );
-    }
-
-    let buf = writer.add_data_zeroed(obj.get_size());
+    buf = buf.offset(pad_netlink_object::<nlattr>() as isize);
     // copy the attribute data itself
-    unsafe {
-        obj.write_payload(buf.as_mut_ptr());
-    }
+    obj.write_payload(buf);
 }
 
 impl NfNetlinkAttribute for u8 {
@@ -228,7 +223,7 @@ impl NfNetlinkDeserializable for u8 {
 
 impl NfNetlinkAttribute for u16 {
     unsafe fn write_payload(&self, addr: *mut u8) {
-        *(addr as *mut Self) = *self;
+        *(addr as *mut Self) = self.to_be();
     }
 }
 
@@ -240,7 +235,7 @@ impl NfNetlinkDeserializable for u16 {
 
 impl NfNetlinkAttribute for i32 {
     unsafe fn write_payload(&self, addr: *mut u8) {
-        *(addr as *mut Self) = *self;
+        *(addr as *mut Self) = self.to_be();
     }
 }
 
@@ -255,7 +250,7 @@ impl NfNetlinkDeserializable for i32 {
 
 impl NfNetlinkAttribute for u32 {
     unsafe fn write_payload(&self, addr: *mut u8) {
-        *(addr as *mut Self) = *self;
+        *(addr as *mut Self) = self.to_be();
     }
 }
 
@@ -270,7 +265,7 @@ impl NfNetlinkDeserializable for u32 {
 
 impl NfNetlinkAttribute for u64 {
     unsafe fn write_payload(&self, addr: *mut u8) {
-        *(addr as *mut Self) = *self;
+        *(addr as *mut Self) = self.to_be();
     }
 }
 
@@ -322,11 +317,24 @@ impl NfNetlinkDeserializable for Vec<u8> {
     }
 }
 
+impl NfNetlinkAttribute for ProtocolFamily {
+    unsafe fn write_payload(&self, addr: *mut u8) {
+        (*self as i32).write_payload(addr);
+    }
+}
+
+impl NfNetlinkDeserializable for ProtocolFamily {
+    fn deserialize(buf: &[u8]) -> Result<(Self, &[u8]), DecodeError> {
+        let (v, remaining_data) = i32::deserialize(buf)?;
+        Ok((Self::try_from(v)?, remaining_data))
+    }
+}
+
 pub type NestedAttribute = NfNetlinkAttributes;
 
 // parts of the NfNetlinkAttribute trait we need for handling nested objects
-impl NestedAttribute {
-    pub fn get_size(&self) -> usize {
+impl NfNetlinkAttribute for NestedAttribute {
+    fn get_size(&self) -> usize {
         let mut size = 0;
 
         for (_type, attr) in self.attributes.iter() {
@@ -338,15 +346,12 @@ impl NestedAttribute {
         size
     }
 
-    pub unsafe fn write_payload(&self, mut addr: *mut u8) {
+    unsafe fn write_payload(&self, mut addr: *mut u8) {
         for (ty, attr) in self.attributes.iter() {
-            *(addr as *mut nlattr) = nlattr {
-                nla_len: attr.get_size() as u16,
-                nla_type: *ty,
-            };
-            addr = addr.offset(pad_netlink_object::<nlattr>() as isize);
-            attr.write_payload(addr);
-            addr = addr.offset(pad_netlink_object_with_variable_size(attr.get_size()) as isize);
+            write_attribute(*ty, attr, addr);
+            let size = pad_netlink_object::<nlattr>()
+                + pad_netlink_object_with_variable_size(attr.get_size());
+            addr = addr.offset(size as isize);
         }
     }
 }
@@ -412,17 +417,6 @@ impl<'a> NfNetlinkAttributeReader<'a> {
     }
 }
 
-impl NfNetlinkSerializable for NfNetlinkAttributes {
-    fn serialize<'a>(&self, writer: &mut NfNetlinkWriter<'a>) {
-        // TODO: improve performance by not sorting this
-        let mut keys: Vec<&NetlinkType> = self.attributes.keys().collect();
-        keys.sort();
-        for k in keys {
-            write_attribute(*k, self.attributes.get(k).unwrap(), writer);
-        }
-    }
-}
-
 macro_rules! impl_attribute_holder {
     ($enum_name:ident, $([$internal_name:ident, $type:ty]),+) => {
         #[derive(Debug, Clone, PartialEq, Eq)]
@@ -433,6 +427,14 @@ macro_rules! impl_attribute_holder {
         }
 
         impl NfNetlinkAttribute for $enum_name {
+            fn is_nested(&self) -> bool {
+                match self {
+                    $(
+                        $enum_name::$internal_name(val) => val.is_nested()
+                    ),+
+                }
+            }
+
             fn get_size(&self) -> usize {
                  match self {
                     $(
@@ -480,12 +482,15 @@ impl_attribute_holder!(
     [U32, u32],
     [U64, u64],
     [VecU8, Vec<u8>],
-    [ChainHook, crate::chain::Hook]
+    [ChainHook, crate::chain::Hook],
+    [ChainPolicy, crate::chain::ChainPolicy],
+    [ChainType, crate::chain::ChainType],
+    [ProtocolFamily, crate::ProtocolFamily]
 );
 
 #[macro_export]
 macro_rules! impl_attr_getters_and_setters {
-    ($struct:ident, [$(($getter_name:ident, $setter_name:ident, $in_place_edit_name:ident, $attr_name:expr, $internal_name:ident, $type:ty)),+]) => {
+    ($struct:ident, [$(($getter_name:ident, $setter_name:ident, $in_place_edit_name:ident, $attr_name:expr, $internal_name:ident, $type:ty $(, $nested:literal)?)),+]) => {
         impl $struct {
             $(
                 #[allow(dead_code)]
