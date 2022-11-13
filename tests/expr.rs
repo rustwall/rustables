@@ -1,3 +1,4 @@
+use rustables::expr::{ExpressionList, Immediate, Register, VerdictKind};
 //use rustables::expr::{
 //    Bitwise, Cmp, CmpOp, Conntrack, Counter, Expression, HeaderField, IcmpCode, Immediate, Log,
 //    LogGroup, LogPrefix, Lookup, Meta, Nat, NatType, Payload, Register, Reject, TcpHeaderField,
@@ -10,26 +11,13 @@
 //use std::ffi::CStr;
 //use std::net::Ipv4Addr;
 //
-//mod sys;
-//use sys::*;
-//
-//mod lib;
-//use lib::*;
-//
-//fn get_test_nlmsg_from_expr(
-//    rule: &mut Rule,
-//    expr: &impl Expression,
-//) -> (nlmsghdr, Nfgenmsg, Vec<u8>) {
-//    rule.add_expr(expr);
-//
-//    let (nlmsghdr, nfgenmsg, raw_expr) = get_test_nlmsg(rule);
-//    assert_eq!(
-//        get_operation_from_nlmsghdr_type(nlmsghdr.nlmsg_type),
-//        NFT_MSG_NEWRULE as u8
-//    );
-//    (nlmsghdr, nfgenmsg, raw_expr)
-//}
-//
+mod sys;
+use libc::NF_DROP;
+use sys::*;
+
+mod lib;
+use lib::*;
+
 //#[test]
 //fn bitwise_expr_is_valid() {
 //    let netmask = Ipv4Addr::new(255, 255, 255, 0);
@@ -202,45 +190,48 @@
 //    )
 //}
 //
-//#[test]
-//fn immediate_expr_is_valid() {
-//    let immediate = Immediate::new(42u8, Register::Reg1);
-//    let mut rule = get_test_rule();
-//    let (nlmsghdr, _nfgenmsg, raw_expr) = get_test_nlmsg_from_expr(&mut rule, &immediate);
-//    assert_eq!(nlmsghdr.nlmsg_len, 100);
-//
-//    assert_eq!(
-//        raw_expr,
-//        NetlinkExpr::List(vec![
-//            NetlinkExpr::Final(NFTA_RULE_TABLE, TABLE_NAME.to_vec()),
-//            NetlinkExpr::Final(NFTA_RULE_CHAIN, CHAIN_NAME.to_vec()),
-//            NetlinkExpr::Nested(
-//                NFTA_RULE_EXPRESSIONS,
-//                vec![NetlinkExpr::Nested(
-//                    NFTA_LIST_ELEM,
-//                    vec![
-//                        NetlinkExpr::Final(NFTA_EXPR_NAME, b"immediate\0".to_vec()),
-//                        NetlinkExpr::Nested(
-//                            NFTA_EXPR_DATA,
-//                            vec![
-//                                NetlinkExpr::Final(
-//                                    NFTA_IMMEDIATE_DREG,
-//                                    NFT_REG_1.to_be_bytes().to_vec()
-//                                ),
-//                                NetlinkExpr::Nested(
-//                                    NFTA_IMMEDIATE_DATA,
-//                                    vec![NetlinkExpr::Final(1u16, 42u8.to_be_bytes().to_vec())]
-//                                )
-//                            ]
-//                        )
-//                    ]
-//                )]
-//            )
-//        ])
-//        .to_raw()
-//    );
-//}
-//
+#[test]
+fn immediate_expr_is_valid() {
+    let immediate = Immediate::new_data(vec![42u8], Register::Reg1);
+    let mut rule =
+        get_test_rule().with_expressions(ExpressionList::builder().with_expression(immediate));
+
+    let mut buf = Vec::new();
+    let (nlmsghdr, _nfgenmsg, raw_expr) = get_test_nlmsg(&mut buf, &mut rule);
+    assert_eq!(nlmsghdr.nlmsg_len, 100);
+
+    assert_eq!(
+        raw_expr,
+        NetlinkExpr::List(vec![
+            NetlinkExpr::Final(NFTA_RULE_TABLE, TABLE_NAME.as_bytes().to_vec()),
+            NetlinkExpr::Final(NFTA_RULE_CHAIN, CHAIN_NAME.as_bytes().to_vec()),
+            NetlinkExpr::Nested(
+                NFTA_RULE_EXPRESSIONS,
+                vec![NetlinkExpr::Nested(
+                    NFTA_LIST_ELEM,
+                    vec![
+                        NetlinkExpr::Final(NFTA_EXPR_NAME, b"immediate".to_vec()),
+                        NetlinkExpr::Nested(
+                            NFTA_EXPR_DATA,
+                            vec![
+                                NetlinkExpr::Final(
+                                    NFTA_IMMEDIATE_DREG,
+                                    NFT_REG_1.to_be_bytes().to_vec()
+                                ),
+                                NetlinkExpr::Nested(
+                                    NFTA_IMMEDIATE_DATA,
+                                    vec![NetlinkExpr::Final(1u16, 42u8.to_be_bytes().to_vec())]
+                                )
+                            ]
+                        )
+                    ]
+                )]
+            )
+        ])
+        .to_raw()
+    );
+}
+
 //#[test]
 //fn log_expr_is_valid() {
 //    let log = Log {
@@ -482,7 +473,7 @@
 //        .to_raw()
 //    );
 //}
-//
+
 //#[test]
 //fn reject_expr_is_valid() {
 //    let code = IcmpCode::NoRoute;
@@ -522,48 +513,51 @@
 //        .to_raw()
 //    );
 //}
-//
-//#[test]
-//fn verdict_expr_is_valid() {
-//    let verdict = Verdict::Drop;
-//    let mut rule = get_test_rule();
-//    let (nlmsghdr, _nfgenmsg, raw_expr) = get_test_nlmsg_from_expr(&mut rule, &verdict);
-//    assert_eq!(nlmsghdr.nlmsg_len, 104);
-//
-//    assert_eq!(
-//        raw_expr,
-//        NetlinkExpr::List(vec![
-//            NetlinkExpr::Final(NFTA_RULE_TABLE, TABLE_NAME.to_vec()),
-//            NetlinkExpr::Final(NFTA_RULE_CHAIN, CHAIN_NAME.to_vec()),
-//            NetlinkExpr::Nested(
-//                NFTA_RULE_EXPRESSIONS,
-//                vec![NetlinkExpr::Nested(
-//                    NFTA_LIST_ELEM,
-//                    vec![
-//                        NetlinkExpr::Final(NFTA_EXPR_NAME, b"immediate\0".to_vec()),
-//                        NetlinkExpr::Nested(
-//                            NFTA_EXPR_DATA,
-//                            vec![
-//                                NetlinkExpr::Final(
-//                                    NFTA_IMMEDIATE_DREG,
-//                                    NFT_REG_VERDICT.to_be_bytes().to_vec()
-//                                ),
-//                                NetlinkExpr::Nested(
-//                                    NFTA_IMMEDIATE_DATA,
-//                                    vec![NetlinkExpr::Nested(
-//                                        NFTA_DATA_VERDICT,
-//                                        vec![NetlinkExpr::Final(
-//                                            NFTA_VERDICT_CODE,
-//                                            NF_DROP.to_be_bytes().to_vec()
-//                                        ),]
-//                                    )],
-//                                ),
-//                            ]
-//                        )
-//                    ]
-//                )]
-//            )
-//        ])
-//        .to_raw()
-//    );
-//}
+
+#[test]
+fn verdict_expr_is_valid() {
+    let verdict = Immediate::new_verdict(VerdictKind::Drop);
+    let mut rule = get_test_rule();
+    rule.set_expressions(ExpressionList::builder().with_expression(verdict));
+
+    let mut buf = Vec::new();
+    let (nlmsghdr, _nfgenmsg, raw_expr) = get_test_nlmsg(&mut buf, &mut rule);
+    assert_eq!(nlmsghdr.nlmsg_len, 104);
+
+    assert_eq!(
+        raw_expr,
+        NetlinkExpr::List(vec![
+            NetlinkExpr::Final(NFTA_RULE_TABLE, TABLE_NAME.as_bytes().to_vec()),
+            NetlinkExpr::Final(NFTA_RULE_CHAIN, CHAIN_NAME.as_bytes().to_vec()),
+            NetlinkExpr::Nested(
+                NFTA_RULE_EXPRESSIONS,
+                vec![NetlinkExpr::Nested(
+                    NFTA_LIST_ELEM,
+                    vec![
+                        NetlinkExpr::Final(NFTA_EXPR_NAME, b"immediate".to_vec()),
+                        NetlinkExpr::Nested(
+                            NFTA_EXPR_DATA,
+                            vec![
+                                NetlinkExpr::Final(
+                                    NFTA_IMMEDIATE_DREG,
+                                    NFT_REG_VERDICT.to_be_bytes().to_vec()
+                                ),
+                                NetlinkExpr::Nested(
+                                    NFTA_IMMEDIATE_DATA,
+                                    vec![NetlinkExpr::Nested(
+                                        NFTA_DATA_VERDICT,
+                                        vec![NetlinkExpr::Final(
+                                            NFTA_VERDICT_CODE,
+                                            NF_DROP.to_be_bytes().to_vec()
+                                        ),]
+                                    )],
+                                ),
+                            ]
+                        )
+                    ]
+                )]
+            )
+        ])
+        .to_raw()
+    );
+}

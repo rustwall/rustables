@@ -2,10 +2,11 @@ use std::{collections::BTreeMap, fmt::Debug, mem::size_of};
 
 use crate::{
     parser::{
-        pad_netlink_object, pad_netlink_object_with_variable_size, AttributeType, DecodeError,
+        pad_netlink_object, pad_netlink_object_with_variable_size, write_attribute, AttributeType,
+        DecodeError,
     },
     sys::{
-        nfgenmsg, nlmsghdr, NFNETLINK_V0, NFNL_MSG_BATCH_BEGIN, NFNL_MSG_BATCH_END,
+        nfgenmsg, nlattr, nlmsghdr, NFNETLINK_V0, NFNL_MSG_BATCH_BEGIN, NFNL_MSG_BATCH_END,
         NFNL_SUBSYS_NFTABLES,
     },
     MsgType, ProtocolFamily,
@@ -87,7 +88,11 @@ impl<'a> NfNetlinkWriter<'a> {
 }
 
 pub trait AttributeDecoder {
-    fn decode_attribute(attr_type: u16, buf: &[u8]) -> Result<AttributeType, DecodeError>;
+    fn decode_attribute(
+        attrs: &NfNetlinkAttributes,
+        attr_type: u16,
+        buf: &[u8],
+    ) -> Result<AttributeType, DecodeError>;
 }
 
 pub trait NfNetlinkDeserializable: Sized {
@@ -138,6 +143,30 @@ impl NfNetlinkAttributes {
         let buf = writer.add_data_zeroed(self.get_size());
         unsafe {
             self.write_payload(buf.as_mut_ptr());
+        }
+    }
+}
+
+impl NfNetlinkAttribute for NfNetlinkAttributes {
+    fn get_size(&self) -> usize {
+        let mut size = 0;
+
+        for (_type, attr) in self.attributes.iter() {
+            // Attribute header + attribute value
+            size += pad_netlink_object::<nlattr>()
+                + pad_netlink_object_with_variable_size(attr.get_size());
+        }
+
+        size
+    }
+
+    unsafe fn write_payload(&self, mut addr: *mut u8) {
+        for (ty, attr) in self.attributes.iter() {
+            debug!("writing attribute {} - {:?}", ty, attr);
+            write_attribute(*ty, attr, addr);
+            let size = pad_netlink_object::<nlattr>()
+                + pad_netlink_object_with_variable_size(attr.get_size());
+            addr = addr.offset(size as isize);
         }
     }
 }

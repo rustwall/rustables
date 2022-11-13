@@ -1,11 +1,9 @@
 #![allow(dead_code)]
 use std::ffi::CString;
 
-use libc::AF_UNIX;
 use rustables::nlmsg::{NfNetlinkObject, NfNetlinkWriter};
 //use rustables::set::SetKey;
-use rustables::{sys::*, Chain};
-use rustables::{MsgType, ProtocolFamily, Table};
+use rustables::{sys::*, Chain, MsgType, ProtocolFamily, Rule, Table};
 
 //use rustables::{nft_nlmsg_maxsize, Chain, MsgType, NlMsg, Rule, Set, Table};
 
@@ -159,11 +157,11 @@ pub fn get_test_chain() -> Chain {
     Chain::new(&get_test_table()).with_name(CHAIN_NAME)
 }
 
-/*
 pub fn get_test_rule() -> Rule {
-    Rule::new(Rc::new(get_test_chain()))
+    Rule::new(&get_test_chain()).unwrap()
 }
 
+/*
 pub fn get_test_set<T: SetKey>() -> Set<T> {
     Set::new(SET_NAME, SET_ID, Rc::new(get_test_table()))
 }

@@ -7,7 +7,7 @@ use crate::nlmsg::{
 use crate::parser::{parse_object, DecodeError, InnerFormat};
 use crate::sys::{
     self, NFNL_SUBSYS_NFTABLES, NFTA_OBJ_TABLE, NFTA_TABLE_FLAGS, NFTA_TABLE_NAME,
-    NFT_MSG_DELTABLE, NFT_MSG_GETTABLE, NFT_MSG_NEWTABLE, NLM_F_ACK,
+    NFT_MSG_DELTABLE, NFT_MSG_GETTABLE, NFT_MSG_NEWTABLE, NLM_F_ACK, NLM_F_CREATE,
 };
 use crate::{impl_attr_getters_and_setters, MsgType, ProtocolFamily};
 
@@ -72,7 +72,17 @@ impl NfNetlinkObject for Table {
             MsgType::Add => NFT_MSG_NEWTABLE,
             MsgType::Del => NFT_MSG_DELTABLE,
         } as u16;
-        writer.write_header(raw_msg_type, self.family, NLM_F_ACK as u16, seq, None);
+        writer.write_header(
+            raw_msg_type,
+            self.family,
+            (if let MsgType::Add = msg_type {
+                NLM_F_CREATE
+            } else {
+                0
+            } | NLM_F_ACK) as u16,
+            seq,
+            None,
+        );
         self.inner.serialize(writer);
         writer.finalize_writing_object();
     }

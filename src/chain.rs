@@ -4,10 +4,8 @@ use crate::nlmsg::{
     NfNetlinkAttribute, NfNetlinkAttributes, NfNetlinkDeserializable, NfNetlinkObject,
     NfNetlinkWriter,
 };
-use crate::parser::{
-    parse_object, DecodeError, InnerFormat, NestedAttribute, NfNetlinkAttributeReader,
-};
-use crate::sys::{self, NFT_MSG_DELCHAIN, NFT_MSG_NEWCHAIN, NLM_F_ACK};
+use crate::parser::{parse_object, DecodeError, InnerFormat, NfNetlinkAttributeReader};
+use crate::sys::{self, NFT_MSG_DELCHAIN, NFT_MSG_NEWCHAIN, NLM_F_ACK, NLM_F_CREATE};
 use crate::{impl_attr_getters_and_setters, MsgType, ProtocolFamily, Table};
 use std::convert::TryFrom;
 use std::fmt::Debug;
@@ -16,32 +14,32 @@ pub type ChainPriority = i32;
 
 /// The netfilter event hooks a chain can register for.
 #[derive(Debug, Copy, Clone, Eq, PartialEq, PartialOrd, Ord, Hash)]
-#[repr(u32)]
+#[repr(i32)]
 pub enum HookClass {
     /// Hook into the pre-routing stage of netfilter. Corresponds to `NF_INET_PRE_ROUTING`.
-    PreRouting = libc::NF_INET_PRE_ROUTING as u32,
+    PreRouting = libc::NF_INET_PRE_ROUTING,
     /// Hook into the input stage of netfilter. Corresponds to `NF_INET_LOCAL_IN`.
-    In = libc::NF_INET_LOCAL_IN as u32,
+    In = libc::NF_INET_LOCAL_IN,
     /// Hook into the forward stage of netfilter. Corresponds to `NF_INET_FORWARD`.
-    Forward = libc::NF_INET_FORWARD as u32,
+    Forward = libc::NF_INET_FORWARD,
     /// Hook into the output stage of netfilter. Corresponds to `NF_INET_LOCAL_OUT`.
-    Out = libc::NF_INET_LOCAL_OUT as u32,
+    Out = libc::NF_INET_LOCAL_OUT,
     /// Hook into the post-routing stage of netfilter. Corresponds to `NF_INET_POST_ROUTING`.
-    PostRouting = libc::NF_INET_POST_ROUTING as u32,
+    PostRouting = libc::NF_INET_POST_ROUTING,
 }
 
 #[derive(Clone, PartialEq, Eq)]
 pub struct Hook {
-    inner: NestedAttribute,
+    inner: NfNetlinkAttributes,
 }
 
 impl Hook {
     pub fn new(class: HookClass, priority: ChainPriority) -> Self {
         Hook {
-            inner: NestedAttribute::new(),
+            inner: NfNetlinkAttributes::new(),
         }
-        .with_hook_class(class as u32)
-        .with_hook_priority(priority as u32)
+        .with_class(class as u32)
+        .with_priority(priority as u32)
     }
 }
 
@@ -56,17 +54,17 @@ impl_attr_getters_and_setters!(
     [
         // Define the action netfilter will apply to packets processed by this chain, but that did not match any rules in it.
         (
-            get_hook_class,
-            set_hook_class,
-            with_hook_class,
+            get_class,
+            set_class,
+            with_class,
             sys::NFTA_HOOK_HOOKNUM,
             U32,
             u32
         ),
         (
-            get_hook_priority,
-            set_hook_priority,
-            with_hook_priority,
+            get_priority,
+            set_priority,
+            with_priority,
             sys::NFTA_HOOK_PRIORITY,
             U32,
             u32
@@ -211,6 +209,14 @@ impl Chain {
         chain
     }
 
+    pub fn get_family(&self) -> ProtocolFamily {
+        self.family
+    }
+
+    fn raw_attributes(&self) -> &NfNetlinkAttributes {
+        &self.inner
+    }
+
     /*
     /// Returns a textual description of the chain.
     pub fn get_str(&self) -> CString {
@@ -251,7 +257,17 @@ impl NfNetlinkObject for Chain {
             MsgType::Add => NFT_MSG_NEWCHAIN,
             MsgType::Del => NFT_MSG_DELCHAIN,
         } as u16;
-        writer.write_header(raw_msg_type, self.family, NLM_F_ACK as u16, seq, None);
+        writer.write_header(
+            raw_msg_type,
+            self.family,
+            (if let MsgType::Add = msg_type {
+                NLM_F_CREATE
+            } else {
+                0
+            } | NLM_F_ACK) as u16,
+            seq,
+            None,
+        );
         self.inner.serialize(writer);
         writer.finalize_writing_object();
     }

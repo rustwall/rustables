@@ -95,7 +95,7 @@ macro_rules! try_alloc {
 mod batch;
 pub use batch::{default_batch_page_size, Batch};
 
-//pub mod expr;
+pub mod expr;
 
 mod table;
 pub use table::list_tables;
@@ -113,9 +113,9 @@ pub mod query;
 pub mod nlmsg;
 pub mod parser;
 
-//mod rule;
-//pub use rule::Rule;
-//pub use rule::{get_rules_cb, list_rules_for_chain};
+mod rule;
+pub use rule::list_rules_for_chain;
+pub use rule::Rule;
 
 //mod rule_methods;
 //pub use rule_methods::{iface_index, Error as MatchError, Protocol, RuleMethods};

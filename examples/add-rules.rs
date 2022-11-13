@@ -38,8 +38,9 @@
 
 use ipnetwork::{IpNetwork, Ipv4Network};
 use rustables::{
-    list_chains_for_table, list_tables, Batch, Chain, ChainPolicy, Hook, HookClass, MsgType,
-    ProtocolFamily, Table,
+    expr::{ExpressionList, Immediate, VerdictKind},
+    list_chains_for_table, list_rules_for_chain, list_tables, Batch, Chain, ChainPolicy, Hook,
+    HookClass, MsgType, ProtocolFamily, Rule, Table,
 };
 //use rustables::{nft_expr, query::send_batch, sys::libc, Batch, Chain,  Rule, Table};
 use std::{ffi::CString, io, net::Ipv4Addr, rc::Rc};
@@ -49,6 +50,8 @@ const OUT_CHAIN_NAME: &str = "chain-for-outgoing-packets";
 const IN_CHAIN_NAME: &str = "chain-for-incoming-packets";
 
 fn main() -> Result<(), Error> {
+    env_logger::init();
+
     // Create a batch. This is used to store all the netlink messages we will later send.
     // Creating a new batch also automatically writes the initial batch begin message needed
     // to tell netlink this is a single transaction that might arrive over multiple netlink packets.
@@ -77,6 +80,23 @@ fn main() -> Result<(), Error> {
     // under the table.
     batch.add(&out_chain, MsgType::Add);
     batch.add(&in_chain, MsgType::Add);
+
+    let rule = Rule::new(&in_chain)?.with_expressions(
+        ExpressionList::builder().with_expression(Immediate::new_verdict(VerdictKind::Accept)),
+    );
+
+    batch.add(&rule, MsgType::Add);
+
+    let rule = Rule::new(&in_chain)?.with_expressions(
+        ExpressionList::builder()
+            .with_expression(Immediate::new_data(
+                vec![1, 2, 3, 4],
+                rustables::expr::Register::Reg2,
+            ))
+            .with_expression(Immediate::new_verdict(VerdictKind::Continue)),
+    );
+
+    batch.add(&rule, MsgType::Add);
 
     //    // === ADD RULE ALLOWING ALL TRAFFIC TO THE LOOPBACK DEVICE ===
     //
@@ -170,7 +190,17 @@ fn main() -> Result<(), Error> {
     // netfilter the we reached the end of the transaction message. It's also converted to a
     // Vec<u8>, containing the raw netlink data so it can be sent over a netlink socket to netfilter.
     // Finally, the batch is sent over to the kernel.
-    Ok(batch.send()?)
+    batch.send()?;
+
+    let tables = list_tables()?;
+    let chains = list_chains_for_table(&tables[0])?;
+    let rules = list_rules_for_chain(&chains[1])?;
+    for rule in rules {
+        for expr in rule.get_expressions().unwrap().iter() {
+            println!("{:?}", expr);
+        }
+    }
+    Ok(())
 }
 
 // Look up the interface index for a given interface name.

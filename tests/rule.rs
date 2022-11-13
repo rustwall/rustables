@@ -1,32 +1,32 @@
-//use std::ffi::CStr;
-//
-//mod sys;
-//use rustables::{query::get_operation_from_nlmsghdr_type, MsgType};
-//use sys::*;
-//
-//mod lib;
-//use lib::*;
-//
-//#[test]
-//fn new_empty_rule() {
-//    let mut rule = get_test_rule();
-//    let (nlmsghdr, _nfgenmsg, raw_expr) = get_test_nlmsg(&mut rule);
-//    assert_eq!(
-//        get_operation_from_nlmsghdr_type(nlmsghdr.nlmsg_type),
-//        NFT_MSG_NEWRULE as u8
-//    );
-//    assert_eq!(nlmsghdr.nlmsg_len, 52);
-//
-//    assert_eq!(
-//        raw_expr,
-//        NetlinkExpr::List(vec![
-//            NetlinkExpr::Final(NFTA_RULE_TABLE, TABLE_NAME.to_vec()),
-//            NetlinkExpr::Final(NFTA_RULE_CHAIN, CHAIN_NAME.to_vec()),
-//        ])
-//        .to_raw()
-//    );
-//}
-//
+mod sys;
+use rustables::parser::get_operation_from_nlmsghdr_type;
+use sys::*;
+
+mod lib;
+use lib::*;
+
+#[test]
+fn new_empty_rule() {
+    let mut rule = get_test_rule();
+
+    let mut buf = Vec::new();
+    let (nlmsghdr, _nfgenmsg, raw_expr) = get_test_nlmsg(&mut buf, &mut rule);
+    assert_eq!(
+        get_operation_from_nlmsghdr_type(nlmsghdr.nlmsg_type),
+        NFT_MSG_NEWRULE as u8
+    );
+    assert_eq!(nlmsghdr.nlmsg_len, 52);
+
+    assert_eq!(
+        raw_expr,
+        NetlinkExpr::List(vec![
+            NetlinkExpr::Final(NFTA_RULE_TABLE, TABLE_NAME.as_bytes().to_vec()),
+            NetlinkExpr::Final(NFTA_RULE_CHAIN, CHAIN_NAME.as_bytes().to_vec()),
+        ])
+        .to_raw()
+    );
+}
+
 //#[test]
 //fn new_empty_rule_with_userdata() {
 //    let mut rule = get_test_rule();

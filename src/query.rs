@@ -1,7 +1,7 @@
 use std::os::unix::prelude::RawFd;
 
 use crate::{
-    nlmsg::{NfNetlinkObject, NfNetlinkWriter},
+    nlmsg::{NfNetlinkAttributes, NfNetlinkObject, NfNetlinkWriter},
     parser::{nft_nlmsg_maxsize, pad_netlink_object_with_variable_size},
     sys::{nlmsgerr, NLM_F_DUMP, NLM_F_MULTI},
     ProtocolFamily,
@@ -77,14 +77,10 @@ pub(crate) fn recv_and_process<'a, T>(
                 break;
             }
 
-            debug!("calling parse_nlmsg");
+            debug!("Calling parse_nlmsg");
             let (nlmsghdr, msg) = parse_nlmsg(&buf)?;
             debug!("Got a valid netlink message: {:?} {:?}", nlmsghdr, msg);
-            // we cannot know when a message will end if we are not receiving messages ending with an
-            // NlMsg::Done marker, and if a maximum sequence number wasn't specified either
-            if max_seq.is_none() && nlmsghdr.nlmsg_flags & NLM_F_MULTI as u16 == 0 {
-                return Err(Error::UndecidableMessageTermination);
-            }
+
             match msg {
                 NlMsg::Done => {
                     return Ok(());
@@ -100,6 +96,12 @@ pub(crate) fn recv_and_process<'a, T>(
                         cb(&buf[0..nlmsghdr.nlmsg_len as usize], working_data)?;
                     }
                 }
+            }
+
+            // we cannot know when a sequence of messages will end if the messages do not end
+            // with an NlMsg::Done marker while if a maximum sequence number wasn't specified
+            if max_seq.is_none() && nlmsghdr.nlmsg_flags & NLM_F_MULTI as u16 == 0 {
+                return Err(Error::UndecidableMessageTermination);
             }
 
             // retrieve the next message
@@ -150,10 +152,11 @@ where
 /// Returns a buffer containing a netlink message which requests a list of all the netfilter
 /// matching objects (e.g. tables, chains, rules, ...).
 /// Supply the type of objects to retrieve (e.g. libc::NFT_MSG_GETTABLE), and a search filter.
-pub fn get_list_of_objects<T>(msg_type: u16, seq: u32, filter: Option<&T>) -> Result<Vec<u8>, Error>
-where
-    T: NfNetlinkObject,
-{
+pub fn get_list_of_objects(
+    msg_type: u16,
+    seq: u32,
+    filter: Option<&NfNetlinkAttributes>,
+) -> Result<Vec<u8>, Error> {
     let mut buffer = Vec::new();
     let mut writer = NfNetlinkWriter::new(&mut buffer);
     writer.write_header(
@@ -163,10 +166,10 @@ where
         seq,
         None,
     );
-    writer.finalize_writing_object();
     if let Some(filter) = filter {
-        filter.add_or_remove(&mut writer, crate::MsgType::Add, 0);
+        filter.serialize(&mut writer);
     }
+    writer.finalize_writing_object();
     Ok(buffer)
 }
 
@@ -177,13 +180,13 @@ where
 pub fn list_objects_with_data<'a, Object, Accumulator>(
     data_type: u16,
     cb: &dyn Fn(Object, &mut Accumulator) -> Result<(), Error>,
-    filter: Option<&Object>,
+    filter: Option<&NfNetlinkAttributes>,
     working_data: &'a mut Accumulator,
 ) -> Result<(), Error>
 where
     Object: NfNetlinkObject,
 {
-    debug!("listing objects of kind {}", data_type);
+    debug!("Listing objects of kind {}", data_type);
     let sock = socket::socket(
         AddressFamily::Netlink,
         SockType::Raw,
@@ -203,6 +206,7 @@ where
             sock,
             None,
             Some(&|buf: &[u8], working_data: &mut Accumulator| {
+                debug!("Calling Object::deserialize()");
                 cb(Object::deserialize(buf)?.0, working_data)
             }),
             working_data,

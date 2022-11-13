@@ -4,14 +4,29 @@
 //! [`Rule`]: struct.Rule.html
 
 use std::borrow::Cow;
+use std::fmt::Debug;
+use std::mem::transmute;
 use std::net::IpAddr;
 use std::net::Ipv4Addr;
 use std::net::Ipv6Addr;
+use std::slice::Iter;
 
 use super::rule::Rule;
-use crate::sys::{self, libc};
+use crate::nlmsg::AttributeDecoder;
+use crate::nlmsg::NfNetlinkAttribute;
+use crate::nlmsg::NfNetlinkAttributes;
+use crate::nlmsg::NfNetlinkDeserializable;
+use crate::parser::pad_netlink_object;
+use crate::parser::pad_netlink_object_with_variable_size;
+use crate::parser::write_attribute;
+use crate::parser::AttributeType;
+use crate::parser::DecodeError;
+use crate::parser::InnerFormat;
+use crate::sys::{self, nlattr};
+use libc::NLA_TYPE_MASK;
 use thiserror::Error;
 
+/*
 mod bitwise;
 pub use self::bitwise::*;
 
@@ -23,12 +38,14 @@ pub use self::counter::*;
 
 pub mod ct;
 pub use self::ct::*;
+*/
 
 mod immediate;
 pub use self::immediate::*;
 
 mod log;
 pub use self::log::*;
+/*
 
 mod lookup;
 pub use self::lookup::*;
@@ -47,6 +64,7 @@ pub use self::payload::*;
 
 mod reject;
 pub use self::reject::{IcmpCode, Reject};
+*/
 
 mod register;
 pub use self::register::Register;
@@ -54,11 +72,18 @@ pub use self::register::Register;
 mod verdict;
 pub use self::verdict::*;
 
+/*
+
 mod wrapper;
 pub use self::wrapper::ExpressionWrapper;
+*/
 
 #[derive(Debug, Error)]
-pub enum DeserializationError {
+pub enum ExpressionError {
+    #[error("The log prefix string is more than 127 characters long")]
+    /// The log prefix string is more than 127 characters long
+    TooLongLogPrefix,
+
     #[error("The expected expression type doesn't match the name of the raw expression")]
     /// The expected expression type doesn't match the name of the raw expression.
     InvalidExpressionKind,
@@ -80,109 +105,295 @@ pub enum DeserializationError {
     )]
     /// The size of a raw value was incoherent with the expected type of the deserialized value/
     InvalidDataSize,
-
-    #[error(transparent)]
-    /// Couldn't find a matching protocol.
-    InvalidProtolFamily(#[from] super::InvalidProtocolFamily),
 }
 
-/// Trait for every safe wrapper of an nftables expression.
 pub trait Expression {
-    /// Returns the raw name used by nftables to identify the rule.
-    fn get_raw_name() -> *const libc::c_char;
+    fn get_name() -> &'static str;
+}
 
-    /// Try to parse the expression from a raw nftables expression, returning a
-    /// [DeserializationError] if the attempted parsing failed.
-    fn from_expr(_expr: *const sys::nftnl_expr) -> Result<Self, DeserializationError>
+// wrapper for the general case, as we need to create many holder types given the depth of some
+// netlink expressions
+#[macro_export]
+macro_rules! create_expr_type {
+    (without_decoder : $struct:ident, [$(($getter_name:ident, $setter_name:ident, $in_place_edit_name:ident, $attr_name:expr, $internal_name:ident, $type:ty)),+]) => {
+        #[derive(Clone, PartialEq, Eq)]
+        pub struct $struct {
+            inner: $crate::nlmsg::NfNetlinkAttributes,
+        }
+
+
+        $crate::impl_attr_getters_and_setters!(without_decoder $struct, [$(($getter_name, $setter_name, $in_place_edit_name, $attr_name, $internal_name, $type)),+]);
+
+        impl std::fmt::Debug for $struct {
+            fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                use $crate::parser::InnerFormat;
+                self.inner_format_struct(f.debug_struct(stringify!($struct)))?
+                    .finish()
+            }
+        }
+
+
+        impl $crate::nlmsg::NfNetlinkDeserializable for $struct {
+            fn deserialize(buf: &[u8]) -> Result<(Self, &[u8]), $crate::parser::DecodeError> {
+                let reader = $crate::parser::NfNetlinkAttributeReader::new(buf, buf.len())?;
+                let inner = reader.decode::<Self>()?;
+                Ok(($struct { inner }, &[]))
+            }
+        }
+
+    };
+    ($struct:ident, [$(($getter_name:ident, $setter_name:ident, $in_place_edit_name:ident, $attr_name:expr, $internal_name:ident, $type:ty)),+]) => {
+        create_expr_type!(without_decoder : $struct, [$(($getter_name, $setter_name, $in_place_edit_name, $attr_name, $internal_name, $type)),+]);
+        $crate::impl_attr_getters_and_setters!(decoder $struct, [$(($getter_name, $setter_name, $in_place_edit_name, $attr_name, $internal_name, $type)),+]);
+    };
+    (with_builder : $struct:ident, [$(($getter_name:ident, $setter_name:ident, $in_place_edit_name:ident, $attr_name:expr, $internal_name:ident, $type:ty)),+]) => {
+        create_expr_type!($struct, [$(($getter_name, $setter_name, $in_place_edit_name, $attr_name, $internal_name, $type)),+]);
+
+        impl $struct {
+            pub fn builder() -> Self {
+                Self { inner: $crate::nlmsg::NfNetlinkAttributes::new() }
+            }
+        }
+    };
+    (inline $($($attrs:ident) +)? :  $struct:ident, [$(($getter_name:ident, $setter_name:ident, $in_place_edit_name:ident, $attr_name:expr, $internal_name:ident, $type:ty)),+]) => {
+        create_expr_type!($($($attrs) + :)? $struct, [$(($getter_name, $setter_name, $in_place_edit_name, $attr_name, $internal_name, $type)),+]);
+
+        impl $crate::nlmsg::NfNetlinkAttribute for $struct {
+            fn get_size(&self) -> usize {
+                self.inner.get_size()
+            }
+
+            unsafe fn write_payload(&self, addr: *mut u8) {
+                self.inner.write_payload(addr)
+            }
+        }
+    };
+    (nested $($($attrs:ident) +)? : $struct:ident, [$(($getter_name:ident, $setter_name:ident, $in_place_edit_name:ident, $attr_name:expr, $internal_name:ident, $type:ty)),+]) => {
+        create_expr_type!($($($attrs) + :)? $struct, [$(($getter_name, $setter_name, $in_place_edit_name, $attr_name, $internal_name, $type)),+]);
+
+        impl $crate::nlmsg::NfNetlinkAttribute for $struct {
+            fn is_nested(&self) -> bool {
+                true
+            }
+
+            fn get_size(&self) -> usize {
+                self.inner.get_size()
+            }
+
+            unsafe fn write_payload(&self, addr: *mut u8) {
+                self.inner.write_payload(addr)
+            }
+        }
+    };
+}
+
+create_expr_type!(
+    nested without_decoder : ExpressionHolder, [
+    // Define the action netfilter will apply to packets processed by this chain, but that did not match any rules in it.
+    (
+        get_name,
+        set_name,
+        with_name,
+        sys::NFTA_EXPR_NAME,
+        String,
+        String
+    ),
+    (
+        get_data,
+        set_data,
+        with_data,
+        sys::NFTA_EXPR_DATA,
+        ExpressionVariant,
+        ExpressionVariant
+    )
+]);
+
+impl ExpressionHolder {
+    pub fn new<T>(expr: T) -> Self
     where
-        Self: Sized,
+        T: Expression,
+        ExpressionVariant: From<T>,
     {
-        Err(DeserializationError::NotImplemented)
-    }
-
-    /// Allocates and returns the low level `nftnl_expr` representation of this expression. The
-    /// caller to this method is responsible for freeing the expression.
-    fn to_expr(&self, rule: &Rule) -> *mut sys::nftnl_expr;
-}
-
-/// A type that can be converted into a byte buffer.
-pub trait ToSlice {
-    /// Returns the data this type represents.
-    fn to_slice(&self) -> Cow<'_, [u8]>;
-}
-
-impl<'a> ToSlice for &'a [u8] {
-    fn to_slice(&self) -> Cow<'_, [u8]> {
-        Cow::Borrowed(self)
+        ExpressionHolder {
+            inner: NfNetlinkAttributes::new(),
+        }
+        .with_name(T::get_name())
+        .with_data(ExpressionVariant::from(expr))
     }
 }
 
-impl<'a> ToSlice for &'a [u16] {
-    fn to_slice(&self) -> Cow<'_, [u8]> {
-        let ptr = self.as_ptr() as *const u8;
-        let len = self.len() * 2;
-        Cow::Borrowed(unsafe { std::slice::from_raw_parts(ptr, len) })
+#[macro_export]
+macro_rules! create_expr_variant {
+    ($enum:ident $(, [$name:ident, $type:ty])+) => {
+        #[derive(Debug, Clone, PartialEq, Eq)]
+        pub enum $enum {
+            $(
+                $name($type),
+            )+
+        }
+
+        impl $crate::nlmsg::NfNetlinkAttribute for $enum {
+            fn is_nested(&self) -> bool {
+                true
+            }
+
+            fn get_size(&self) -> usize {
+                match self {
+                    $(
+                        $enum::$name(val) => val.get_size(),
+                    )+
+                }
+            }
+
+            unsafe fn write_payload(&self, addr: *mut u8) {
+                match self {
+                    $(
+                        $enum::$name(val) => val.write_payload(addr),
+                    )+
+                }
+            }
+        }
+
+        $(
+            impl From<$type> for $enum {
+                fn from(val: $type) -> Self {
+                    $enum::$name(val)
+                }
+            }
+        )+
+
+        impl AttributeDecoder for ExpressionHolder {
+            fn decode_attribute(
+                attrs: &NfNetlinkAttributes,
+                attr_type: u16,
+                buf: &[u8],
+            ) -> Result<AttributeType, DecodeError> {
+                debug!("Decoding attribute {} in an expression", attr_type);
+                match attr_type {
+                    x if x == sys::NFTA_EXPR_NAME => {
+                        debug!("Calling {}::deserialize()", std::any::type_name::<String>());
+                        let (val, remaining) = String::deserialize(buf)?;
+                        if remaining.len() != 0 {
+                            return Err(DecodeError::InvalidDataSize);
+                        }
+                        Ok(AttributeType::String(val))
+                    },
+                    x if x == sys::NFTA_EXPR_DATA => {
+                        // we can assume we have already the name parsed, as that's how we identify the
+                        // type of expression
+                        let name = attrs
+                            .get_attr(sys::NFTA_EXPR_NAME)
+                            .ok_or(DecodeError::MissingExpressionName)?;
+                        match name {
+                            $(
+                                AttributeType::String(x) if x == <$type>::get_name() => {
+                                    debug!("Calling {}::deserialize()", std::any::type_name::<$type>());
+                                    let (res, remaining) =  <$type>::deserialize(buf)?;
+                                    if remaining.len() != 0 {
+                                            return Err($crate::parser::DecodeError::InvalidDataSize);
+                                    }
+                                    Ok(AttributeType::ExpressionVariant(ExpressionVariant::from(res)))
+                                },
+                            )+
+                            AttributeType::String(name) => Err(DecodeError::UnknownExpressionName(name.to_string())),
+                            _ => unreachable!()
+                        }
+                    },
+                    _ => Err(DecodeError::UnsupportedAttributeType(attr_type)),
+                }
+            }
+        }
+    };
+}
+
+create_expr_variant!(ExpressionVariant, [Log, Log], [Immediate, Immediate]);
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ExpressionList {
+    exprs: Vec<AttributeType>,
+}
+
+impl ExpressionList {
+    pub fn builder() -> Self {
+        Self { exprs: Vec::new() }
+    }
+
+    pub fn add_expression<T>(&mut self, e: T)
+    where
+        T: Expression,
+        ExpressionVariant: From<T>,
+    {
+        self.exprs
+            .push(AttributeType::Expression(ExpressionHolder::new(e)));
+    }
+
+    pub fn with_expression<T>(mut self, e: T) -> Self
+    where
+        T: Expression,
+        ExpressionVariant: From<T>,
+    {
+        self.add_expression(e);
+        self
+    }
+
+    pub fn iter<'a>(&'a self) -> impl Iterator<Item = &'a ExpressionVariant> {
+        self.exprs.iter().map(|t| match t {
+            AttributeType::Expression(e) => e.get_data().unwrap(),
+            _ => unreachable!(),
+        })
     }
 }
 
-impl ToSlice for IpAddr {
-    fn to_slice(&self) -> Cow<'_, [u8]> {
-        match *self {
-            IpAddr::V4(ref addr) => addr.to_slice(),
-            IpAddr::V6(ref addr) => addr.to_slice(),
+impl NfNetlinkAttribute for ExpressionList {
+    fn is_nested(&self) -> bool {
+        true
+    }
+
+    fn get_size(&self) -> usize {
+        // one nlattr LIST_ELEM per object
+        self.exprs.iter().fold(0, |acc, item| {
+            acc + item.get_size() + pad_netlink_object::<nlattr>()
+        })
+    }
+
+    unsafe fn write_payload(&self, mut addr: *mut u8) {
+        for item in &self.exprs {
+            write_attribute(sys::NFTA_LIST_ELEM, item, addr);
+            addr = addr.offset((pad_netlink_object::<nlattr>() + item.get_size()) as isize);
         }
     }
 }
 
-impl ToSlice for Ipv4Addr {
-    fn to_slice(&self) -> Cow<'_, [u8]> {
-        Cow::Owned(self.octets().to_vec())
-    }
-}
+impl NfNetlinkDeserializable for ExpressionList {
+    fn deserialize(buf: &[u8]) -> Result<(Self, &[u8]), DecodeError> {
+        let mut exprs = Vec::new();
 
-impl ToSlice for Ipv6Addr {
-    fn to_slice(&self) -> Cow<'_, [u8]> {
-        Cow::Owned(self.octets().to_vec())
-    }
-}
+        let mut pos = 0;
+        while buf.len() - pos > pad_netlink_object::<nlattr>() {
+            let nlattr = unsafe { *transmute::<*const u8, *const nlattr>(buf[pos..].as_ptr()) };
+            // ignore the byteorder and nested attributes
+            let nla_type = nlattr.nla_type & NLA_TYPE_MASK as u16;
 
-impl ToSlice for u8 {
-    fn to_slice(&self) -> Cow<'_, [u8]> {
-        Cow::Owned(vec![*self])
-    }
-}
+            if nla_type != sys::NFTA_LIST_ELEM {
+                return Err(DecodeError::UnsupportedAttributeType(nla_type));
+            }
 
-impl ToSlice for u16 {
-    fn to_slice(&self) -> Cow<'_, [u8]> {
-        let b0 = (*self & 0x00ff) as u8;
-        let b1 = (*self >> 8) as u8;
-        Cow::Owned(vec![b0, b1])
-    }
-}
+            let (expr, remaining) = ExpressionHolder::deserialize(
+                &buf[pos + pad_netlink_object::<nlattr>()..pos + nlattr.nla_len as usize],
+            )?;
+            if remaining.len() != 0 {
+                return Err(DecodeError::InvalidDataSize);
+            }
+            exprs.push(AttributeType::Expression(expr));
 
-impl ToSlice for u32 {
-    fn to_slice(&self) -> Cow<'_, [u8]> {
-        let b0 = *self as u8;
-        let b1 = (*self >> 8) as u8;
-        let b2 = (*self >> 16) as u8;
-        let b3 = (*self >> 24) as u8;
-        Cow::Owned(vec![b0, b1, b2, b3])
-    }
-}
+            pos += pad_netlink_object_with_variable_size(nlattr.nla_len as usize);
+        }
 
-impl ToSlice for i32 {
-    fn to_slice(&self) -> Cow<'_, [u8]> {
-        let b0 = *self as u8;
-        let b1 = (*self >> 8) as u8;
-        let b2 = (*self >> 16) as u8;
-        let b3 = (*self >> 24) as u8;
-        Cow::Owned(vec![b0, b1, b2, b3])
-    }
-}
-
-impl<'a> ToSlice for &'a str {
-    fn to_slice(&self) -> Cow<'_, [u8]> {
-        Cow::from(self.as_bytes())
+        if pos != buf.len() {
+            Err(DecodeError::InvalidDataSize)
+        } else {
+            Ok((Self { exprs }, &[]))
+        }
     }
 }
 

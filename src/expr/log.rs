@@ -1,21 +1,61 @@
-use super::{DeserializationError, Expression, Rule};
+use super::{Expression, ExpressionError};
+use crate::create_expr_type;
+use crate::nlmsg::NfNetlinkAttributes;
 use crate::sys;
-use std::ffi::{CStr, CString};
-use std::os::raw::c_char;
-use thiserror::Error;
 
-/// A Log expression will log all packets that match the rule.
-#[derive(Debug, PartialEq)]
-pub struct Log {
-    pub group: Option<LogGroup>,
-    pub prefix: Option<LogPrefix>,
+// A Log expression will log all packets that match the rule.
+create_expr_type!(
+    inline with_builder : Log,
+    [
+        (
+            get_group,
+            set_group,
+            with_group,
+            sys::NFTA_LOG_GROUP,
+            U32,
+            u32
+        ),
+        (
+            get_prefix,
+            set_prefix,
+            with_prefix,
+            sys::NFTA_LOG_PREFIX,
+            String,
+            String
+        )
+    ]
+);
+
+impl Log {
+    pub fn new(
+        group: Option<u16>,
+        prefix: Option<impl Into<String>>,
+    ) -> Result<Log, ExpressionError> {
+        let mut res = Log {
+            inner: NfNetlinkAttributes::new(),
+            //pub group: Option<LogGroup>,
+            //pub prefix: Option<LogPrefix>,
+        };
+        if let Some(group) = group {
+            res.set_group(group);
+        }
+        if let Some(prefix) = prefix {
+            let prefix = prefix.into();
+
+            if prefix.bytes().count() > 127 {
+                return Err(ExpressionError::TooLongLogPrefix);
+            }
+            res.set_prefix(prefix);
+        }
+        Ok(res)
+    }
 }
 
 impl Expression for Log {
-    fn get_raw_name() -> *const sys::libc::c_char {
-        b"log\0" as *const _ as *const c_char
+    fn get_name() -> &'static str {
+        "log"
     }
-
+    /*
     fn from_expr(expr: *const sys::nftnl_expr) -> Result<Self, DeserializationError>
     where
         Self: Sized,
@@ -54,59 +94,21 @@ impl Expression for Log {
             expr
         }
     }
-}
-
-#[derive(Error, Debug)]
-pub enum LogPrefixError {
-    #[error("The log prefix string is more than 128 characters long")]
-    TooLongPrefix,
-    #[error("The log prefix string contains an invalid Nul character.")]
-    PrefixContainsANul(#[from] std::ffi::NulError),
-}
-
-/// The NFLOG group that will be assigned to each log line.
-#[derive(Debug, Clone, Copy, Eq, PartialEq, Hash)]
-pub struct LogGroup(pub u16);
-
-/// A prefix that will get prepended to each log line.
-#[derive(Debug, Clone, PartialEq)]
-pub struct LogPrefix(CString);
-
-impl LogPrefix {
-    /// Creates a new LogPrefix from a String. Converts it to CString as needed by nftnl. Note that
-    /// LogPrefix should not be more than 127 characters long.
-    pub fn new(prefix: &str) -> Result<Self, LogPrefixError> {
-        if prefix.chars().count() > 127 {
-            return Err(LogPrefixError::TooLongPrefix);
-        }
-        Ok(LogPrefix(CString::new(prefix)?))
-    }
+    */
 }
 
 #[macro_export]
 macro_rules! nft_expr_log {
     (group $group:ident prefix $prefix:expr) => {
-        $crate::expr::Log {
-            group: $group,
-            prefix: $prefix,
-        }
+        $crate::expr::Log::new(Some($group), Some($prefix))
     };
     (prefix $prefix:expr) => {
-        $crate::expr::Log {
-            group: None,
-            prefix: $prefix,
-        }
+        $crate::expr::Log::new(None, Some($prefix))
     };
     (group $group:ident) => {
-        $crate::expr::Log {
-            group: $group,
-            prefix: None,
-        }
+        $crate::expr::Log::new(Some($group), None)
     };
     () => {
-        $crate::expr::Log {
-            group: None,
-            prefix: None,
-        }
+        $crate::expr::Log::new(None, None)
     };
 }
