@@ -1,4 +1,4 @@
-use rustables::expr::{ExpressionList, Immediate, Register, VerdictKind};
+use rustables::expr::{Bitwise, ExpressionList, Immediate, Register, VerdictKind};
 //use rustables::expr::{
 //    Bitwise, Cmp, CmpOp, Conntrack, Counter, Expression, HeaderField, IcmpCode, Immediate, Log,
 //    LogGroup, LogPrefix, Lookup, Meta, Nat, NatType, Payload, Register, Reject, TcpHeaderField,
@@ -9,8 +9,8 @@ use rustables::expr::{ExpressionList, Immediate, Register, VerdictKind};
 //use rustables::sys::libc::{nlmsghdr, NF_DROP};
 //use rustables::{ProtoFamily, Rule};
 //use std::ffi::CStr;
-//use std::net::Ipv4Addr;
-//
+use std::net::Ipv4Addr;
+
 mod sys;
 use libc::NF_DROP;
 use sys::*;
@@ -18,60 +18,63 @@ use sys::*;
 mod lib;
 use lib::*;
 
-//#[test]
-//fn bitwise_expr_is_valid() {
-//    let netmask = Ipv4Addr::new(255, 255, 255, 0);
-//    let bitwise = Bitwise::new(netmask, 0);
-//    let mut rule = get_test_rule();
-//    let (nlmsghdr, _nfgenmsg, raw_expr) = get_test_nlmsg_from_expr(&mut rule, &bitwise);
-//    assert_eq!(nlmsghdr.nlmsg_len, 124);
-//
-//    assert_eq!(
-//        raw_expr,
-//        NetlinkExpr::List(vec![
-//            NetlinkExpr::Final(NFTA_RULE_TABLE, TABLE_NAME.to_vec()),
-//            NetlinkExpr::Final(NFTA_RULE_CHAIN, CHAIN_NAME.to_vec()),
-//            NetlinkExpr::Nested(
-//                NFTA_RULE_EXPRESSIONS,
-//                vec![NetlinkExpr::Nested(
-//                    NFTA_LIST_ELEM,
-//                    vec![
-//                        NetlinkExpr::Final(NFTA_EXPR_NAME, b"bitwise\0".to_vec()),
-//                        NetlinkExpr::Nested(
-//                            NFTA_EXPR_DATA,
-//                            vec![
-//                                NetlinkExpr::Final(
-//                                    NFTA_BITWISE_SREG,
-//                                    NFT_REG_1.to_be_bytes().to_vec()
-//                                ),
-//                                NetlinkExpr::Final(
-//                                    NFTA_BITWISE_DREG,
-//                                    NFT_REG_1.to_be_bytes().to_vec()
-//                                ),
-//                                NetlinkExpr::Final(NFTA_BITWISE_LEN, 4u32.to_be_bytes().to_vec()),
-//                                NetlinkExpr::Nested(
-//                                    NFTA_BITWISE_MASK,
-//                                    vec![NetlinkExpr::Final(
-//                                        NFTA_DATA_VALUE,
-//                                        vec![255, 255, 255, 0]
-//                                    )]
-//                                ),
-//                                NetlinkExpr::Nested(
-//                                    NFTA_BITWISE_XOR,
-//                                    vec![NetlinkExpr::Final(
-//                                        NFTA_DATA_VALUE,
-//                                        0u32.to_be_bytes().to_vec()
-//                                    )]
-//                                )
-//                            ]
-//                        )
-//                    ]
-//                )]
-//            )
-//        ])
-//        .to_raw()
-//    );
-//}
+#[test]
+fn bitwise_expr_is_valid() {
+    let netmask = Ipv4Addr::new(255, 255, 255, 0);
+    let bitwise = Bitwise::new(netmask.octets(), [0, 0, 0, 0]).unwrap();
+    let mut rule =
+        get_test_rule().with_expressions(ExpressionList::builder().with_expression(bitwise));
+
+    let mut buf = Vec::new();
+    let (nlmsghdr, _nfgenmsg, raw_expr) = get_test_nlmsg(&mut buf, &mut rule);
+    assert_eq!(nlmsghdr.nlmsg_len, 124);
+
+    assert_eq!(
+        raw_expr,
+        NetlinkExpr::List(vec![
+            NetlinkExpr::Final(NFTA_RULE_TABLE, TABLE_NAME.as_bytes().to_vec()),
+            NetlinkExpr::Final(NFTA_RULE_CHAIN, CHAIN_NAME.as_bytes().to_vec()),
+            NetlinkExpr::Nested(
+                NFTA_RULE_EXPRESSIONS,
+                vec![NetlinkExpr::Nested(
+                    NFTA_LIST_ELEM,
+                    vec![
+                        NetlinkExpr::Final(NFTA_EXPR_NAME, b"bitwise".to_vec()),
+                        NetlinkExpr::Nested(
+                            NFTA_EXPR_DATA,
+                            vec![
+                                NetlinkExpr::Final(
+                                    NFTA_BITWISE_SREG,
+                                    NFT_REG_1.to_be_bytes().to_vec()
+                                ),
+                                NetlinkExpr::Final(
+                                    NFTA_BITWISE_DREG,
+                                    NFT_REG_1.to_be_bytes().to_vec()
+                                ),
+                                NetlinkExpr::Final(NFTA_BITWISE_LEN, 4u32.to_be_bytes().to_vec()),
+                                NetlinkExpr::Nested(
+                                    NFTA_BITWISE_MASK,
+                                    vec![NetlinkExpr::Final(
+                                        NFTA_DATA_VALUE,
+                                        vec![255, 255, 255, 0]
+                                    )]
+                                ),
+                                NetlinkExpr::Nested(
+                                    NFTA_BITWISE_XOR,
+                                    vec![NetlinkExpr::Final(
+                                        NFTA_DATA_VALUE,
+                                        0u32.to_be_bytes().to_vec()
+                                    )]
+                                )
+                            ]
+                        )
+                    ]
+                )]
+            )
+        ])
+        .to_raw()
+    );
+}
 //
 //#[test]
 //fn cmp_expr_is_valid() {

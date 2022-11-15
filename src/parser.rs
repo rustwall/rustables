@@ -36,6 +36,9 @@ pub enum DecodeError {
     #[error("Missing information in the chain to create a rule")]
     MissingChainInformationError,
 
+    #[error("The length of the arguments are not compatible with each other")]
+    IncompatibleLength,
+
     #[error("Invalid subsystem, expected NFTABLES")]
     InvalidSubsystem(u8),
 
@@ -71,9 +74,6 @@ pub enum DecodeError {
 
     #[error("The object does not contain a name for the expression being parsed")]
     MissingExpressionName,
-
-    #[error("The expression name was not recognized")]
-    UnknownExpressionName(String),
 
     #[error("Unsupported attribute type")]
     UnsupportedAttributeType(u16),
@@ -486,11 +486,12 @@ impl_attribute_holder!(
     [ExpressionVariant, crate::expr::ExpressionVariant],
     [ExpressionList, crate::expr::ExpressionList],
     [ExprLog, crate::expr::Log],
-    [ExprImmediate, crate::expr::ImmediateData],
-    [ExprImmediateData, crate::expr::ImmediateData],
+    [ExprImmediate, crate::expr::Immediate],
+    [ExprData, crate::expr::ExpressionData],
     [ExprVerdictAttribute, crate::expr::VerdictAttribute],
     [ExprVerdictType, crate::expr::VerdictType],
-    [Register, crate::expr::Register]
+    [Register, crate::expr::Register],
+    [ExprRaw, crate::expr::ExpressionRaw]
 );
 
 #[macro_export]

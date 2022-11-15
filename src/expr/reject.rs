@@ -1,6 +1,9 @@
 use super::{DeserializationError, Expression, Rule};
+use crate::sys::{
+    self,
+    libc::{self, c_char},
+};
 use crate::ProtoFamily;
-use crate::sys::{self, libc::{self, c_char}};
 
 /// A reject expression that defines the type of rejection message sent when discarding a packet.
 #[derive(Debug, Clone, Copy, Eq, PartialEq, Hash)]

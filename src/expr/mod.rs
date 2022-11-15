@@ -26,10 +26,10 @@ use crate::sys::{self, nlattr};
 use libc::NLA_TYPE_MASK;
 use thiserror::Error;
 
-/*
 mod bitwise;
 pub use self::bitwise::*;
 
+/*
 mod cmp;
 pub use self::cmp::*;
 
@@ -295,7 +295,10 @@ macro_rules! create_expr_variant {
                                     Ok(AttributeType::ExpressionVariant(ExpressionVariant::from(res)))
                                 },
                             )+
-                            AttributeType::String(name) => Err(DecodeError::UnknownExpressionName(name.to_string())),
+                            AttributeType::String(name) => {
+                                info!("Unrecognized expression '{}', generating an ExpressionRaw", name);
+                                ExpressionRaw::deserialize(buf).map(|(res, _)| AttributeType::ExpressionVariant(ExpressionVariant::ExpressionRaw(res)))
+                            },
                             _ => unreachable!()
                         }
                     },
@@ -306,7 +309,13 @@ macro_rules! create_expr_variant {
     };
 }
 
-create_expr_variant!(ExpressionVariant, [Log, Log], [Immediate, Immediate]);
+create_expr_variant!(
+    ExpressionVariant,
+    [Log, Log],
+    [Immediate, Immediate],
+    [Bitwise, Bitwise],
+    [ExpressionRaw, ExpressionRaw]
+);
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ExpressionList {
@@ -316,6 +325,11 @@ pub struct ExpressionList {
 impl ExpressionList {
     pub fn builder() -> Self {
         Self { exprs: Vec::new() }
+    }
+
+    /// Useful to add raw expressions because ExpressionHolder cannot infer alone its type
+    pub fn add_raw_expression(&mut self, e: ExpressionHolder) {
+        self.exprs.push(AttributeType::Expression(e));
     }
 
     pub fn add_expression<T>(&mut self, e: T)
@@ -397,57 +411,52 @@ impl NfNetlinkDeserializable for ExpressionList {
     }
 }
 
-#[macro_export(local_inner_macros)]
-macro_rules! nft_expr {
-    (bitwise mask $mask:expr,xor $xor:expr) => {
-        nft_expr_bitwise!(mask $mask, xor $xor)
-    };
-    (cmp $op:tt $data:expr) => {
-        nft_expr_cmp!($op $data)
-    };
-    (counter) => {
-        $crate::expr::Counter { nb_bytes: 0, nb_packets: 0}
-    };
-    (ct $key:ident set) => {
-        nft_expr_ct!($key set)
-    };
-    (ct $key:ident) => {
-        nft_expr_ct!($key)
-    };
-    (immediate $expr:ident $value:expr) => {
-        nft_expr_immediate!($expr $value)
-    };
-    (log group $group:ident prefix $prefix:expr) => {
-        nft_expr_log!(group $group prefix $prefix)
-    };
-    (log group $group:ident) => {
-        nft_expr_log!(group $group)
-    };
-    (log prefix $prefix:expr) => {
-        nft_expr_log!(prefix $prefix)
-    };
-    (log) => {
-        nft_expr_log!()
-    };
-    (lookup $set:expr) => {
-        nft_expr_lookup!($set)
-    };
-    (masquerade) => {
-        $crate::expr::Masquerade
-    };
-    (meta $expr:ident set) => {
-        nft_expr_meta!($expr set)
-    };
-    (meta $expr:ident) => {
-        nft_expr_meta!($expr)
-    };
-    (payload $proto:ident $field:ident) => {
-        nft_expr_payload!($proto $field)
-    };
-    (verdict $verdict:ident) => {
-        nft_expr_verdict!($verdict)
-    };
-    (verdict $verdict:ident $chain:expr) => {
-        nft_expr_verdict!($verdict $chain)
-    };
+create_expr_type!(
+  nested with_builder : ExpressionData,
+    [
+        (
+            get_value,
+            set_value,
+            with_value,
+            sys::NFTA_DATA_VALUE,
+            VecU8,
+            Vec<u8>
+        ),
+        (
+            get_verdict,
+            set_verdict,
+            with_verdict,
+            sys::NFTA_DATA_VERDICT,
+            ExprVerdictAttribute,
+            VerdictAttribute
+        )
+    ]
+);
+
+// default type for expressions that we do not handle yet
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ExpressionRaw(Vec<u8>);
+
+impl NfNetlinkAttribute for ExpressionRaw {
+    fn get_size(&self) -> usize {
+        self.0.get_size()
+    }
+
+    unsafe fn write_payload(&self, addr: *mut u8) {
+        self.0.write_payload(addr);
+    }
+}
+
+impl NfNetlinkDeserializable for ExpressionRaw {
+    fn deserialize(buf: &[u8]) -> Result<(Self, &[u8]), DecodeError> {
+        Ok((ExpressionRaw(buf.to_vec()), &[]))
+    }
+}
+
+// Because we loose the name of the expression when parsing, this is the only expression
+// where deserializing a message and the reserializing it alter its content
+impl Expression for ExpressionRaw {
+    fn get_name() -> &'static str {
+        "unknown_expression"
+    }
 }

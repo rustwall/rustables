@@ -2,12 +2,12 @@ use std::fmt::Debug;
 
 use libc::{NF_ACCEPT, NF_DROP, NF_QUEUE};
 
-use super::{Expression, Immediate, ImmediateData, Register, Rule};
+use super::{ExpressionData, Immediate, Register};
 use crate::{
-    create_expr_type, impl_attr_getters_and_setters,
-    nlmsg::{NfNetlinkAttribute, NfNetlinkAttributes, NfNetlinkDeserializable},
-    parser::{DecodeError, InnerFormat},
-    sys::{self, NFT_BREAK, NFT_CONTINUE, NFT_GOTO, NFT_JUMP, NFT_REG_VERDICT, NFT_RETURN},
+    create_expr_type,
+    nlmsg::{NfNetlinkAttribute, NfNetlinkDeserializable},
+    parser::DecodeError,
+    sys::{self, NFT_BREAK, NFT_CONTINUE, NFT_GOTO, NFT_JUMP, NFT_RETURN},
 };
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Hash)]
@@ -119,6 +119,6 @@ impl Immediate {
         }
         Immediate::builder()
             .with_dreg(Register::Verdict)
-            .with_data(ImmediateData::builder().with_verdict(data))
+            .with_data(ExpressionData::builder().with_verdict(data))
     }
 }

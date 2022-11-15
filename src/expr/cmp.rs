@@ -157,31 +157,6 @@ impl<const N: usize> Expression for Cmp<[u8; N]> {
     }
 }
 
-#[macro_export(local_inner_macros)]
-macro_rules! nft_expr_cmp {
-    (@cmp_op ==) => {
-        $crate::expr::CmpOp::Eq
-    };
-    (@cmp_op !=) => {
-        $crate::expr::CmpOp::Neq
-    };
-    (@cmp_op <) => {
-        $crate::expr::CmpOp::Lt
-    };
-    (@cmp_op <=) => {
-        $crate::expr::CmpOp::Lte
-    };
-    (@cmp_op >) => {
-        $crate::expr::CmpOp::Gt
-    };
-    (@cmp_op >=) => {
-        $crate::expr::CmpOp::Gte
-    };
-    ($op:tt $data:expr) => {
-        $crate::expr::Cmp::new(nft_expr_cmp!(@cmp_op $op), $data)
-    };
-}
-
 /// Can be used to compare the value loaded by [`Meta::IifName`] and [`Meta::OifName`]. Please note
 /// that it is faster to check interface index than name.
 ///
