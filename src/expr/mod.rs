@@ -62,10 +62,10 @@ pub use self::nat::*;
 
 mod payload;
 pub use self::payload::*;
+*/
 
 mod reject;
-pub use self::reject::{IcmpCode, Reject};
-*/
+pub use self::reject::{IcmpCode, Reject, RejectType};
 
 mod register;
 pub use self::register::Register;
@@ -239,7 +239,8 @@ create_expr_variant!(
     [Immediate, Immediate],
     [Bitwise, Bitwise],
     [ExpressionRaw, ExpressionRaw],
-    [Meta, Meta]
+    [Meta, Meta],
+    [Reject, Reject]
 );
 
 #[derive(Debug, Clone, PartialEq, Eq, Default)]

@@ -68,6 +68,12 @@ pub enum DecodeError {
     #[error("Unknown type for a Meta expression")]
     UnknownMetaType(u32),
 
+    #[error("Unsupported value for an icmp reject type")]
+    UnknownRejectType(u32),
+
+    #[error("Unsupported value for an icmp code in a reject expression")]
+    UnknownIcmpCode(u8),
+
     #[error("Invalid value for a register")]
     UnknownRegisterValue,
 

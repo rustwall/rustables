@@ -1,11 +1,15 @@
 use rustables::{
-    expr::{Bitwise, ExpressionList, Immediate, Meta, MetaType, Register, VerdictKind},
+    expr::{
+        Bitwise, ExpressionList, IcmpCode, Immediate, Meta, MetaType, Register, Reject, RejectType,
+        VerdictKind,
+    },
     sys::{
         NFTA_BITWISE_DREG, NFTA_BITWISE_LEN, NFTA_BITWISE_MASK, NFTA_BITWISE_SREG,
         NFTA_BITWISE_XOR, NFTA_DATA_VALUE, NFTA_DATA_VERDICT, NFTA_EXPR_DATA, NFTA_EXPR_NAME,
         NFTA_IMMEDIATE_DATA, NFTA_IMMEDIATE_DREG, NFTA_LIST_ELEM, NFTA_META_DREG, NFTA_META_KEY,
-        NFTA_RULE_CHAIN, NFTA_RULE_EXPRESSIONS, NFTA_RULE_TABLE, NFTA_VERDICT_CODE,
-        NFT_META_PROTOCOL, NFT_REG_1, NFT_REG_VERDICT,
+        NFTA_REJECT_ICMP_CODE, NFTA_REJECT_TYPE, NFTA_RULE_CHAIN, NFTA_RULE_EXPRESSIONS,
+        NFTA_RULE_TABLE, NFTA_VERDICT_CODE, NFT_META_PROTOCOL, NFT_REG_1, NFT_REG_VERDICT,
+        NFT_REJECT_ICMPX_UNREACH,
     },
 };
 //use rustables::expr::{
@@ -488,45 +492,48 @@ fn meta_expr_is_valid() {
 //    );
 //}
 
-//#[test]
-//fn reject_expr_is_valid() {
-//    let code = IcmpCode::NoRoute;
-//    let reject = Reject::Icmp(code);
-//    let mut rule = get_test_rule();
-//    let (nlmsghdr, _nfgenmsg, raw_expr) = get_test_nlmsg_from_expr(&mut rule, &reject);
-//    assert_eq!(nlmsghdr.nlmsg_len, 92);
-//
-//    assert_eq!(
-//        raw_expr,
-//        NetlinkExpr::List(vec![
-//            NetlinkExpr::Final(NFTA_RULE_TABLE, TABLE_NAME.to_vec()),
-//            NetlinkExpr::Final(NFTA_RULE_CHAIN, CHAIN_NAME.to_vec()),
-//            NetlinkExpr::Nested(
-//                NFTA_RULE_EXPRESSIONS,
-//                vec![NetlinkExpr::Nested(
-//                    NFTA_LIST_ELEM,
-//                    vec![
-//                        NetlinkExpr::Final(NFTA_EXPR_NAME, b"reject\0".to_vec()),
-//                        NetlinkExpr::Nested(
-//                            NFTA_EXPR_DATA,
-//                            vec![
-//                                NetlinkExpr::Final(
-//                                    NFTA_REJECT_TYPE,
-//                                    NFT_REJECT_ICMPX_UNREACH.to_be_bytes().to_vec()
-//                                ),
-//                                NetlinkExpr::Final(
-//                                    NFTA_REJECT_ICMP_CODE,
-//                                    (code as u8).to_be_bytes().to_vec()
-//                                ),
-//                            ]
-//                        )
-//                    ]
-//                )]
-//            )
-//        ])
-//        .to_raw()
-//    );
-//}
+#[test]
+fn reject_expr_is_valid() {
+    let code = IcmpCode::NoRoute;
+    let reject = Reject::default()
+        .with_type(RejectType::IcmpxUnreach)
+        .with_icmp_code(code);
+    let mut rule = get_test_rule().with_expressions(vec![reject]);
+    let mut buf = Vec::new();
+    let (nlmsghdr, _nfgenmsg, raw_expr) = get_test_nlmsg(&mut buf, &mut rule);
+    assert_eq!(nlmsghdr.nlmsg_len, 92);
+
+    assert_eq!(
+        raw_expr,
+        NetlinkExpr::List(vec![
+            NetlinkExpr::Final(NFTA_RULE_TABLE, TABLE_NAME.as_bytes().to_vec()),
+            NetlinkExpr::Final(NFTA_RULE_CHAIN, CHAIN_NAME.as_bytes().to_vec()),
+            NetlinkExpr::Nested(
+                NFTA_RULE_EXPRESSIONS,
+                vec![NetlinkExpr::Nested(
+                    NFTA_LIST_ELEM,
+                    vec![
+                        NetlinkExpr::Final(NFTA_EXPR_NAME, b"reject".to_vec()),
+                        NetlinkExpr::Nested(
+                            NFTA_EXPR_DATA,
+                            vec![
+                                NetlinkExpr::Final(
+                                    NFTA_REJECT_TYPE,
+                                    NFT_REJECT_ICMPX_UNREACH.to_be_bytes().to_vec()
+                                ),
+                                NetlinkExpr::Final(
+                                    NFTA_REJECT_ICMP_CODE,
+                                    (code as u8).to_be_bytes().to_vec()
+                                ),
+                            ]
+                        )
+                    ]
+                )]
+            )
+        ])
+        .to_raw()
+    );
+}
 
 #[test]
 fn verdict_expr_is_valid() {
