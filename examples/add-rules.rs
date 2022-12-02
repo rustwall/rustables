@@ -87,30 +87,20 @@ fn main() -> Result<(), Error> {
 
     batch.add(&rule, MsgType::Add);
 
-    let rule = Rule::new(&in_chain)?.with_expressions(
-        ExpressionList::builder()
-            .with_expression(Immediate::new_data(
-                vec![1, 2, 3, 4],
-                rustables::expr::Register::Reg2,
-            ))
-            .with_expression(Immediate::new_verdict(VerdictKind::Continue)),
-    );
+    // === ADD RULE ALLOWING ALL TRAFFIC TO THE LOOPBACK DEVICE ===
 
-    batch.add(&rule, MsgType::Add);
+    // Create a new rule object under the input chain.
+    let mut allow_loopback_in_rule = Rule::new(&in_chain)?;
+    // Lookup the interface index of the loopback interface.
+    let lo_iface_index = iface_index("lo")?;
 
-    //    // === ADD RULE ALLOWING ALL TRAFFIC TO THE LOOPBACK DEVICE ===
-    //
-    //    // Create a new rule object under the input chain.
-    //    let mut allow_loopback_in_rule = Rule::new(Rc::clone(&in_chain));
-    //    // Lookup the interface index of the loopback interface.
-    //    let lo_iface_index = iface_index("lo")?;
-    //
-    //    // First expression to be evaluated in this rule is load the meta information "iif"
-    //    // (incoming interface index) into the comparison register of netfilter.
-    //    // When an incoming network packet is processed by this rule it will first be processed by this
-    //    // expression, which will load the interface index of the interface the packet came from into
-    //    // a special "register" in netfilter.
-    //    allow_loopback_in_rule.add_expr(&nft_expr!(meta iif));
+    // First expression to be evaluated in this rule is load the meta information "iif"
+    // (incoming interface index) into the comparison register of netfilter.
+    // When an incoming network packet is processed by this rule it will first be processed by this
+    // expression, which will load the interface index of the interface the packet came from into
+    // a special "register" in netfilter.
+    //allow_loopback_in_rule.set_expressions(ExpressionList::builder().with_expression());
+    //add_expr(&nft_expr!(meta iif));
     //    // Next expression in the rule is to compare the value loaded into the register with our desired
     //    // interface index, and succeed only if it's equal. For any packet processed where the equality
     //    // does not hold the packet is said to not match this rule, and the packet moves on to be
@@ -190,17 +180,7 @@ fn main() -> Result<(), Error> {
     // netfilter the we reached the end of the transaction message. It's also converted to a
     // Vec<u8>, containing the raw netlink data so it can be sent over a netlink socket to netfilter.
     // Finally, the batch is sent over to the kernel.
-    batch.send()?;
-
-    let tables = list_tables()?;
-    let chains = list_chains_for_table(&tables[0])?;
-    let rules = list_rules_for_chain(&chains[1])?;
-    for rule in rules {
-        for expr in rule.get_expressions().unwrap().iter() {
-            println!("{:?}", expr);
-        }
-    }
-    Ok(())
+    Ok(batch.send()?)
 }
 
 // Look up the interface index for a given interface name.

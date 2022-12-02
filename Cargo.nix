@@ -204,7 +204,7 @@ rec {
           }
           {
             name = "env_logger";
-            packageId = "env_logger";
+            packageId = "env_logger 0.7.1";
             optional = true;
           }
           {
@@ -459,7 +459,7 @@ rec {
         };
         resolvedDefaultFeatures = [ "ansi_term" "atty" "color" "default" "strsim" "suggestions" "vec_map" ];
       };
-      "env_logger" = rec {
+      "env_logger 0.7.1" = rec {
         crateName = "env_logger";
         version = "0.7.1";
         edition = "2018";
@@ -475,7 +475,7 @@ rec {
           }
           {
             name = "humantime";
-            packageId = "humantime";
+            packageId = "humantime 1.3.0";
             optional = true;
           }
           {
@@ -487,6 +487,49 @@ rec {
             name = "regex";
             packageId = "regex";
             optional = true;
+          }
+          {
+            name = "termcolor";
+            packageId = "termcolor";
+            optional = true;
+          }
+        ];
+        features = {
+          "atty" = [ "dep:atty" ];
+          "default" = [ "termcolor" "atty" "humantime" "regex" ];
+          "humantime" = [ "dep:humantime" ];
+          "regex" = [ "dep:regex" ];
+          "termcolor" = [ "dep:termcolor" ];
+        };
+        resolvedDefaultFeatures = [ "atty" "default" "humantime" "regex" "termcolor" ];
+      };
+      "env_logger 0.9.3" = rec {
+        crateName = "env_logger";
+        version = "0.9.3";
+        edition = "2018";
+        sha256 = "1rq0kqpa8my6i1qcyhfqrn1g9xr5fbkwwbd42nqvlzn9qibncbm1";
+        dependencies = [
+          {
+            name = "atty";
+            packageId = "atty";
+            optional = true;
+          }
+          {
+            name = "humantime";
+            packageId = "humantime 2.1.0";
+            optional = true;
+          }
+          {
+            name = "log";
+            packageId = "log";
+            features = [ "std" ];
+          }
+          {
+            name = "regex";
+            packageId = "regex";
+            optional = true;
+            usesDefaultFeatures = false;
+            features = [ "std" "perf" ];
           }
           {
             name = "termcolor";
@@ -535,7 +578,7 @@ rec {
         };
         resolvedDefaultFeatures = [ "default" ];
       };
-      "humantime" = rec {
+      "humantime 1.3.0" = rec {
         crateName = "humantime";
         version = "1.3.0";
         edition = "2015";
@@ -551,29 +594,30 @@ rec {
         ];
 
       };
+      "humantime 2.1.0" = rec {
+        crateName = "humantime";
+        version = "2.1.0";
+        edition = "2018";
+        sha256 = "1r55pfkkf5v0ji1x6izrjwdq9v6sc7bv99xj6srywcar37xmnfls";
+        authors = [
+          "Paul Colomiets <paul@colomiets.name>"
+        ];
+
+      };
       "ipnetwork" = rec {
         crateName = "ipnetwork";
-        version = "0.16.0";
-        edition = "2018";
-        sha256 = "07nkh9djfmkkwd0phkgrv977kfmvw4hmrn1xxw4cjyx23psskv5q";
+        version = "0.20.0";
+        edition = "2021";
+        sha256 = "03hhmxyimz0800z44wl3z1ak8iw91xcnk7sgx5p5jinmx50naimz";
         authors = [
           "Abhishek Chanda <abhishek.becs@gmail.com>"
           "Linus Färnstrand <faern@faern.net>"
         ];
-        dependencies = [
-          {
-            name = "serde";
-            packageId = "serde";
-            optional = true;
-          }
-        ];
         features = {
-          "clippy" = [ "dep:clippy" ];
           "default" = [ "serde" ];
-          "dev" = [ "clippy" ];
+          "schemars" = [ "dep:schemars" ];
           "serde" = [ "dep:serde" ];
         };
-        resolvedDefaultFeatures = [ "default" "serde" ];
       };
       "lazy_static" = rec {
         crateName = "lazy_static";
@@ -915,6 +959,7 @@ rec {
           {
             name = "ipnetwork";
             packageId = "ipnetwork";
+            usesDefaultFeatures = false;
           }
           {
             name = "libc";
@@ -927,11 +972,6 @@ rec {
           {
             name = "nix";
             packageId = "nix";
-          }
-          {
-            name = "serde";
-            packageId = "serde";
-            features = [ "derive" ];
           }
           {
             name = "thiserror";
@@ -954,14 +994,11 @@ rec {
         ];
         devDependencies = [
           {
-            name = "rustables";
-            packageId = "rustables";
-            features = [ "query" ];
+            name = "env_logger";
+            packageId = "env_logger 0.9.3";
           }
         ];
-        features = {
-        };
-        resolvedDefaultFeatures = [ "query" "unsafe-raw-handles" ];
+
       };
       "rustc-hash" = rec {
         crateName = "rustc-hash";
@@ -975,63 +1012,6 @@ rec {
           "default" = [ "std" ];
         };
         resolvedDefaultFeatures = [ "default" "std" ];
-      };
-      "serde" = rec {
-        crateName = "serde";
-        version = "1.0.147";
-        edition = "2015";
-        sha256 = "0rc9jj8bbhf3lkf07ln8kyljigyzc4kk90nzg4dc2gwqmsdxd4yi";
-        authors = [
-          "Erick Tryzelaar <erick.tryzelaar@gmail.com>"
-          "David Tolnay <dtolnay@gmail.com>"
-        ];
-        dependencies = [
-          {
-            name = "serde_derive";
-            packageId = "serde_derive";
-            optional = true;
-          }
-        ];
-        devDependencies = [
-          {
-            name = "serde_derive";
-            packageId = "serde_derive";
-          }
-        ];
-        features = {
-          "default" = [ "std" ];
-          "derive" = [ "serde_derive" ];
-          "serde_derive" = [ "dep:serde_derive" ];
-        };
-        resolvedDefaultFeatures = [ "default" "derive" "serde_derive" "std" ];
-      };
-      "serde_derive" = rec {
-        crateName = "serde_derive";
-        version = "1.0.147";
-        edition = "2015";
-        sha256 = "0ln8rqbybpxmk4fvh6lgm75acs1d8x90fi44fhx3x77wm0n3c7ag";
-        procMacro = true;
-        authors = [
-          "Erick Tryzelaar <erick.tryzelaar@gmail.com>"
-          "David Tolnay <dtolnay@gmail.com>"
-        ];
-        dependencies = [
-          {
-            name = "proc-macro2";
-            packageId = "proc-macro2";
-          }
-          {
-            name = "quote";
-            packageId = "quote";
-          }
-          {
-            name = "syn";
-            packageId = "syn";
-          }
-        ];
-        features = {
-        };
-        resolvedDefaultFeatures = [ "default" ];
       };
       "shlex" = rec {
         crateName = "shlex";

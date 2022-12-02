@@ -1,20 +1,23 @@
 use crate::expr::ExpressionList;
-use crate::nlmsg::{
-    NfNetlinkAttributes, NfNetlinkDeserializable, NfNetlinkObject, NfNetlinkWriter,
-};
-use crate::parser::InnerFormat;
-use crate::parser::{parse_object, DecodeError};
+use crate::nlmsg::{NfNetlinkAttribute, NfNetlinkDeserializable, NfNetlinkObject, NfNetlinkWriter};
+use crate::parser::{DecodeError, InnerFormat, Parsable};
 use crate::query::list_objects_with_data;
 use crate::sys::{self, NFT_MSG_DELRULE, NFT_MSG_NEWRULE, NLM_F_ACK, NLM_F_CREATE};
 use crate::{chain::Chain, MsgType};
-use crate::{impl_attr_getters_and_setters, ProtocolFamily};
+use crate::{impl_attr_getters_and_setters, impl_nfnetlinkattribute, ProtocolFamily};
 use std::convert::TryFrom;
 use std::fmt::Debug;
 
 /// A nftables firewall rule.
-#[derive(PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq, Default)]
 pub struct Rule {
-    inner: NfNetlinkAttributes,
+    id: Option<u32>,
+    handle: Option<u64>,
+    position: Option<u64>,
+    table: Option<String>,
+    chain: Option<String>,
+    userdata: Option<Vec<u8>>,
+    expressions: Option<ExpressionList>,
     family: ProtocolFamily,
 }
 
@@ -23,21 +26,18 @@ impl Rule {
     ///
     /// [`Chain`]: struct.Chain.html
     pub fn new(chain: &Chain) -> Result<Rule, DecodeError> {
-        let inner = NfNetlinkAttributes::new();
-        Ok(Rule {
-            inner,
-            family: chain.get_family(),
-        }
-        .with_table(
-            chain
-                .get_table()
-                .ok_or(DecodeError::MissingChainInformationError)?,
-        )
-        .with_chain(
-            chain
-                .get_name()
-                .ok_or(DecodeError::MissingChainInformationError)?,
-        ))
+        Ok(Rule::default()
+            .with_family(chain.get_family())
+            .with_table(
+                chain
+                    .get_table()
+                    .ok_or(DecodeError::MissingChainInformationError)?,
+            )
+            .with_chain(
+                chain
+                    .get_name()
+                    .ok_or(DecodeError::MissingChainInformationError)?,
+            ))
     }
 
     pub fn get_family(&self) -> ProtocolFamily {
@@ -51,10 +51,6 @@ impl Rule {
     pub fn with_family(mut self, family: ProtocolFamily) -> Self {
         self.set_family(family);
         self
-    }
-
-    fn raw_attributes(&self) -> &NfNetlinkAttributes {
-        &self.inner
     }
 
     /*
@@ -191,143 +187,58 @@ impl NfNetlinkObject for Rule {
             seq,
             None,
         );
-        self.inner.serialize(writer);
+        let buf = writer.add_data_zeroed(self.get_size());
+        unsafe {
+            self.write_payload(buf.as_mut_ptr());
+        }
         writer.finalize_writing_object();
     }
 }
 
 impl NfNetlinkDeserializable for Rule {
     fn deserialize(buf: &[u8]) -> Result<(Self, &[u8]), DecodeError> {
-        let (inner, nfgenmsg, remaining_data) =
-            parse_object::<Self>(buf, NFT_MSG_NEWRULE, NFT_MSG_DELRULE)?;
+        let (mut obj, nfgenmsg, remaining_data) =
+            Self::parse_object(buf, NFT_MSG_NEWRULE, NFT_MSG_DELRULE)?;
+        obj.family = ProtocolFamily::try_from(nfgenmsg.nfgen_family as i32)?;
 
-        Ok((
-            Self {
-                inner,
-                family: ProtocolFamily::try_from(nfgenmsg.nfgen_family as i32)?,
-            },
-            remaining_data,
-        ))
+        Ok((obj, remaining_data))
     }
 }
 
 impl_attr_getters_and_setters!(
     Rule,
     [
-        (get_id, set_id, with_id, sys::NFTA_RULE_ID, U32, u32),
-        (get_handle, set_handle, with_handle, sys::NFTA_RULE_HANDLE, U64, u64),
+        (get_table, set_table, with_table, sys::NFTA_RULE_TABLE, table, String),
+        (get_chain, set_chain, with_chain, sys::NFTA_RULE_CHAIN, chain, String),
+        (get_handle, set_handle, with_handle, sys::NFTA_RULE_HANDLE, handle, u64),
+        (get_expressions, set_expressions, with_expressions, sys::NFTA_RULE_EXPRESSIONS, expressions, ExpressionList),
         // Sets the position of this rule within the chain it lives in. By default a new rule is added
         // to the end of the chain.
-        (get_position, set_position, with_position, sys::NFTA_RULE_POSITION, U64, u64),
-        (get_table, set_table, with_table, sys::NFTA_RULE_TABLE, String, String),
-        (get_chain, set_chain, with_chain, sys::NFTA_RULE_CHAIN, String, String),
+        (get_position, set_position, with_position, sys::NFTA_RULE_POSITION, position, u64),
         (
             get_userdata,
             set_userdata,
             with_userdata,
             sys::NFTA_RULE_USERDATA,
-            VecU8,
+            userdata,
             Vec<u8>
         ),
-        (get_expressions, set_expressions, with_expressions, sys::NFTA_RULE_EXPRESSIONS, ExpressionList, ExpressionList)
+        (get_id, set_id, with_id, sys::NFTA_RULE_ID, id, u32)
     ]
 );
 
-/*
-
-impl PartialEq for Rule {
-    fn eq(&self, other: &Self) -> bool {
-        if self.get_chain() != other.get_chain() {
-            return false;
-        }
-
-        unsafe {
-            if sys::nftnl_rule_is_set(self.rule, sys::NFTNL_RULE_HANDLE as u16)
-                && sys::nftnl_rule_is_set(other.rule, sys::NFTNL_RULE_HANDLE as u16)
-            {
-                if self.get_handle() != other.get_handle() {
-                    return false;
-                }
-            }
-            if sys::nftnl_rule_is_set(self.rule, sys::NFTNL_RULE_POSITION as u16)
-                && sys::nftnl_rule_is_set(other.rule, sys::NFTNL_RULE_POSITION as u16)
-            {
-                if self.get_position() != other.get_position() {
-                    return false;
-                }
-            }
-        }
-
-        return false;
-    }
-}
-
-unsafe impl NlMsg for Rule {
-    unsafe fn write(&self, buf: &mut Vec<u8>, seq: u32, msg_type: MsgType) {
-        let type_ = match msg_type {
-            MsgType::Add => libc::NFT_MSG_NEWRULE,
-            MsgType::Del => libc::NFT_MSG_DELRULE,
-        };
-        let flags: u16 = match msg_type {
-            MsgType::Add => (libc::NLM_F_CREATE | libc::NLM_F_APPEND | libc::NLM_F_EXCL) as u16,
-            MsgType::Del => 0u16,
-        } | libc::NLM_F_ACK as u16;
-        /*
-        let header = sys::nftnl_nlmsg_build_hdr(
-            buf as *mut c_char,
-            type_ as u16,
-            self.chain.get_table().get_family() as u16,
-            flags,
-            seq,
-        );
-        sys::nftnl_rule_nlmsg_build_payload(header, self.rule);
-        */
-    }
-}
-
-impl Drop for Rule {
-    fn drop(&mut self) {
-        unsafe { sys::nftnl_rule_free(self.rule) };
-    }
-}
-
-pub struct RuleExprsIter {
-    rule: Rc<Rule>,
-    iter: *mut sys::nftnl_expr_iter,
-}
-
-impl RuleExprsIter {
-    fn new(rule: Rc<Rule>) -> Self {
-        let iter =
-            try_alloc!(unsafe { sys::nftnl_expr_iter_create(rule.rule as *const sys::nftnl_rule) });
-        RuleExprsIter { rule, iter }
-    }
-}
-
-impl Iterator for RuleExprsIter {
-    type Item = ExpressionWrapper;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        let next = unsafe { sys::nftnl_expr_iter_next(self.iter) };
-        if next.is_null() {
-            trace!("RulesExprsIter iterator ending");
-            None
-        } else {
-            trace!("RulesExprsIter returning new expression");
-            Some(ExpressionWrapper {
-                expr: next,
-                rule: self.rule.clone(),
-            })
-        }
-    }
-}
-
-impl Drop for RuleExprsIter {
-    fn drop(&mut self) {
-        unsafe { sys::nftnl_expr_iter_destroy(self.iter) };
-    }
-}
-*/
+impl_nfnetlinkattribute!(inline : Rule, [
+        (sys::NFTA_RULE_TABLE, table),
+        (sys::NFTA_RULE_CHAIN, chain),
+        (sys::NFTA_RULE_HANDLE, handle),
+        (sys::NFTA_RULE_EXPRESSIONS, expressions),
+        (sys::NFTA_RULE_POSITION, position),
+        (
+            sys::NFTA_RULE_USERDATA,
+            userdata
+        ),
+        (sys::NFTA_RULE_ID, id)
+]);
 
 pub fn list_rules_for_chain(chain: &Chain) -> Result<Vec<Rule>, crate::query::Error> {
     let mut result = Vec::new();
@@ -338,7 +249,7 @@ pub fn list_rules_for_chain(chain: &Chain) -> Result<Vec<Rule>, crate::query::Er
             Ok(())
         },
         // only retrieve rules from the currently targetted chain
-        Some(&Rule::new(chain)?.raw_attributes()),
+        Some(&Rule::new(chain)?),
         &mut result,
     )?;
     Ok(result)

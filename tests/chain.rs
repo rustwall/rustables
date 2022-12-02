@@ -1,9 +1,14 @@
-mod sys;
-use rustables::{parser::get_operation_from_nlmsghdr_type, ChainType, Hook, HookClass, MsgType};
-use sys::*;
+use rustables::{
+    parser::get_operation_from_nlmsghdr_type,
+    sys::{
+        NFTA_CHAIN_HOOK, NFTA_CHAIN_NAME, NFTA_CHAIN_TABLE, NFTA_CHAIN_TYPE, NFTA_CHAIN_USERDATA,
+        NFTA_HOOK_HOOKNUM, NFTA_HOOK_PRIORITY, NFT_MSG_DELCHAIN, NFT_MSG_NEWCHAIN,
+    },
+    ChainType, Hook, HookClass, MsgType,
+};
 
-mod lib;
-use lib::*;
+mod common;
+use common::*;
 
 #[test]
 fn new_empty_chain() {

@@ -1,41 +1,34 @@
 use super::{Expression, ExpressionData, Register};
-use crate::create_expr_type;
+use crate::create_wrapper_type;
 use crate::parser::DecodeError;
 use crate::sys;
 
-create_expr_type!(
-    inline with_builder : Bitwise,
+create_wrapper_type!(
+    inline: Bitwise,
     [
-        (
-            get_dreg,
-            set_dreg,
-            with_dreg,
-            sys::NFTA_BITWISE_DREG,
-            Register,
-            Register
-        ),
         (
             get_sreg,
             set_sreg,
             with_sreg,
             sys::NFTA_BITWISE_SREG,
-            Register,
+            sreg,
             Register
         ),
         (
-            get_len,
-            set_len,
-            with_len,
-            sys::NFTA_BITWISE_LEN,
-            U32,
-            u32
+            get_dreg,
+            set_dreg,
+            with_dreg,
+            sys::NFTA_BITWISE_DREG,
+            dreg,
+            Register
         ),
+        (get_len, set_len, with_len, sys::NFTA_BITWISE_LEN, len, u32),
         (
             get_mask,
             set_mask,
             with_mask,
             sys::NFTA_BITWISE_MASK,
-            ExprData,
+            mask,
             ExpressionData
         ),
         (
@@ -43,7 +36,7 @@ create_expr_type!(
             set_xor,
             with_xor,
             sys::NFTA_BITWISE_XOR,
-            ExprData,
+            xor,
             ExpressionData
         )
     ]
@@ -64,11 +57,11 @@ impl Bitwise {
         if mask.len() != xor.len() {
             return Err(DecodeError::IncompatibleLength);
         }
-        Ok(Self::builder()
+        Ok(Bitwise::default()
             .with_sreg(Register::Reg1)
             .with_dreg(Register::Reg1)
             .with_len(mask.len() as u32)
-            .with_xor(ExpressionData::builder().with_value(xor))
-            .with_mask(ExpressionData::builder().with_value(mask)))
+            .with_xor(ExpressionData::default().with_value(xor))
+            .with_mask(ExpressionData::default().with_value(mask)))
     }
 }

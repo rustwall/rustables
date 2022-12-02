@@ -78,24 +78,10 @@ extern crate log;
 
 pub mod sys;
 use libc;
-use std::{convert::TryFrom, ffi::c_void, ops::Deref};
-
-macro_rules! try_alloc {
-    ($e:expr) => {{
-        let ptr = $e;
-        if ptr.is_null() {
-            // OOM, and the tried allocation was likely very small,
-            // so we are in a very tight situation. We do what libstd does, aborts.
-            std::process::abort();
-        }
-        ptr
-    }};
-}
+use std::convert::TryFrom;
 
 mod batch;
 pub use batch::{default_batch_page_size, Batch};
-
-pub mod expr;
 
 mod table;
 pub use table::list_tables;
@@ -116,6 +102,8 @@ pub mod parser;
 mod rule;
 pub use rule::list_rules_for_chain;
 pub use rule::Rule;
+
+pub mod expr;
 
 //mod rule_methods;
 //pub use rule_methods::{iface_index, Error as MatchError, Protocol, RuleMethods};
@@ -153,6 +141,12 @@ pub enum ProtocolFamily {
     Bridge = libc::NFPROTO_BRIDGE,
     Ipv6 = libc::NFPROTO_IPV6,
     DecNet = libc::NFPROTO_DECNET,
+}
+
+impl Default for ProtocolFamily {
+    fn default() -> Self {
+        Self::Unspec
+    }
 }
 
 impl TryFrom<i32> for ProtocolFamily {

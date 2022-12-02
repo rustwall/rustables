@@ -12,14 +12,13 @@ use std::net::Ipv6Addr;
 use std::slice::Iter;
 
 use super::rule::Rule;
+use crate::create_wrapper_type;
 use crate::nlmsg::AttributeDecoder;
 use crate::nlmsg::NfNetlinkAttribute;
-use crate::nlmsg::NfNetlinkAttributes;
 use crate::nlmsg::NfNetlinkDeserializable;
 use crate::parser::pad_netlink_object;
 use crate::parser::pad_netlink_object_with_variable_size;
 use crate::parser::write_attribute;
-use crate::parser::AttributeType;
 use crate::parser::DecodeError;
 use crate::parser::InnerFormat;
 use crate::sys::{self, nlattr};
@@ -52,10 +51,12 @@ pub use self::lookup::*;
 
 mod masquerade;
 pub use self::masquerade::*;
+*/
 
 mod meta;
 pub use self::meta::*;
 
+/*
 mod nat;
 pub use self::nat::*;
 
@@ -111,91 +112,15 @@ pub trait Expression {
     fn get_name() -> &'static str;
 }
 
-// wrapper for the general case, as we need to create many holder types given the depth of some
-// netlink expressions
-#[macro_export]
-macro_rules! create_expr_type {
-    (without_decoder : $struct:ident, [$(($getter_name:ident, $setter_name:ident, $in_place_edit_name:ident, $attr_name:expr, $internal_name:ident, $type:ty)),+]) => {
-        #[derive(Clone, PartialEq, Eq)]
-        pub struct $struct {
-            inner: $crate::nlmsg::NfNetlinkAttributes,
-        }
-
-
-        $crate::impl_attr_getters_and_setters!(without_decoder $struct, [$(($getter_name, $setter_name, $in_place_edit_name, $attr_name, $internal_name, $type)),+]);
-
-        impl std::fmt::Debug for $struct {
-            fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-                use $crate::parser::InnerFormat;
-                self.inner_format_struct(f.debug_struct(stringify!($struct)))?
-                    .finish()
-            }
-        }
-
-
-        impl $crate::nlmsg::NfNetlinkDeserializable for $struct {
-            fn deserialize(buf: &[u8]) -> Result<(Self, &[u8]), $crate::parser::DecodeError> {
-                let reader = $crate::parser::NfNetlinkAttributeReader::new(buf, buf.len())?;
-                let inner = reader.decode::<Self>()?;
-                Ok(($struct { inner }, &[]))
-            }
-        }
-
-    };
-    ($struct:ident, [$(($getter_name:ident, $setter_name:ident, $in_place_edit_name:ident, $attr_name:expr, $internal_name:ident, $type:ty)),+]) => {
-        create_expr_type!(without_decoder : $struct, [$(($getter_name, $setter_name, $in_place_edit_name, $attr_name, $internal_name, $type)),+]);
-        $crate::impl_attr_getters_and_setters!(decoder $struct, [$(($getter_name, $setter_name, $in_place_edit_name, $attr_name, $internal_name, $type)),+]);
-    };
-    (with_builder : $struct:ident, [$(($getter_name:ident, $setter_name:ident, $in_place_edit_name:ident, $attr_name:expr, $internal_name:ident, $type:ty)),+]) => {
-        create_expr_type!($struct, [$(($getter_name, $setter_name, $in_place_edit_name, $attr_name, $internal_name, $type)),+]);
-
-        impl $struct {
-            pub fn builder() -> Self {
-                Self { inner: $crate::nlmsg::NfNetlinkAttributes::new() }
-            }
-        }
-    };
-    (inline $($($attrs:ident) +)? :  $struct:ident, [$(($getter_name:ident, $setter_name:ident, $in_place_edit_name:ident, $attr_name:expr, $internal_name:ident, $type:ty)),+]) => {
-        create_expr_type!($($($attrs) + :)? $struct, [$(($getter_name, $setter_name, $in_place_edit_name, $attr_name, $internal_name, $type)),+]);
-
-        impl $crate::nlmsg::NfNetlinkAttribute for $struct {
-            fn get_size(&self) -> usize {
-                self.inner.get_size()
-            }
-
-            unsafe fn write_payload(&self, addr: *mut u8) {
-                self.inner.write_payload(addr)
-            }
-        }
-    };
-    (nested $($($attrs:ident) +)? : $struct:ident, [$(($getter_name:ident, $setter_name:ident, $in_place_edit_name:ident, $attr_name:expr, $internal_name:ident, $type:ty)),+]) => {
-        create_expr_type!($($($attrs) + :)? $struct, [$(($getter_name, $setter_name, $in_place_edit_name, $attr_name, $internal_name, $type)),+]);
-
-        impl $crate::nlmsg::NfNetlinkAttribute for $struct {
-            fn is_nested(&self) -> bool {
-                true
-            }
-
-            fn get_size(&self) -> usize {
-                self.inner.get_size()
-            }
-
-            unsafe fn write_payload(&self, addr: *mut u8) {
-                self.inner.write_payload(addr)
-            }
-        }
-    };
-}
-
-create_expr_type!(
-    nested without_decoder : ExpressionHolder, [
+create_wrapper_type!(
+    nested without_deser : RawExpression, [
     // Define the action netfilter will apply to packets processed by this chain, but that did not match any rules in it.
     (
         get_name,
         set_name,
         with_name,
         sys::NFTA_EXPR_NAME,
-        String,
+        name,
         String
     ),
     (
@@ -203,22 +128,20 @@ create_expr_type!(
         set_data,
         with_data,
         sys::NFTA_EXPR_DATA,
-        ExpressionVariant,
+        data,
         ExpressionVariant
     )
 ]);
 
-impl ExpressionHolder {
+impl RawExpression {
     pub fn new<T>(expr: T) -> Self
     where
         T: Expression,
         ExpressionVariant: From<T>,
     {
-        ExpressionHolder {
-            inner: NfNetlinkAttributes::new(),
-        }
-        .with_name(T::get_name())
-        .with_data(ExpressionVariant::from(expr))
+        RawExpression::default()
+            .with_name(T::get_name())
+            .with_data(ExpressionVariant::from(expr))
     }
 }
 
@@ -262,44 +185,45 @@ macro_rules! create_expr_variant {
             }
         )+
 
-        impl AttributeDecoder for ExpressionHolder {
+        impl $crate::nlmsg::AttributeDecoder for RawExpression {
             fn decode_attribute(
-                attrs: &NfNetlinkAttributes,
+                &mut self,
                 attr_type: u16,
                 buf: &[u8],
-            ) -> Result<AttributeType, DecodeError> {
+            ) -> Result<(), $crate::parser::DecodeError> {
                 debug!("Decoding attribute {} in an expression", attr_type);
                 match attr_type {
                     x if x == sys::NFTA_EXPR_NAME => {
                         debug!("Calling {}::deserialize()", std::any::type_name::<String>());
                         let (val, remaining) = String::deserialize(buf)?;
                         if remaining.len() != 0 {
-                            return Err(DecodeError::InvalidDataSize);
+                            return Err($crate::parser::DecodeError::InvalidDataSize);
                         }
-                        Ok(AttributeType::String(val))
+                        self.name = Some(val);
+                        Ok(())
                     },
                     x if x == sys::NFTA_EXPR_DATA => {
                         // we can assume we have already the name parsed, as that's how we identify the
                         // type of expression
-                        let name = attrs
-                            .get_attr(sys::NFTA_EXPR_NAME)
-                            .ok_or(DecodeError::MissingExpressionName)?;
+                        let name = self.name.as_ref()
+                            .ok_or($crate::parser::DecodeError::MissingExpressionName)?;
                         match name {
                             $(
-                                AttributeType::String(x) if x == <$type>::get_name() => {
+                                x if x == <$type>::get_name() => {
                                     debug!("Calling {}::deserialize()", std::any::type_name::<$type>());
                                     let (res, remaining) =  <$type>::deserialize(buf)?;
                                     if remaining.len() != 0 {
                                             return Err($crate::parser::DecodeError::InvalidDataSize);
                                     }
-                                    Ok(AttributeType::ExpressionVariant(ExpressionVariant::from(res)))
+                                    self.data = Some(ExpressionVariant::from(res));
+                                    Ok(())
                                 },
                             )+
-                            AttributeType::String(name) => {
+                            name => {
                                 info!("Unrecognized expression '{}', generating an ExpressionRaw", name);
-                                ExpressionRaw::deserialize(buf).map(|(res, _)| AttributeType::ExpressionVariant(ExpressionVariant::ExpressionRaw(res)))
-                            },
-                            _ => unreachable!()
+                                self.data = Some(ExpressionVariant::ExpressionRaw(ExpressionRaw::deserialize(buf)?.0));
+                                Ok(())
+                            }
                         }
                     },
                     _ => Err(DecodeError::UnsupportedAttributeType(attr_type)),
@@ -314,12 +238,13 @@ create_expr_variant!(
     [Log, Log],
     [Immediate, Immediate],
     [Bitwise, Bitwise],
-    [ExpressionRaw, ExpressionRaw]
+    [ExpressionRaw, ExpressionRaw],
+    [Meta, Meta]
 );
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct ExpressionList {
-    exprs: Vec<AttributeType>,
+    exprs: Vec<RawExpression>,
 }
 
 impl ExpressionList {
@@ -327,9 +252,9 @@ impl ExpressionList {
         Self { exprs: Vec::new() }
     }
 
-    /// Useful to add raw expressions because ExpressionHolder cannot infer alone its type
-    pub fn add_raw_expression(&mut self, e: ExpressionHolder) {
-        self.exprs.push(AttributeType::Expression(e));
+    /// Useful to add raw expressions because RawExpression cannot infer alone its type
+    pub fn add_raw_expression(&mut self, e: RawExpression) {
+        self.exprs.push(e);
     }
 
     pub fn add_expression<T>(&mut self, e: T)
@@ -337,8 +262,7 @@ impl ExpressionList {
         T: Expression,
         ExpressionVariant: From<T>,
     {
-        self.exprs
-            .push(AttributeType::Expression(ExpressionHolder::new(e)));
+        self.exprs.push(RawExpression::new(e));
     }
 
     pub fn with_expression<T>(mut self, e: T) -> Self
@@ -351,10 +275,7 @@ impl ExpressionList {
     }
 
     pub fn iter<'a>(&'a self) -> impl Iterator<Item = &'a ExpressionVariant> {
-        self.exprs.iter().map(|t| match t {
-            AttributeType::Expression(e) => e.get_data().unwrap(),
-            _ => unreachable!(),
-        })
+        self.exprs.iter().map(|e| e.get_data().unwrap())
     }
 }
 
@@ -392,13 +313,13 @@ impl NfNetlinkDeserializable for ExpressionList {
                 return Err(DecodeError::UnsupportedAttributeType(nla_type));
             }
 
-            let (expr, remaining) = ExpressionHolder::deserialize(
+            let (expr, remaining) = RawExpression::deserialize(
                 &buf[pos + pad_netlink_object::<nlattr>()..pos + nlattr.nla_len as usize],
             )?;
             if remaining.len() != 0 {
                 return Err(DecodeError::InvalidDataSize);
             }
-            exprs.push(AttributeType::Expression(expr));
+            exprs.push(expr);
 
             pos += pad_netlink_object_with_variable_size(nlattr.nla_len as usize);
         }
@@ -411,15 +332,27 @@ impl NfNetlinkDeserializable for ExpressionList {
     }
 }
 
-create_expr_type!(
-  nested with_builder : ExpressionData,
+impl<T> From<Vec<T>> for ExpressionList
+where
+    ExpressionVariant: From<T>,
+    T: Expression,
+{
+    fn from(v: Vec<T>) -> Self {
+        ExpressionList {
+            exprs: v.into_iter().map(RawExpression::new).collect(),
+        }
+    }
+}
+
+create_wrapper_type!(
+  nested : ExpressionData,
     [
         (
             get_value,
             set_value,
             with_value,
             sys::NFTA_DATA_VALUE,
-            VecU8,
+            value,
             Vec<u8>
         ),
         (
@@ -427,7 +360,7 @@ create_expr_type!(
             set_verdict,
             with_verdict,
             sys::NFTA_DATA_VERDICT,
-            ExprVerdictAttribute,
+            verdict,
             VerdictAttribute
         )
     ]
@@ -454,7 +387,7 @@ impl NfNetlinkDeserializable for ExpressionRaw {
 }
 
 // Because we loose the name of the expression when parsing, this is the only expression
-// where deserializing a message and the reserializing it alter its content
+// where deserializing a message and then reserializing it is invalid
 impl Expression for ExpressionRaw {
     fn get_name() -> &'static str {
         "unknown_expression"

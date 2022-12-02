@@ -4,7 +4,7 @@ use libc::{NF_ACCEPT, NF_DROP, NF_QUEUE};
 
 use super::{ExpressionData, Immediate, Register};
 use crate::{
-    create_expr_type,
+    create_wrapper_type,
     nlmsg::{NfNetlinkAttribute, NfNetlinkDeserializable},
     parser::DecodeError,
     sys::{self, NFT_BREAK, NFT_CONTINUE, NFT_GOTO, NFT_JUMP, NFT_RETURN},
@@ -53,15 +53,15 @@ impl NfNetlinkDeserializable for VerdictType {
     }
 }
 
-create_expr_type!(
-    nested with_builder : VerdictAttribute,
+create_wrapper_type!(
+    nested: VerdictAttribute,
     [
         (
             get_code,
             set_code,
             with_code,
             sys::NFTA_VERDICT_CODE,
-            ExprVerdictType,
+            code,
             VerdictType
         ),
         (
@@ -69,7 +69,7 @@ create_expr_type!(
             set_chain,
             with_chain,
             sys::NFTA_VERDICT_CHAIN,
-            String,
+            chain,
             String
         ),
         (
@@ -77,7 +77,7 @@ create_expr_type!(
             set_chain_id,
             with_chain_id,
             sys::NFTA_VERDICT_CHAIN_ID,
-            U32,
+            chain_id,
             u32
         )
     ]
@@ -113,12 +113,12 @@ impl Immediate {
             VerdictKind::Goto { .. } => VerdictType::Goto,
             VerdictKind::Return => VerdictType::Return,
         };
-        let mut data = VerdictAttribute::builder().with_code(code);
+        let mut data = VerdictAttribute::default().with_code(code);
         if let VerdictKind::Jump { chain } | VerdictKind::Goto { chain } = kind {
             data.set_chain(chain);
         }
-        Immediate::builder()
+        Immediate::default()
             .with_dreg(Register::Verdict)
-            .with_data(ExpressionData::builder().with_verdict(data))
+            .with_data(ExpressionData::default().with_verdict(data))
     }
 }

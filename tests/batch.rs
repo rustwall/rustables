@@ -1,27 +1,15 @@
-mod sys;
 use std::mem::size_of;
 
-use libc::AF_NETLINK;
-use libc::AF_UNIX;
-use libc::AF_UNSPEC;
-use libc::NFNL_MSG_BATCH_BEGIN;
-use libc::NLM_F_ACK;
-use libc::NLM_F_REQUEST;
+use libc::{AF_UNSPEC, NFNL_MSG_BATCH_BEGIN, NLM_F_REQUEST};
 use nix::libc::NFNL_MSG_BATCH_END;
+
 use rustables::nlmsg::NfNetlinkDeserializable;
-use rustables::nlmsg::NfNetlinkObject;
-use rustables::parser::pad_netlink_object;
-use rustables::parser::pad_netlink_object_with_variable_size;
-use rustables::parser::NlMsg;
-use rustables::parser::{get_operation_from_nlmsghdr_type, parse_nlmsg, parse_object};
-use rustables::sys::nfgenmsg;
-use rustables::sys::nlmsghdr;
-use rustables::sys::NFNETLINK_V0;
-use rustables::sys::NFNL_SUBSYS_NFTABLES;
+use rustables::parser::{pad_netlink_object_with_variable_size, parse_nlmsg, NlMsg};
+use rustables::sys::{nfgenmsg, nlmsghdr, NFNETLINK_V0, NFNL_SUBSYS_NFTABLES};
 use rustables::{Batch, MsgType, Table};
 
-mod lib;
-use lib::*;
+mod common;
+use common::*;
 
 const HEADER_SIZE: u32 =
     pad_netlink_object_with_variable_size(size_of::<nlmsghdr>() + size_of::<nfgenmsg>()) as u32;

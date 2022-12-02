@@ -1,12 +1,9 @@
-use std::{collections::BTreeMap, fmt::Debug, mem::size_of};
+use std::{fmt::Debug, mem::size_of};
 
 use crate::{
-    parser::{
-        pad_netlink_object, pad_netlink_object_with_variable_size, write_attribute, AttributeType,
-        DecodeError,
-    },
+    parser::{pad_netlink_object, pad_netlink_object_with_variable_size, DecodeError},
     sys::{
-        nfgenmsg, nlattr, nlmsghdr, NFNETLINK_V0, NFNL_MSG_BATCH_BEGIN, NFNL_MSG_BATCH_END,
+        nfgenmsg, nlmsghdr, NFNETLINK_V0, NFNL_MSG_BATCH_BEGIN, NFNL_MSG_BATCH_END,
         NFNL_SUBSYS_NFTABLES,
     },
     MsgType, ProtocolFamily,
@@ -88,11 +85,7 @@ impl<'a> NfNetlinkWriter<'a> {
 }
 
 pub trait AttributeDecoder {
-    fn decode_attribute(
-        attrs: &NfNetlinkAttributes,
-        attr_type: u16,
-        buf: &[u8],
-    ) -> Result<AttributeType, DecodeError>;
+    fn decode_attribute(&mut self, attr_type: u16, buf: &[u8]) -> Result<(), DecodeError>;
 }
 
 pub trait NfNetlinkDeserializable: Sized {
@@ -119,6 +112,7 @@ pub trait NfNetlinkAttribute: Debug + Sized {
     unsafe fn write_payload(&self, addr: *mut u8);
 }
 
+/*
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct NfNetlinkAttributes {
     pub attributes: BTreeMap<NetlinkType, AttributeType>,
@@ -170,3 +164,4 @@ impl NfNetlinkAttribute for NfNetlinkAttributes {
         }
     }
 }
+*/

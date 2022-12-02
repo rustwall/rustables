@@ -1,4 +1,13 @@
-use rustables::expr::{Bitwise, ExpressionList, Immediate, Register, VerdictKind};
+use rustables::{
+    expr::{Bitwise, ExpressionList, Immediate, Meta, MetaType, Register, VerdictKind},
+    sys::{
+        NFTA_BITWISE_DREG, NFTA_BITWISE_LEN, NFTA_BITWISE_MASK, NFTA_BITWISE_SREG,
+        NFTA_BITWISE_XOR, NFTA_DATA_VALUE, NFTA_DATA_VERDICT, NFTA_EXPR_DATA, NFTA_EXPR_NAME,
+        NFTA_IMMEDIATE_DATA, NFTA_IMMEDIATE_DREG, NFTA_LIST_ELEM, NFTA_META_DREG, NFTA_META_KEY,
+        NFTA_RULE_CHAIN, NFTA_RULE_EXPRESSIONS, NFTA_RULE_TABLE, NFTA_VERDICT_CODE,
+        NFT_META_PROTOCOL, NFT_REG_1, NFT_REG_VERDICT,
+    },
+};
 //use rustables::expr::{
 //    Bitwise, Cmp, CmpOp, Conntrack, Counter, Expression, HeaderField, IcmpCode, Immediate, Log,
 //    LogGroup, LogPrefix, Lookup, Meta, Nat, NatType, Payload, Register, Reject, TcpHeaderField,
@@ -11,12 +20,10 @@ use rustables::expr::{Bitwise, ExpressionList, Immediate, Register, VerdictKind}
 //use std::ffi::CStr;
 use std::net::Ipv4Addr;
 
-mod sys;
 use libc::NF_DROP;
-use sys::*;
 
-mod lib;
-use lib::*;
+mod common;
+use common::*;
 
 #[test]
 fn bitwise_expr_is_valid() {
@@ -341,44 +348,48 @@ fn immediate_expr_is_valid() {
 //    );
 //}
 //
-//#[test]
-//fn meta_expr_is_valid() {
-//    let meta = Meta::Protocol;
-//    let mut rule = get_test_rule();
-//    let (nlmsghdr, _nfgenmsg, raw_expr) = get_test_nlmsg_from_expr(&mut rule, &meta);
-//    assert_eq!(nlmsghdr.nlmsg_len, 92);
-//
-//    assert_eq!(
-//        raw_expr,
-//        NetlinkExpr::List(vec![
-//            NetlinkExpr::Final(NFTA_RULE_TABLE, TABLE_NAME.to_vec()),
-//            NetlinkExpr::Final(NFTA_RULE_CHAIN, CHAIN_NAME.to_vec()),
-//            NetlinkExpr::Nested(
-//                NFTA_RULE_EXPRESSIONS,
-//                vec![NetlinkExpr::Nested(
-//                    NFTA_LIST_ELEM,
-//                    vec![
-//                        NetlinkExpr::Final(NFTA_EXPR_NAME, b"meta\0".to_vec()),
-//                        NetlinkExpr::Nested(
-//                            NFTA_EXPR_DATA,
-//                            vec![
-//                                NetlinkExpr::Final(
-//                                    NFTA_META_KEY,
-//                                    NFT_META_PROTOCOL.to_be_bytes().to_vec()
-//                                ),
-//                                NetlinkExpr::Final(
-//                                    NFTA_META_DREG,
-//                                    NFT_REG_1.to_be_bytes().to_vec()
-//                                )
-//                            ]
-//                        )
-//                    ]
-//                )]
-//            )
-//        ])
-//        .to_raw()
-//    );
-//}
+#[test]
+fn meta_expr_is_valid() {
+    let meta = Meta::default()
+        .with_key(MetaType::Protocol)
+        .with_dreg(Register::Reg1);
+    let mut rule = get_test_rule().with_expressions(vec![meta]);
+
+    let mut buf = Vec::new();
+    let (nlmsghdr, _nfgenmsg, raw_expr) = get_test_nlmsg(&mut buf, &mut rule);
+    assert_eq!(nlmsghdr.nlmsg_len, 88);
+
+    assert_eq!(
+        raw_expr,
+        NetlinkExpr::List(vec![
+            NetlinkExpr::Final(NFTA_RULE_TABLE, TABLE_NAME.as_bytes().to_vec()),
+            NetlinkExpr::Final(NFTA_RULE_CHAIN, CHAIN_NAME.as_bytes().to_vec()),
+            NetlinkExpr::Nested(
+                NFTA_RULE_EXPRESSIONS,
+                vec![NetlinkExpr::Nested(
+                    NFTA_LIST_ELEM,
+                    vec![
+                        NetlinkExpr::Final(NFTA_EXPR_NAME, b"meta".to_vec()),
+                        NetlinkExpr::Nested(
+                            NFTA_EXPR_DATA,
+                            vec![
+                                NetlinkExpr::Final(
+                                    NFTA_META_KEY,
+                                    NFT_META_PROTOCOL.to_be_bytes().to_vec()
+                                ),
+                                NetlinkExpr::Final(
+                                    NFTA_META_DREG,
+                                    NFT_REG_1.to_be_bytes().to_vec()
+                                )
+                            ]
+                        )
+                    ]
+                )]
+            )
+        ])
+        .to_raw()
+    );
+}
 //
 //#[test]
 //fn nat_expr_is_valid() {

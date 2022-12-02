@@ -1,7 +1,7 @@
 use std::os::unix::prelude::RawFd;
 
 use crate::{
-    nlmsg::{NfNetlinkAttributes, NfNetlinkObject, NfNetlinkWriter},
+    nlmsg::{NfNetlinkAttribute, NfNetlinkObject, NfNetlinkWriter},
     parser::{nft_nlmsg_maxsize, pad_netlink_object_with_variable_size},
     sys::{nlmsgerr, NLM_F_DUMP, NLM_F_MULTI},
     ProtocolFamily,
@@ -152,10 +152,10 @@ where
 /// Returns a buffer containing a netlink message which requests a list of all the netfilter
 /// matching objects (e.g. tables, chains, rules, ...).
 /// Supply the type of objects to retrieve (e.g. libc::NFT_MSG_GETTABLE), and a search filter.
-pub fn get_list_of_objects(
+pub fn get_list_of_objects<T: NfNetlinkAttribute>(
     msg_type: u16,
     seq: u32,
-    filter: Option<&NfNetlinkAttributes>,
+    filter: Option<&T>,
 ) -> Result<Vec<u8>, Error> {
     let mut buffer = Vec::new();
     let mut writer = NfNetlinkWriter::new(&mut buffer);
@@ -167,7 +167,10 @@ pub fn get_list_of_objects(
         None,
     );
     if let Some(filter) = filter {
-        filter.serialize(&mut writer);
+        let buf = writer.add_data_zeroed(filter.get_size());
+        unsafe {
+            filter.write_payload(buf.as_mut_ptr());
+        }
     }
     writer.finalize_writing_object();
     Ok(buffer)
@@ -180,11 +183,11 @@ pub fn get_list_of_objects(
 pub fn list_objects_with_data<'a, Object, Accumulator>(
     data_type: u16,
     cb: &dyn Fn(Object, &mut Accumulator) -> Result<(), Error>,
-    filter: Option<&NfNetlinkAttributes>,
+    filter: Option<&Object>,
     working_data: &'a mut Accumulator,
 ) -> Result<(), Error>
 where
-    Object: NfNetlinkObject,
+    Object: NfNetlinkObject + NfNetlinkAttribute,
 {
     debug!("Listing objects of kind {}", data_type);
     let sock = socket::socket(

@@ -9,10 +9,9 @@ use std::{
 use thiserror::Error;
 
 use crate::{
-    expr::ExpressionHolder,
+    //expr::ExpressionHolder,
     nlmsg::{
-        AttributeDecoder, NetlinkType, NfNetlinkAttribute, NfNetlinkAttributes,
-        NfNetlinkDeserializable, NfNetlinkWriter,
+        AttributeDecoder, NetlinkType, NfNetlinkAttribute, NfNetlinkDeserializable, NfNetlinkWriter,
     },
     sys::{
         nfgenmsg, nlattr, nlmsgerr, nlmsghdr, NFNETLINK_V0, NFNL_MSG_BATCH_BEGIN,
@@ -65,6 +64,9 @@ pub enum DecodeError {
 
     #[error("Invalid policy for a chain")]
     UnknownChainPolicy,
+
+    #[error("Unknown type for a Meta expression")]
+    UnknownMetaType(u32),
 
     #[error("Invalid value for a register")]
     UnknownRegisterValue,
@@ -208,7 +210,11 @@ pub fn parse_nlmsg<'a>(buf: &'a [u8]) -> Result<(nlmsghdr, NlMsg<'a>), DecodeErr
 
 /// Write the attribute, preceded by a `libc::nlattr`
 // rewrite of `mnl_attr_put`
-pub unsafe fn write_attribute<'a>(ty: NetlinkType, obj: &AttributeType, mut buf: *mut u8) {
+pub unsafe fn write_attribute<'a>(
+    ty: NetlinkType,
+    obj: &impl NfNetlinkAttribute,
+    mut buf: *mut u8,
+) {
     let header_len = pad_netlink_object::<libc::nlattr>();
     // copy the header
     *(buf as *mut nlattr) = nlattr {
@@ -296,7 +302,6 @@ impl NfNetlinkDeserializable for u64 {
     }
 }
 
-// TODO: safe handling for null-delimited strings
 impl NfNetlinkAttribute for String {
     fn get_size(&self) -> usize {
         self.len()
@@ -346,120 +351,40 @@ impl NfNetlinkDeserializable for ProtocolFamily {
     }
 }
 
-pub struct NfNetlinkAttributeReader<'a> {
-    buf: &'a [u8],
-    pos: usize,
-    remaining_size: usize,
-    attrs: NfNetlinkAttributes,
-}
+pub(crate) fn read_attributes<T: AttributeDecoder + Default>(buf: &[u8]) -> Result<T, DecodeError> {
+    debug!(
+        "Calling <{} as NfNetlinkDeserialize>::deserialize()",
+        std::any::type_name::<T>()
+    );
+    let mut remaining_size = buf.len();
+    let mut pos = 0;
+    let mut res = T::default();
+    while remaining_size > pad_netlink_object::<nlattr>() {
+        let nlattr = unsafe { *transmute::<*const u8, *const nlattr>(buf[pos..].as_ptr()) };
+        // ignore the byteorder and nested attributes
+        let nla_type = nlattr.nla_type & NLA_TYPE_MASK as u16;
 
-impl<'a> NfNetlinkAttributeReader<'a> {
-    pub fn new(buf: &'a [u8], remaining_size: usize) -> Result<Self, DecodeError> {
-        if buf.len() < remaining_size {
-            return Err(DecodeError::BufTooSmall);
+        pos += pad_netlink_object::<nlattr>();
+        let attr_remaining_size = nlattr.nla_len as usize - pad_netlink_object::<nlattr>();
+        match T::decode_attribute(&mut res, nla_type, &buf[pos..pos + attr_remaining_size]) {
+            Ok(()) => {}
+            Err(DecodeError::UnsupportedAttributeType(t)) => info!(
+                "Ignoring unsupported attribute type {} for type {}",
+                t,
+                std::any::type_name::<T>()
+            ),
+            Err(e) => return Err(e),
         }
+        pos += pad_netlink_object_with_variable_size(attr_remaining_size);
 
-        Ok(Self {
-            buf,
-            pos: 0,
-            remaining_size,
-            attrs: NfNetlinkAttributes::new(),
-        })
+        remaining_size -= pad_netlink_object_with_variable_size(nlattr.nla_len as usize);
     }
 
-    pub fn get_raw_data(&self) -> &'a [u8] {
-        &self.buf[self.pos..]
+    if remaining_size != 0 {
+        Err(DecodeError::InvalidDataSize)
+    } else {
+        Ok(res)
     }
-
-    pub fn decode<T: AttributeDecoder + 'static>(
-        mut self,
-    ) -> Result<NfNetlinkAttributes, DecodeError> {
-        debug!(
-            "Calling NfNetlinkAttributeReader::decode() on {}",
-            std::any::type_name::<T>()
-        );
-        while self.remaining_size > pad_netlink_object::<nlattr>() {
-            let nlattr =
-                unsafe { *transmute::<*const u8, *const nlattr>(self.buf[self.pos..].as_ptr()) };
-            // ignore the byteorder and nested attributes
-            let nla_type = nlattr.nla_type & NLA_TYPE_MASK as u16;
-
-            self.pos += pad_netlink_object::<nlattr>();
-            let attr_remaining_size = nlattr.nla_len as usize - pad_netlink_object::<nlattr>();
-            match T::decode_attribute(
-                &self.attrs,
-                nla_type,
-                &self.buf[self.pos..self.pos + attr_remaining_size],
-            ) {
-                Ok(x) => self.attrs.set_attr(nla_type, x),
-                Err(DecodeError::UnsupportedAttributeType(t)) => info!(
-                    "Ignoring unsupported attribute type {} for type {}",
-                    t,
-                    std::any::type_name::<T>()
-                ),
-                Err(e) => return Err(e),
-            }
-            self.pos += pad_netlink_object_with_variable_size(attr_remaining_size);
-
-            self.remaining_size -= pad_netlink_object_with_variable_size(nlattr.nla_len as usize);
-        }
-
-        if self.remaining_size != 0 {
-            Err(DecodeError::InvalidDataSize)
-        } else {
-            Ok(self.attrs)
-        }
-    }
-}
-
-#[macro_export]
-macro_rules! impl_attribute_holder {
-    ($enum_name:ident, $([$internal_name:ident, $type:ty]),+) => {
-        #[derive(Debug, Clone, PartialEq, Eq)]
-        pub enum $enum_name {
-            $(
-                $internal_name($type),
-            )+
-        }
-
-        impl NfNetlinkAttribute for $enum_name {
-            fn is_nested(&self) -> bool {
-                match self {
-                    $(
-                        $enum_name::$internal_name(val) => val.is_nested()
-                    ),+
-                }
-            }
-
-            fn get_size(&self) -> usize {
-                 match self {
-                    $(
-                        $enum_name::$internal_name(val) => val.get_size()
-                    ),+
-                 }
-            }
-
-            unsafe fn write_payload(&self, addr: *mut u8) {
-                match self {
-                    $(
-                        $enum_name::$internal_name(val) => val.write_payload(addr)
-                    ),+
-                 }
-            }
-        }
-
-        impl $enum_name {
-            $(
-                #[allow(non_snake_case)]
-                pub fn $internal_name(&self) -> Option<&$type> {
-                    match self {
-                        $enum_name::$internal_name(val) => Some(val),
-                        _ => None
-                    }
-                }
-            )+
-        }
-    };
 }
 
 pub trait InnerFormat {
@@ -469,49 +394,24 @@ pub trait InnerFormat {
     ) -> Result<DebugStruct<'a, 'b>, std::fmt::Error>;
 }
 
-impl_attribute_holder!(
-    AttributeType,
-    [String, String],
-    [U8, u8],
-    [U16, u16],
-    [I32, i32],
-    [U32, u32],
-    [U64, u64],
-    [VecU8, Vec<u8>],
-    [ChainHook, crate::chain::Hook],
-    [ChainPolicy, crate::chain::ChainPolicy],
-    [ChainType, crate::chain::ChainType],
-    [ProtocolFamily, crate::ProtocolFamily],
-    [Expression, crate::expr::ExpressionHolder],
-    [ExpressionVariant, crate::expr::ExpressionVariant],
-    [ExpressionList, crate::expr::ExpressionList],
-    [ExprLog, crate::expr::Log],
-    [ExprImmediate, crate::expr::Immediate],
-    [ExprData, crate::expr::ExpressionData],
-    [ExprVerdictAttribute, crate::expr::VerdictAttribute],
-    [ExprVerdictType, crate::expr::VerdictType],
-    [Register, crate::expr::Register],
-    [ExprRaw, crate::expr::ExpressionRaw]
-);
-
 #[macro_export]
 macro_rules! impl_attr_getters_and_setters {
-    (without_decoder $struct:ident, [$(($getter_name:ident, $setter_name:ident, $in_place_edit_name:ident, $attr_name:expr, $internal_name:ident, $type:ty)),+]) => {
+    (without_deser $struct:ident, [$(($getter_name:ident, $setter_name:ident, $in_place_edit_name:ident, $attr_name:expr, $internal_name:ident, $type:ty)),+]) => {
         impl $struct {
             $(
                 #[allow(dead_code)]
                 pub fn $getter_name(&self) -> Option<&$type> {
-                    self.inner.get_attr($attr_name as $crate::nlmsg::NetlinkType).map(|x| x.$internal_name()).flatten()
+                    self.$internal_name.as_ref()
                 }
 
                 #[allow(dead_code)]
                 pub fn $setter_name(&mut self, val: impl Into<$type>) {
-                    self.inner.set_attr($attr_name as $crate::nlmsg::NetlinkType, $crate::parser::AttributeType::$internal_name(val.into()));
+                    self.$internal_name = Some(val.into());
                 }
 
                 #[allow(dead_code)]
                 pub fn $in_place_edit_name(mut self, val: impl Into<$type>) -> Self {
-                    self.inner.set_attr($attr_name as $crate::nlmsg::NetlinkType, $crate::parser::AttributeType::$internal_name(val.into()));
+                    self.$internal_name = Some(val.into());
                     self
                 }
 
@@ -540,10 +440,10 @@ macro_rules! impl_attr_getters_and_setters {
         }
 
     };
-    (decoder $struct:ident, [$(($getter_name:ident, $setter_name:ident, $in_place_edit_name:ident, $attr_name:expr, $internal_name:ident, $type:ty)),+]) => {
+    (deser $struct:ident, [$(($getter_name:ident, $setter_name:ident, $in_place_edit_name:ident, $attr_name:expr, $internal_name:ident, $type:ty)),+]) => {
         impl $crate::nlmsg::AttributeDecoder for $struct {
             #[allow(dead_code)]
-            fn decode_attribute(_attrs: &$crate::nlmsg::NfNetlinkAttributes, attr_type: u16, buf: &[u8]) -> Result<$crate::parser::AttributeType, $crate::parser::DecodeError> {
+            fn decode_attribute(&mut self, attr_type: u16, buf: &[u8]) -> Result<(), $crate::parser::DecodeError> {
                 use $crate::nlmsg::NfNetlinkDeserializable;
                 debug!("Decoding attribute {} in type {}", attr_type, std::any::type_name::<$struct>());
                 match attr_type {
@@ -554,7 +454,8 @@ macro_rules! impl_attr_getters_and_setters {
                             if remaining.len() != 0 {
                                 return Err($crate::parser::DecodeError::InvalidDataSize);
                             }
-                            Ok($crate::parser::AttributeType::$internal_name(val))
+                            self.$setter_name(val);
+                            Ok(())
                         },
                     )+
                     _ => Err($crate::parser::DecodeError::UnsupportedAttributeType(attr_type)),
@@ -563,39 +464,168 @@ macro_rules! impl_attr_getters_and_setters {
         }
     };
     ($struct:ident, [$(($getter_name:ident, $setter_name:ident, $in_place_edit_name:ident, $attr_name:expr, $internal_name:ident, $type:ty)),+]) => {
-        $crate::impl_attr_getters_and_setters!(without_decoder $struct, [$(($getter_name, $setter_name, $in_place_edit_name, $attr_name, $internal_name, $type)),+]);
-        $crate::impl_attr_getters_and_setters!(decoder $struct, [$(($getter_name, $setter_name, $in_place_edit_name, $attr_name, $internal_name, $type)),+]);
+        $crate::impl_attr_getters_and_setters!(without_deser $struct, [$(($getter_name, $setter_name, $in_place_edit_name, $attr_name, $internal_name, $type)),+]);
+        $crate::impl_attr_getters_and_setters!(deser $struct, [$(($getter_name, $setter_name, $in_place_edit_name, $attr_name, $internal_name, $type)),+]);
     };
 }
 
-pub fn parse_object<T: AttributeDecoder + 'static>(
-    buf: &[u8],
-    add_obj: u32,
-    del_obj: u32,
-) -> Result<(NfNetlinkAttributes, nfgenmsg, &[u8]), DecodeError> {
-    debug!("parse_object() running");
-    let (hdr, msg) = parse_nlmsg(buf)?;
+pub trait Parsable
+where
+    Self: Sized,
+{
+    fn parse_object(
+        buf: &[u8],
+        add_obj: u32,
+        del_obj: u32,
+    ) -> Result<(Self, nfgenmsg, &[u8]), DecodeError>;
+}
 
-    let op = get_operation_from_nlmsghdr_type(hdr.nlmsg_type) as u32;
+impl<T> Parsable for T
+where
+    T: AttributeDecoder + Default + Sized,
+{
+    fn parse_object(
+        buf: &[u8],
+        add_obj: u32,
+        del_obj: u32,
+    ) -> Result<(Self, nfgenmsg, &[u8]), DecodeError> {
+        debug!("parse_object() started");
+        let (hdr, msg) = parse_nlmsg(buf)?;
 
-    if op != add_obj && op != del_obj {
-        return Err(DecodeError::UnexpectedType(hdr.nlmsg_type));
-    }
+        let op = get_operation_from_nlmsghdr_type(hdr.nlmsg_type) as u32;
 
-    let obj_size = hdr.nlmsg_len as usize
-        - pad_netlink_object_with_variable_size(size_of::<nlmsghdr>() + size_of::<nfgenmsg>());
-
-    let remaining_data_offset = pad_netlink_object_with_variable_size(hdr.nlmsg_len as usize);
-    let remaining_data = &buf[remaining_data_offset..];
-
-    let (nfgenmsg, attrs) = match msg {
-        NlMsg::NfGenMsg(nfgenmsg, content) => {
-            (nfgenmsg, NfNetlinkAttributeReader::new(content, obj_size)?)
+        if op != add_obj && op != del_obj {
+            return Err(DecodeError::UnexpectedType(hdr.nlmsg_type));
         }
-        _ => return Err(DecodeError::UnexpectedType(hdr.nlmsg_type)),
+
+        let obj_size = hdr.nlmsg_len as usize
+            - pad_netlink_object_with_variable_size(size_of::<nlmsghdr>() + size_of::<nfgenmsg>());
+
+        let remaining_data_offset = pad_netlink_object_with_variable_size(hdr.nlmsg_len as usize);
+        let remaining_data = &buf[remaining_data_offset..];
+
+        let (nfgenmsg, res) = match msg {
+            NlMsg::NfGenMsg(nfgenmsg, content) => {
+                (nfgenmsg, read_attributes(&content[..obj_size])?)
+            }
+            _ => return Err(DecodeError::UnexpectedType(hdr.nlmsg_type)),
+        };
+
+        Ok((res, nfgenmsg, remaining_data))
+    }
+}
+
+#[macro_export]
+macro_rules! impl_nfnetlinkattribute {
+    (__inner : $struct:ident, [$(($attr_name:expr, $internal_name:ident)),+]) => {
+        impl $struct {
+            fn inner_get_size(&self) -> usize {
+                use $crate::nlmsg::NfNetlinkAttribute;
+                use $crate::parser::{pad_netlink_object, pad_netlink_object_with_variable_size};
+                use $crate::sys::nlattr;
+                let mut size = 0;
+
+                $(
+                    if let Some(val) = &self.$internal_name {
+                        // Attribute header + attribute value
+                        size += pad_netlink_object::<nlattr>()
+                            + pad_netlink_object_with_variable_size(val.get_size());
+                    }
+                )+
+
+                size
+            }
+
+            unsafe fn inner_write_payload(&self, mut addr: *mut u8) {
+                use $crate::nlmsg::NfNetlinkAttribute;
+                use $crate::parser::{pad_netlink_object, pad_netlink_object_with_variable_size};
+                use $crate::sys::nlattr;
+                $(
+                    if let Some(val) = &self.$internal_name {
+                        debug!("writing attribute {} - {:?}", $attr_name, val);
+
+                        unsafe {
+                            $crate::parser::write_attribute($attr_name, val, addr);
+                        }
+                        let size = pad_netlink_object::<nlattr>()
+                            + pad_netlink_object_with_variable_size(val.get_size());
+                        #[allow(unused)]
+                        {
+                            addr = addr.offset(size as isize);
+                        }
+                    }
+                )+
+            }
+        }
     };
+    (inline : $struct:ident, [$(($attr_name:expr, $internal_name:ident)),+]) => {
+        $crate::impl_nfnetlinkattribute!(__inner : $struct, [$(($attr_name, $internal_name)),+]);
 
-    let inner = attrs.decode::<T>()?;
+        impl $crate::nlmsg::NfNetlinkAttribute for $struct {
+            fn get_size(&self) -> usize {
+                self.inner_get_size()
+            }
 
-    Ok((inner, nfgenmsg, remaining_data))
+            unsafe fn write_payload(&self, addr: *mut u8) {
+                self.inner_write_payload(addr);
+            }
+        }
+    };
+    (nested : $struct:ident, [$(($attr_name:expr, $internal_name:ident)),+]) => {
+        $crate::impl_nfnetlinkattribute!(__inner : $struct, [$(($attr_name, $internal_name)),+]);
+
+        impl $crate::nlmsg::NfNetlinkAttribute for $struct {
+            fn is_nested(&self) -> bool {
+                true
+            }
+
+            fn get_size(&self) -> usize {
+                self.inner_get_size()
+            }
+
+            unsafe fn write_payload(&self, addr: *mut u8) {
+                self.inner_write_payload(addr);
+            }
+        }
+    };
+}
+
+#[macro_export]
+macro_rules! create_wrapper_type {
+    (without_deser : $struct:ident, [$(($getter_name:ident, $setter_name:ident, $in_place_edit_name:ident, $attr_name:expr, $internal_name:ident, $type:ty)),+]) => {
+        #[derive(Clone, PartialEq, Eq, Default)]
+        pub struct $struct {
+            $(
+                $internal_name: Option<$type>
+            ),+
+        }
+
+        $crate::impl_attr_getters_and_setters!(without_deser $struct, [$(($getter_name, $setter_name, $in_place_edit_name, $attr_name, $internal_name, $type)),+]);
+
+        impl std::fmt::Debug for $struct {
+            fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                use $crate::parser::InnerFormat;
+                self.inner_format_struct(f.debug_struct(stringify!($struct)))?
+                    .finish()
+            }
+        }
+
+        impl $crate::nlmsg::NfNetlinkDeserializable for $struct {
+            fn deserialize(buf: &[u8]) -> Result<(Self, &[u8]), $crate::parser::DecodeError> {
+                Ok(($crate::parser::read_attributes(buf)?, &[]))
+            }
+        }
+    };
+    ($struct:ident, [$(($getter_name:ident, $setter_name:ident, $in_place_edit_name:ident, $attr_name:expr, $internal_name:ident, $type:ty)),+]) => {
+        create_wrapper_type!(without_deser : $struct, [$(($getter_name, $setter_name, $in_place_edit_name, $attr_name, $internal_name, $type)),+]);
+        $crate::impl_attr_getters_and_setters!(deser $struct, [$(($getter_name, $setter_name, $in_place_edit_name, $attr_name, $internal_name, $type)),+]);
+    };
+    (inline $($($attrs:ident) +)? :  $struct:ident, [$(($getter_name:ident, $setter_name:ident, $in_place_edit_name:ident, $attr_name:expr, $internal_name:ident, $type:ty)),+]) => {
+        create_wrapper_type!($($($attrs) + :)? $struct, [$(($getter_name, $setter_name, $in_place_edit_name, $attr_name, $internal_name, $type)),+]);
+        $crate::impl_nfnetlinkattribute!(inline : $struct, [$(($attr_name, $internal_name)),+]);
+    };
+    (nested $($($attrs:ident) +)? : $struct:ident, [$(($getter_name:ident, $setter_name:ident, $in_place_edit_name:ident, $attr_name:expr, $internal_name:ident, $type:ty)),+]) => {
+        create_wrapper_type!($($($attrs) + :)? $struct, [$(($getter_name, $setter_name, $in_place_edit_name, $attr_name, $internal_name, $type)),+]);
+        $crate::impl_nfnetlinkattribute!(nested : $struct, [$(($attr_name, $internal_name)),+]);
+    };
 }

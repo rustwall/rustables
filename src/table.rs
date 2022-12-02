@@ -1,62 +1,33 @@
 use std::convert::TryFrom;
 use std::fmt::Debug;
 
-use crate::nlmsg::{
-    NfNetlinkAttributes, NfNetlinkDeserializable, NfNetlinkObject, NfNetlinkWriter,
-};
-use crate::parser::{parse_object, DecodeError, InnerFormat};
+use crate::nlmsg::{NfNetlinkAttribute, NfNetlinkDeserializable, NfNetlinkObject, NfNetlinkWriter};
+use crate::parser::Parsable;
+use crate::parser::{DecodeError, InnerFormat};
 use crate::sys::{
-    self, NFNL_SUBSYS_NFTABLES, NFTA_OBJ_TABLE, NFTA_TABLE_FLAGS, NFTA_TABLE_NAME,
-    NFT_MSG_DELTABLE, NFT_MSG_GETTABLE, NFT_MSG_NEWTABLE, NLM_F_ACK, NLM_F_CREATE,
+    self, NFT_MSG_DELTABLE, NFT_MSG_GETTABLE, NFT_MSG_NEWTABLE, NLM_F_ACK, NLM_F_CREATE,
 };
-use crate::{impl_attr_getters_and_setters, MsgType, ProtocolFamily};
+use crate::{impl_attr_getters_and_setters, impl_nfnetlinkattribute, MsgType, ProtocolFamily};
 
 /// Abstraction of a `nftnl_table`, the top level container in netfilter. A table has a protocol
 /// family and contains [`Chain`]s that in turn hold the rules.
 ///
 /// [`Chain`]: struct.Chain.html
-#[derive(PartialEq, Eq)]
+#[derive(Default, PartialEq, Eq)]
 pub struct Table {
-    inner: NfNetlinkAttributes,
-    family: ProtocolFamily,
+    flags: Option<u32>,
+    name: Option<String>,
+    userdata: Option<Vec<u8>>,
+    pub family: ProtocolFamily,
 }
 
 impl Table {
     pub fn new(family: ProtocolFamily) -> Table {
-        Table {
-            inner: NfNetlinkAttributes::new(),
-            family,
-        }
-    }
-
-    pub fn get_family(&self) -> ProtocolFamily {
-        self.family
-    }
-
-    /*
-    /// Returns a textual description of the table.
-    pub fn get_str(&self) -> CString {
-        let mut descr_buf = vec![0i8; 4096];
-        unsafe {
-            sys::nftnl_table_snprintf(
-                descr_buf.as_mut_ptr() as *mut c_char,
-                (descr_buf.len() - 1) as u64,
-                self.table,
-                sys::NFTNL_OUTPUT_DEFAULT,
-                0,
-            );
-            CStr::from_ptr(descr_buf.as_ptr() as *mut c_char).to_owned()
-        }
-    }
-    */
-}
-/*
-impl PartialEq for Table {
-    fn eq(&self, other: &Self) -> bool {
-        self.get_name() == other.get_name() && self.family == other.family
+        let mut res = Self::default();
+        res.family = family;
+        res
     }
 }
-*/
 
 impl Debug for Table {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -83,39 +54,46 @@ impl NfNetlinkObject for Table {
             seq,
             None,
         );
-        self.inner.serialize(writer);
+        let buf = writer.add_data_zeroed(self.get_size());
+        unsafe {
+            self.write_payload(buf.as_mut_ptr());
+        }
         writer.finalize_writing_object();
     }
 }
 
 impl NfNetlinkDeserializable for Table {
     fn deserialize(buf: &[u8]) -> Result<(Self, &[u8]), DecodeError> {
-        let (inner, nfgenmsg, remaining_data) =
-            parse_object::<Self>(buf, NFT_MSG_NEWTABLE, NFT_MSG_DELTABLE)?;
+        let (mut obj, nfgenmsg, remaining_data) =
+            Self::parse_object(buf, NFT_MSG_NEWTABLE, NFT_MSG_DELTABLE)?;
+        obj.family = ProtocolFamily::try_from(nfgenmsg.nfgen_family as i32)?;
 
-        Ok((
-            Self {
-                inner,
-                family: ProtocolFamily::try_from(nfgenmsg.nfgen_family as i32)?,
-            },
-            remaining_data,
-        ))
+        Ok((obj, remaining_data))
     }
 }
 
 impl_attr_getters_and_setters!(
     Table,
     [
-        (get_flags, set_flags, with_flags, sys::NFTA_TABLE_FLAGS, U32, u32),
-        (get_name, set_name, with_name, sys::NFTA_TABLE_NAME, String, String),
+        (get_name, set_name, with_name, sys::NFTA_TABLE_NAME, name, String),
+        (get_flags, set_flags, with_flags, sys::NFTA_TABLE_FLAGS, flags, u32),
         (
             get_userdata,
             set_userdata,
             with_userdata,
             sys::NFTA_TABLE_USERDATA,
-            VecU8,
+            userdata,
             Vec<u8>
         )
+    ]
+);
+
+impl_nfnetlinkattribute!(
+    inline : Table,
+    [
+        (sys::NFTA_TABLE_NAME, name),
+        (sys::NFTA_TABLE_FLAGS, flags),
+        (sys::NFTA_TABLE_USERDATA, userdata)
     ]
 );
 

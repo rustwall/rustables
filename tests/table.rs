@@ -1,13 +1,12 @@
-mod sys;
 use rustables::{
     nlmsg::NfNetlinkDeserializable,
     parser::{get_operation_from_nlmsghdr_type, nft_nlmsg_maxsize},
+    sys::{NFT_MSG_DELTABLE, NFT_MSG_NEWTABLE},
     MsgType, Table,
 };
-use sys::*;
 
-mod lib;
-use lib::*;
+mod common;
+use common::*;
 
 #[test]
 fn new_empty_table() {
