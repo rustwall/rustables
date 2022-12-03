@@ -25,9 +25,11 @@ pub use self::bitwise::*;
 /*
 mod cmp;
 pub use self::cmp::*;
+*/
 
 mod counter;
 pub use self::counter::*;
+/*
 
 pub mod ct;
 pub use self::ct::*;
@@ -222,7 +224,8 @@ create_expr_variant!(
     [Bitwise, Bitwise],
     [ExpressionRaw, ExpressionRaw],
     [Meta, Meta],
-    [Reject, Reject]
+    [Reject, Reject],
+    [Counter, Counter]
 );
 
 #[derive(Debug, Clone, PartialEq, Eq, Default)]

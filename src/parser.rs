@@ -1,5 +1,4 @@
 use std::{
-    any::TypeId,
     convert::TryFrom,
     fmt::{Debug, DebugStruct},
     mem::{size_of, transmute},
@@ -9,10 +8,7 @@ use std::{
 use thiserror::Error;
 
 use crate::{
-    //expr::ExpressionHolder,
-    nlmsg::{
-        AttributeDecoder, NetlinkType, NfNetlinkAttribute, NfNetlinkDeserializable, NfNetlinkWriter,
-    },
+    nlmsg::{AttributeDecoder, NetlinkType, NfNetlinkAttribute, NfNetlinkDeserializable},
     sys::{
         nfgenmsg, nlattr, nlmsgerr, nlmsghdr, NFNETLINK_V0, NFNL_MSG_BATCH_BEGIN,
         NFNL_MSG_BATCH_END, NFNL_SUBSYS_NFTABLES, NLA_F_NESTED, NLA_TYPE_MASK, NLMSG_ALIGNTO,
@@ -75,10 +71,10 @@ pub enum DecodeError {
     UnknownIcmpCode(u8),
 
     #[error("Invalid value for a register")]
-    UnknownRegisterValue,
+    UnknownRegister(u32),
 
     #[error("Invalid type for a verdict expression")]
-    UnknownExpressionVerdictType,
+    UnknownVerdictType(i32),
 
     #[error("The object does not contain a name for the expression being parsed")]
     MissingExpressionName,

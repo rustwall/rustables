@@ -1,15 +1,11 @@
-use rustables_macros::nfnetlink_struct;
+use rustables_macros::{nfnetlink_enum, nfnetlink_struct};
 
 use super::{Expression, Register};
-use crate::{
-    nlmsg::{NfNetlinkAttribute, NfNetlinkDeserializable},
-    parser::DecodeError,
-    sys,
-};
+use crate::sys;
 
 /// A meta expression refers to meta data associated with a packet.
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
-#[repr(u32)]
+#[nfnetlink_enum(u32)]
 #[non_exhaustive]
 pub enum MetaType {
     /// Packet ethertype protocol (skb->protocol), invalid in OUTPUT.
@@ -40,42 +36,6 @@ pub enum MetaType {
     Cgroup = sys::NFT_META_CGROUP,
     /// A 32bit pseudo-random number.
     PRandom = sys::NFT_META_PRANDOM,
-}
-
-impl NfNetlinkAttribute for MetaType {
-    fn get_size(&self) -> usize {
-        (*self as u32).get_size()
-    }
-
-    unsafe fn write_payload(&self, addr: *mut u8) {
-        (*self as u32).write_payload(addr);
-    }
-}
-
-impl NfNetlinkDeserializable for MetaType {
-    fn deserialize(buf: &[u8]) -> Result<(Self, &[u8]), DecodeError> {
-        let (v, remaining_data) = u32::deserialize(buf)?;
-        Ok((
-            match v {
-                sys::NFT_META_PROTOCOL => Self::Protocol,
-                sys::NFT_META_MARK => Self::Mark,
-                sys::NFT_META_IIF => Self::Iif,
-                sys::NFT_META_OIF => Self::Oif,
-                sys::NFT_META_IIFNAME => Self::IifName,
-                sys::NFT_META_OIFNAME => Self::OifName,
-                sys::NFT_META_IFTYPE => Self::IifType,
-                sys::NFT_META_OIFTYPE => Self::OifType,
-                sys::NFT_META_SKUID => Self::SkUid,
-                sys::NFT_META_SKGID => Self::SkGid,
-                sys::NFT_META_NFPROTO => Self::NfProto,
-                sys::NFT_META_L4PROTO => Self::L4Proto,
-                sys::NFT_META_CGROUP => Self::Cgroup,
-                sys::NFT_META_PRANDOM => Self::PRandom,
-                value => return Err(DecodeError::UnknownMetaType(value)),
-            },
-            remaining_data,
-        ))
-    }
 }
 
 #[derive(Clone, PartialEq, Eq, Default, Debug)]

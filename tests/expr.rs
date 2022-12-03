@@ -1,15 +1,15 @@
 use rustables::{
     expr::{
-        Bitwise, ExpressionList, IcmpCode, Immediate, Meta, MetaType, Register, Reject, RejectType,
-        VerdictKind,
+        Bitwise, ExpressionList, IcmpCode, Immediate, Log, Meta, MetaType, Register, Reject,
+        RejectType, VerdictKind,
     },
     sys::{
         NFTA_BITWISE_DREG, NFTA_BITWISE_LEN, NFTA_BITWISE_MASK, NFTA_BITWISE_SREG,
         NFTA_BITWISE_XOR, NFTA_DATA_VALUE, NFTA_DATA_VERDICT, NFTA_EXPR_DATA, NFTA_EXPR_NAME,
-        NFTA_IMMEDIATE_DATA, NFTA_IMMEDIATE_DREG, NFTA_LIST_ELEM, NFTA_META_DREG, NFTA_META_KEY,
-        NFTA_REJECT_ICMP_CODE, NFTA_REJECT_TYPE, NFTA_RULE_CHAIN, NFTA_RULE_EXPRESSIONS,
-        NFTA_RULE_TABLE, NFTA_VERDICT_CODE, NFT_META_PROTOCOL, NFT_REG_1, NFT_REG_VERDICT,
-        NFT_REJECT_ICMPX_UNREACH,
+        NFTA_IMMEDIATE_DATA, NFTA_IMMEDIATE_DREG, NFTA_LIST_ELEM, NFTA_LOG_GROUP, NFTA_LOG_PREFIX,
+        NFTA_META_DREG, NFTA_META_KEY, NFTA_REJECT_ICMP_CODE, NFTA_REJECT_TYPE, NFTA_RULE_CHAIN,
+        NFTA_RULE_EXPRESSIONS, NFTA_RULE_TABLE, NFTA_VERDICT_CODE, NFT_META_PROTOCOL, NFT_REG_1,
+        NFT_REG_VERDICT, NFT_REJECT_ICMPX_UNREACH,
     },
 };
 //use rustables::expr::{
@@ -246,42 +246,41 @@ fn immediate_expr_is_valid() {
     );
 }
 
-//#[test]
-//fn log_expr_is_valid() {
-//    let log = Log {
-//        group: Some(LogGroup(1)),
-//        prefix: Some(LogPrefix::new("mockprefix").unwrap()),
-//    };
-//    let mut rule = get_test_rule();
-//    let (nlmsghdr, _nfgenmsg, raw_expr) = get_test_nlmsg_from_expr(&mut rule, &log);
-//    assert_eq!(nlmsghdr.nlmsg_len, 96);
-//
-//    assert_eq!(
-//        raw_expr,
-//        NetlinkExpr::List(vec![
-//            NetlinkExpr::Final(NFTA_RULE_TABLE, TABLE_NAME.to_vec()),
-//            NetlinkExpr::Final(NFTA_RULE_CHAIN, CHAIN_NAME.to_vec()),
-//            NetlinkExpr::Nested(
-//                NFTA_RULE_EXPRESSIONS,
-//                vec![NetlinkExpr::Nested(
-//                    NFTA_LIST_ELEM,
-//                    vec![
-//                        NetlinkExpr::Final(NFTA_EXPR_NAME, b"log\0".to_vec()),
-//                        NetlinkExpr::Nested(
-//                            NFTA_EXPR_DATA,
-//                            vec![
-//                                NetlinkExpr::Final(NFTA_LOG_PREFIX, b"mockprefix\0".to_vec()),
-//                                NetlinkExpr::Final(NFTA_LOG_GROUP, 1u16.to_be_bytes().to_vec())
-//                            ]
-//                        )
-//                    ]
-//                )]
-//            )
-//        ])
-//        .to_raw()
-//    );
-//}
-//
+#[test]
+fn log_expr_is_valid() {
+    let log = Log::new(Some(1337), Some("mockprefix")).expect("Could not build a log expression");
+    let mut rule = get_test_rule().with_expressions(ExpressionList::builder().with_expression(log));
+
+    let mut buf = Vec::new();
+    let (nlmsghdr, _nfgenmsg, raw_expr) = get_test_nlmsg(&mut buf, &mut rule);
+    assert_eq!(nlmsghdr.nlmsg_len, 96);
+
+    assert_eq!(
+        raw_expr,
+        NetlinkExpr::List(vec![
+            NetlinkExpr::Final(NFTA_RULE_TABLE, TABLE_NAME.as_bytes().to_vec()),
+            NetlinkExpr::Final(NFTA_RULE_CHAIN, CHAIN_NAME.as_bytes().to_vec()),
+            NetlinkExpr::Nested(
+                NFTA_RULE_EXPRESSIONS,
+                vec![NetlinkExpr::Nested(
+                    NFTA_LIST_ELEM,
+                    vec![
+                        NetlinkExpr::Final(NFTA_EXPR_NAME, b"log".to_vec()),
+                        NetlinkExpr::Nested(
+                            NFTA_EXPR_DATA,
+                            vec![
+                                NetlinkExpr::Final(NFTA_LOG_GROUP, 1337u16.to_be_bytes().to_vec()),
+                                NetlinkExpr::Final(NFTA_LOG_PREFIX, b"mockprefix".to_vec()),
+                            ]
+                        )
+                    ]
+                )]
+            )
+        ])
+        .to_raw()
+    );
+}
+
 //#[test]
 //fn lookup_expr_is_valid() {
 //    let set_name = &CStr::from_bytes_with_nul(b"mockset\0").unwrap();

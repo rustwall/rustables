@@ -71,7 +71,6 @@
 //! [`build.rs`]: https://gitlab.com/rustwall/rustables/-/blob/master/build.rs
 
 use parser::DecodeError;
-use thiserror::Error;
 
 #[macro_use]
 extern crate log;

@@ -8,7 +8,7 @@ use crate::sys::{NFTA_LOG_GROUP, NFTA_LOG_PREFIX};
 /// A Log expression will log all packets that match the rule.
 pub struct Log {
     #[field(NFTA_LOG_GROUP)]
-    group: u32,
+    group: u16,
     #[field(NFTA_LOG_PREFIX)]
     prefix: String,
 }

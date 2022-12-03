@@ -1,20 +1,16 @@
 use std::fmt::Debug;
 
 use libc::{NF_ACCEPT, NF_DROP, NF_QUEUE};
-use rustables_macros::nfnetlink_struct;
+use rustables_macros::{nfnetlink_enum, nfnetlink_struct};
 
 use super::{ExpressionData, Immediate, Register};
-use crate::{
-    nlmsg::{NfNetlinkAttribute, NfNetlinkDeserializable},
-    parser::DecodeError,
-    sys::{
-        NFTA_VERDICT_CHAIN, NFTA_VERDICT_CHAIN_ID, NFTA_VERDICT_CODE, NFT_BREAK, NFT_CONTINUE,
-        NFT_GOTO, NFT_JUMP, NFT_RETURN,
-    },
+use crate::sys::{
+    NFTA_VERDICT_CHAIN, NFTA_VERDICT_CHAIN_ID, NFTA_VERDICT_CODE, NFT_BREAK, NFT_CONTINUE,
+    NFT_GOTO, NFT_JUMP, NFT_RETURN,
 };
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Hash)]
-#[repr(i32)]
+#[nfnetlink_enum(i32)]
 pub enum VerdictType {
     Drop = NF_DROP,
     Accept = NF_ACCEPT,
@@ -24,36 +20,6 @@ pub enum VerdictType {
     Jump = NFT_JUMP,
     Goto = NFT_GOTO,
     Return = NFT_RETURN,
-}
-
-impl NfNetlinkAttribute for VerdictType {
-    fn get_size(&self) -> usize {
-        (*self as i32).get_size()
-    }
-
-    unsafe fn write_payload(&self, addr: *mut u8) {
-        (*self as i32).write_payload(addr);
-    }
-}
-
-impl NfNetlinkDeserializable for VerdictType {
-    fn deserialize(buf: &[u8]) -> Result<(Self, &[u8]), DecodeError> {
-        let (v, remaining_data) = i32::deserialize(buf)?;
-        Ok((
-            match v {
-                NF_DROP => VerdictType::Drop,
-                NF_ACCEPT => VerdictType::Accept,
-                NF_QUEUE => VerdictType::Queue,
-                NFT_CONTINUE => VerdictType::Continue,
-                NFT_BREAK => VerdictType::Break,
-                NFT_JUMP => VerdictType::Jump,
-                NFT_GOTO => VerdictType::Goto,
-                NFT_RETURN => VerdictType::Goto,
-                _ => return Err(DecodeError::UnknownExpressionVerdictType),
-            },
-            remaining_data,
-        ))
-    }
 }
 
 #[derive(Clone, PartialEq, Eq, Default, Debug)]
