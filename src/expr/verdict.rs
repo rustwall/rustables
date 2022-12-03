@@ -1,13 +1,16 @@
 use std::fmt::Debug;
 
 use libc::{NF_ACCEPT, NF_DROP, NF_QUEUE};
+use rustables_macros::nfnetlink_struct;
 
 use super::{ExpressionData, Immediate, Register};
 use crate::{
-    create_wrapper_type,
     nlmsg::{NfNetlinkAttribute, NfNetlinkDeserializable},
     parser::DecodeError,
-    sys::{self, NFT_BREAK, NFT_CONTINUE, NFT_GOTO, NFT_JUMP, NFT_RETURN},
+    sys::{
+        NFTA_VERDICT_CHAIN, NFTA_VERDICT_CHAIN_ID, NFTA_VERDICT_CODE, NFT_BREAK, NFT_CONTINUE,
+        NFT_GOTO, NFT_JUMP, NFT_RETURN,
+    },
 };
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Hash)]
@@ -53,35 +56,16 @@ impl NfNetlinkDeserializable for VerdictType {
     }
 }
 
-create_wrapper_type!(
-    nested: VerdictAttribute,
-    [
-        (
-            get_code,
-            set_code,
-            with_code,
-            sys::NFTA_VERDICT_CODE,
-            code,
-            VerdictType
-        ),
-        (
-            get_chain,
-            set_chain,
-            with_chain,
-            sys::NFTA_VERDICT_CHAIN,
-            chain,
-            String
-        ),
-        (
-            get_chain_id,
-            set_chain_id,
-            with_chain_id,
-            sys::NFTA_VERDICT_CHAIN_ID,
-            chain_id,
-            u32
-        )
-    ]
-);
+#[derive(Clone, PartialEq, Eq, Default, Debug)]
+#[nfnetlink_struct(nested = true)]
+pub struct VerdictAttribute {
+    #[field(NFTA_VERDICT_CODE)]
+    code: VerdictType,
+    #[field(NFTA_VERDICT_CHAIN)]
+    chain: String,
+    #[field(NFTA_VERDICT_CHAIN_ID)]
+    chain_id: u32,
+}
 
 #[derive(Debug, Clone, Eq, PartialEq, Hash)]
 pub enum VerdictKind {

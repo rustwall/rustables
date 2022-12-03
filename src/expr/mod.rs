@@ -6,8 +6,6 @@
 use std::fmt::Debug;
 use std::mem::transmute;
 
-use super::rule::Rule;
-use crate::create_wrapper_type;
 use crate::nlmsg::NfNetlinkAttribute;
 use crate::nlmsg::NfNetlinkDeserializable;
 use crate::parser::pad_netlink_object;
@@ -15,7 +13,10 @@ use crate::parser::pad_netlink_object_with_variable_size;
 use crate::parser::write_attribute;
 use crate::parser::DecodeError;
 use crate::sys::{self, nlattr};
-use libc::NLA_TYPE_MASK;
+use crate::sys::{
+    NFTA_DATA_VALUE, NFTA_DATA_VERDICT, NFTA_EXPR_DATA, NFTA_EXPR_NAME, NLA_TYPE_MASK,
+};
+use rustables_macros::nfnetlink_struct;
 use thiserror::Error;
 
 mod bitwise;
@@ -105,26 +106,14 @@ pub trait Expression {
     fn get_name() -> &'static str;
 }
 
-create_wrapper_type!(
-    nested without_deser : RawExpression, [
-    // Define the action netfilter will apply to packets processed by this chain, but that did not match any rules in it.
-    (
-        get_name,
-        set_name,
-        with_name,
-        sys::NFTA_EXPR_NAME,
-        name,
-        String
-    ),
-    (
-        get_data,
-        set_data,
-        with_data,
-        sys::NFTA_EXPR_DATA,
-        data,
-        ExpressionVariant
-    )
-]);
+#[derive(Clone, PartialEq, Eq, Default, Debug)]
+#[nfnetlink_struct(nested = true, derive_decoder = false)]
+pub struct RawExpression {
+    #[field(NFTA_EXPR_NAME)]
+    name: String,
+    #[field(NFTA_EXPR_DATA)]
+    data: ExpressionVariant,
+}
 
 impl RawExpression {
     pub fn new<T>(expr: T) -> Self
@@ -338,27 +327,14 @@ where
     }
 }
 
-create_wrapper_type!(
-  nested : ExpressionData,
-    [
-        (
-            get_value,
-            set_value,
-            with_value,
-            sys::NFTA_DATA_VALUE,
-            value,
-            Vec<u8>
-        ),
-        (
-            get_verdict,
-            set_verdict,
-            with_verdict,
-            sys::NFTA_DATA_VERDICT,
-            verdict,
-            VerdictAttribute
-        )
-    ]
-);
+#[derive(Clone, PartialEq, Eq, Default, Debug)]
+#[nfnetlink_struct(nested = true)]
+pub struct ExpressionData {
+    #[field(NFTA_DATA_VALUE)]
+    value: Vec<u8>,
+    #[field(NFTA_DATA_VERDICT)]
+    verdict: VerdictAttribute,
+}
 
 // default type for expressions that we do not handle yet
 #[derive(Debug, Clone, PartialEq, Eq)]

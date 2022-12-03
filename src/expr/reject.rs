@@ -1,5 +1,6 @@
+use rustables_macros::nfnetlink_struct;
+
 use crate::{
-    create_wrapper_type,
     nlmsg::{NfNetlinkAttribute, NfNetlinkDeserializable},
     parser::DecodeError,
     sys,
@@ -13,28 +14,15 @@ impl Expression for Reject {
     }
 }
 
-// A reject expression that defines the type of rejection message sent when discarding a packet.
-create_wrapper_type!(
-    inline: Reject,
-    [
-        (
-            get_type,
-            set_type,
-            with_type,
-            sys::NFTA_REJECT_TYPE,
-            reject_type,
-            RejectType
-        ),
-        (
-            get_icmp_code,
-            set_icmp_code,
-            with_icmp_code,
-            sys::NFTA_REJECT_ICMP_CODE,
-            icmp_code,
-            IcmpCode
-        )
-    ]
-);
+#[derive(Clone, PartialEq, Eq, Default, Debug)]
+#[nfnetlink_struct]
+/// A reject expression that defines the type of rejection message sent when discarding a packet.
+pub struct Reject {
+    #[field(sys::NFTA_REJECT_TYPE, name_in_functions = "type")]
+    reject_type: RejectType,
+    #[field(sys::NFTA_REJECT_ICMP_CODE)]
+    icmp_code: IcmpCode,
+}
 
 /// An ICMP reject code.
 #[derive(Debug, Clone, Copy, Eq, PartialEq, Hash)]

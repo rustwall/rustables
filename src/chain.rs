@@ -4,11 +4,11 @@ use rustables_macros::nfnetlink_struct;
 use crate::nlmsg::{NfNetlinkAttribute, NfNetlinkDeserializable, NfNetlinkObject, NfNetlinkWriter};
 use crate::parser::{DecodeError, Parsable};
 use crate::sys::{
-    self, NFTA_CHAIN_FLAGS, NFTA_CHAIN_HOOK, NFTA_CHAIN_NAME, NFTA_CHAIN_POLICY, NFTA_CHAIN_TABLE,
+    NFTA_CHAIN_FLAGS, NFTA_CHAIN_HOOK, NFTA_CHAIN_NAME, NFTA_CHAIN_POLICY, NFTA_CHAIN_TABLE,
     NFTA_CHAIN_TYPE, NFTA_CHAIN_USERDATA, NFTA_HOOK_HOOKNUM, NFTA_HOOK_PRIORITY, NFT_MSG_DELCHAIN,
     NFT_MSG_NEWCHAIN, NLM_F_ACK, NLM_F_CREATE,
 };
-use crate::{create_wrapper_type, MsgType, ProtocolFamily, Table};
+use crate::{MsgType, ProtocolFamily, Table};
 use std::convert::TryFrom;
 use std::fmt::Debug;
 

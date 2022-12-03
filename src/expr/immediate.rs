@@ -1,27 +1,16 @@
-use super::{Expression, ExpressionData, Register};
-use crate::{create_wrapper_type, sys};
+use rustables_macros::nfnetlink_struct;
 
-create_wrapper_type!(
-    inline: Immediate,
-    [
-        (
-            get_dreg,
-            set_dreg,
-            with_dreg,
-            sys::NFTA_IMMEDIATE_DREG,
-            dreg,
-            Register
-        ),
-        (
-            get_data,
-            set_data,
-            with_data,
-            sys::NFTA_IMMEDIATE_DATA,
-            data,
-            ExpressionData
-        )
-    ]
-);
+use super::{Expression, ExpressionData, Register};
+use crate::sys::{NFTA_IMMEDIATE_DATA, NFTA_IMMEDIATE_DREG};
+
+#[derive(Clone, PartialEq, Eq, Default, Debug)]
+#[nfnetlink_struct]
+pub struct Immediate {
+    #[field(NFTA_IMMEDIATE_DREG)]
+    dreg: Register,
+    #[field(NFTA_IMMEDIATE_DATA)]
+    data: ExpressionData,
+}
 
 impl Immediate {
     pub fn new_data(data: Vec<u8>, register: Register) -> Self {

@@ -1,11 +1,11 @@
-use super::{Expression, Register, Rule};
+use rustables_macros::nfnetlink_struct;
+
+use super::{Expression, Register};
 use crate::{
-    create_wrapper_type,
     nlmsg::{NfNetlinkAttribute, NfNetlinkDeserializable},
     parser::DecodeError,
     sys,
 };
-use std::convert::TryFrom;
 
 /// A meta expression refers to meta data associated with a packet.
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
@@ -78,35 +78,16 @@ impl NfNetlinkDeserializable for MetaType {
     }
 }
 
-create_wrapper_type!(
-    inline: Meta,
-    [
-        (
-            get_dreg,
-            set_dreg,
-            with_dreg,
-            sys::NFTA_META_DREG,
-            dreg,
-            Register
-        ),
-        (
-            get_key,
-            set_key,
-            with_key,
-            sys::NFTA_META_KEY,
-            key,
-            MetaType
-        ),
-        (
-            get_sreg,
-            set_sreg,
-            with_sreg,
-            sys::NFTA_META_SREG,
-            sreg,
-            Register
-        )
-    ]
-);
+#[derive(Clone, PartialEq, Eq, Default, Debug)]
+#[nfnetlink_struct]
+pub struct Meta {
+    #[field(sys::NFTA_META_DREG)]
+    dreg: Register,
+    #[field(sys::NFTA_META_KEY)]
+    key: MetaType,
+    #[field(sys::NFTA_META_SREG)]
+    sreg: Register,
+}
 
 impl Expression for Meta {
     fn get_name() -> &'static str {

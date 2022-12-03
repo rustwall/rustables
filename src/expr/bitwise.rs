@@ -1,46 +1,25 @@
-use super::{Expression, ExpressionData, Register};
-use crate::create_wrapper_type;
-use crate::parser::DecodeError;
-use crate::sys;
+use rustables_macros::nfnetlink_struct;
 
-create_wrapper_type!(
-    inline: Bitwise,
-    [
-        (
-            get_sreg,
-            set_sreg,
-            with_sreg,
-            sys::NFTA_BITWISE_SREG,
-            sreg,
-            Register
-        ),
-        (
-            get_dreg,
-            set_dreg,
-            with_dreg,
-            sys::NFTA_BITWISE_DREG,
-            dreg,
-            Register
-        ),
-        (get_len, set_len, with_len, sys::NFTA_BITWISE_LEN, len, u32),
-        (
-            get_mask,
-            set_mask,
-            with_mask,
-            sys::NFTA_BITWISE_MASK,
-            mask,
-            ExpressionData
-        ),
-        (
-            get_xor,
-            set_xor,
-            with_xor,
-            sys::NFTA_BITWISE_XOR,
-            xor,
-            ExpressionData
-        )
-    ]
-);
+use super::{Expression, ExpressionData, Register};
+use crate::parser::DecodeError;
+use crate::sys::{
+    NFTA_BITWISE_DREG, NFTA_BITWISE_LEN, NFTA_BITWISE_MASK, NFTA_BITWISE_SREG, NFTA_BITWISE_XOR,
+};
+
+#[derive(Clone, PartialEq, Eq, Default, Debug)]
+#[nfnetlink_struct]
+pub struct Bitwise {
+    #[field(NFTA_BITWISE_SREG)]
+    sreg: Register,
+    #[field(NFTA_BITWISE_DREG)]
+    dreg: Register,
+    #[field(NFTA_BITWISE_LEN)]
+    len: u32,
+    #[field(NFTA_BITWISE_MASK)]
+    mask: ExpressionData,
+    #[field(NFTA_BITWISE_XOR)]
+    xor: ExpressionData,
+}
 
 impl Expression for Bitwise {
     fn get_name() -> &'static str {

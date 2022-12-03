@@ -1,29 +1,17 @@
-use super::{Expression, ExpressionError};
-use crate::create_wrapper_type;
-use crate::sys;
+use rustables_macros::nfnetlink_struct;
 
-// A Log expression will log all packets that match the rule.
-create_wrapper_type!(
-    inline: Log,
-    [
-        (
-            get_group,
-            set_group,
-            with_group,
-            sys::NFTA_LOG_GROUP,
-            group,
-            u32
-        ),
-        (
-            get_prefix,
-            set_prefix,
-            with_prefix,
-            sys::NFTA_LOG_PREFIX,
-            prefix,
-            String
-        )
-    ]
-);
+use super::{Expression, ExpressionError};
+use crate::sys::{NFTA_LOG_GROUP, NFTA_LOG_PREFIX};
+
+#[derive(Clone, PartialEq, Eq, Default, Debug)]
+#[nfnetlink_struct]
+/// A Log expression will log all packets that match the rule.
+pub struct Log {
+    #[field(NFTA_LOG_GROUP)]
+    group: u32,
+    #[field(NFTA_LOG_PREFIX)]
+    prefix: String,
+}
 
 impl Log {
     pub fn new(
