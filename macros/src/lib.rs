@@ -17,6 +17,7 @@ use syn::{parse::ParseStream, TypeReference};
 struct Field<'a> {
     name: &'a Ident,
     ty: &'a Type,
+    args: FieldArgs,
     netlink_type: Path,
     attrs: Vec<&'a Attribute>,
 }
@@ -24,6 +25,7 @@ struct Field<'a> {
 #[derive(Debug, Default)]
 struct FieldArgs {
     netlink_type: Option<Path>,
+    override_function_name: Option<String>,
 }
 
 fn parse_field_args(input: proc_macro2::TokenStream) -> Result<FieldArgs> {
@@ -32,17 +34,35 @@ fn parse_field_args(input: proc_macro2::TokenStream) -> Result<FieldArgs> {
     let parser = Punctuated::<Meta, Token![,]>::parse_terminated;
     let attribute_args = parser.parse2(input)?;
     for arg in attribute_args.iter() {
-        if let Meta::Path(path) = arg {
-            if args.netlink_type.is_none() {
-                args.netlink_type = Some(path.clone());
-            } else {
-                abort!(
-                    arg.span(),
-                    "Only a single netlink value can exist for a given field"
-                );
+        match arg {
+            Meta::Path(path) => {
+                if args.netlink_type.is_none() {
+                    args.netlink_type = Some(path.clone());
+                } else {
+                    abort!(
+                        arg.span(),
+                        "Only a single netlink value can exist for a given field"
+                    );
+                }
             }
-        } else {
-            abort!(arg.span(), "Unrecognized argument");
+            Meta::NameValue(namevalue) => {
+                let key = namevalue
+                    .path
+                    .get_ident()
+                    .expect("the macro parameter is not an ident?")
+                    .to_string();
+                match key.as_str() {
+                    "name_in_functions" => {
+                        if let Lit::Str(val) = &namevalue.lit {
+                            args.override_function_name = Some(val.value());
+                        } else {
+                            abort!(&namevalue.lit.span(), "Expected a string literal");
+                        }
+                    }
+                    _ => abort!(key.span(), "Unsupported macro parameter"),
+                }
+            }
+            _ => abort!(arg.span(), "Unrecognized argument"),
         }
     }
     Ok(args)
@@ -52,6 +72,7 @@ fn parse_field_args(input: proc_macro2::TokenStream) -> Result<FieldArgs> {
 struct StructArgs {
     nested: bool,
     derive_decoder: bool,
+    derive_deserialize: bool,
 }
 
 impl Default for StructArgs {
@@ -59,6 +80,7 @@ impl Default for StructArgs {
         Self {
             nested: false,
             derive_decoder: true,
+            derive_deserialize: true,
         }
     }
 }
@@ -74,7 +96,7 @@ fn parse_struct_args(args: &mut StructArgs, input: TokenStream) -> Result<()> {
             let key = namevalue
                 .path
                 .get_ident()
-                .expect("the macro parameter is not an ident ?")
+                .expect("the macro parameter is not an ident?")
                 .to_string();
             match key.as_str() {
                 "derive_decoder" => {
@@ -91,7 +113,13 @@ fn parse_struct_args(args: &mut StructArgs, input: TokenStream) -> Result<()> {
                         abort!(&namevalue.lit.span(), "Expected a boolean");
                     }
                 }
-
+                "derive_deserialize" => {
+                    if let Lit::Bool(boolean) = &namevalue.lit {
+                        args.derive_deserialize = boolean.value;
+                    } else {
+                        abort!(&namevalue.lit.span(), "Expected a boolean");
+                    }
+                }
                 _ => abort!(key.span(), "Unsupported macro parameter"),
             }
         } else {
@@ -119,10 +147,11 @@ pub fn nfnetlink_struct(attrs: TokenStream, item: TokenStream) -> TokenStream {
                 if id == "field" {
                     let field_args = parse_field_args(attr.tokens.clone())
                         .expect("Could not parse the field attributes");
-                    if let Some(netlink_type) = field_args.netlink_type {
+                    if let Some(netlink_type) = field_args.netlink_type.clone() {
                         fields.push(Field {
                             name: field.ident.as_ref().expect("Should be a names struct"),
                             ty: &field.ty,
+                            args: field_args,
                             netlink_type,
                             attrs: field.attrs.iter().filter(|x| *x != attr).collect(),
                         });
@@ -138,7 +167,14 @@ pub fn nfnetlink_struct(attrs: TokenStream, item: TokenStream) -> TokenStream {
 
     let getters_and_setters = fields.iter().map(|field| {
         let field_name = field.name;
+        // use the name override if any
         let field_str = field_name.to_string();
+        let field_str = field
+            .args
+            .override_function_name
+            .as_ref()
+            .map(|x| x.as_str())
+            .unwrap_or(field_str.as_str());
         let field_type = field.ty;
 
         let getter_name = format!("get_{}", field_str);
@@ -263,6 +299,17 @@ pub fn nfnetlink_struct(attrs: TokenStream, item: TokenStream) -> TokenStream {
         let attrs = &field.attrs;
         quote!( #(#attrs) * #name: Option<#ty>, )
     });
+    let nfnetlinkdeserialize_impl = if args.derive_deserialize {
+        quote!(
+            impl crate::nlmsg::NfNetlinkDeserializable for #name {
+                fn deserialize(buf: &[u8]) -> Result<(Self, &[u8]), crate::parser::DecodeError> {
+                    Ok((crate::parser::read_attributes(buf)?, &[]))
+                }
+            }
+        )
+    } else {
+        proc_macro2::TokenStream::new()
+    };
     let res = quote! {
         #(#attrs) * #vis struct #name {
             #(#new_fields)*
@@ -274,6 +321,8 @@ pub fn nfnetlink_struct(attrs: TokenStream, item: TokenStream) -> TokenStream {
         #decoder
 
         #nfnetlinkattribute_impl
+
+        #nfnetlinkdeserialize_impl
     };
 
     res.into()

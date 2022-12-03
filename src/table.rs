@@ -4,20 +4,19 @@ use std::fmt::Debug;
 use rustables_macros::nfnetlink_struct;
 
 use crate::nlmsg::{NfNetlinkAttribute, NfNetlinkDeserializable, NfNetlinkObject, NfNetlinkWriter};
-use crate::parser::Parsable;
-use crate::parser::{DecodeError, InnerFormat};
+use crate::parser::{DecodeError, Parsable};
 use crate::sys::{
-    self, NFTA_TABLE_FLAGS, NFTA_TABLE_NAME, NFTA_TABLE_USERDATA, NFT_MSG_DELTABLE,
-    NFT_MSG_GETTABLE, NFT_MSG_NEWTABLE, NLM_F_ACK, NLM_F_CREATE,
+    NFTA_TABLE_FLAGS, NFTA_TABLE_NAME, NFTA_TABLE_USERDATA, NFT_MSG_DELTABLE, NFT_MSG_GETTABLE,
+    NFT_MSG_NEWTABLE, NLM_F_ACK, NLM_F_CREATE,
 };
-use crate::{impl_attr_getters_and_setters, impl_nfnetlinkattribute, MsgType, ProtocolFamily};
+use crate::{MsgType, ProtocolFamily};
 
 /// Abstraction of a `nftnl_table`, the top level container in netfilter. A table has a protocol
 /// family and contains [`Chain`]s that in turn hold the rules.
 ///
 /// [`Chain`]: struct.Chain.html
 #[derive(Default, PartialEq, Eq, Debug)]
-#[nfnetlink_struct]
+#[nfnetlink_struct(derive_deserialize = false)]
 pub struct Table {
     #[field(NFTA_TABLE_NAME)]
     name: String,

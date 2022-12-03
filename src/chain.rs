@@ -1,12 +1,14 @@
 use libc::{NF_ACCEPT, NF_DROP};
+use rustables_macros::nfnetlink_struct;
 
 use crate::nlmsg::{NfNetlinkAttribute, NfNetlinkDeserializable, NfNetlinkObject, NfNetlinkWriter};
-use crate::parser::{DecodeError, InnerFormat, Parsable};
-use crate::sys::{self, NFT_MSG_DELCHAIN, NFT_MSG_NEWCHAIN, NLM_F_ACK, NLM_F_CREATE};
-use crate::{
-    create_wrapper_type, impl_attr_getters_and_setters, impl_nfnetlinkattribute, MsgType,
-    ProtocolFamily, Table,
+use crate::parser::{DecodeError, Parsable};
+use crate::sys::{
+    self, NFTA_CHAIN_FLAGS, NFTA_CHAIN_HOOK, NFTA_CHAIN_NAME, NFTA_CHAIN_POLICY, NFTA_CHAIN_TABLE,
+    NFTA_CHAIN_TYPE, NFTA_CHAIN_USERDATA, NFTA_HOOK_HOOKNUM, NFTA_HOOK_PRIORITY, NFT_MSG_DELCHAIN,
+    NFT_MSG_NEWCHAIN, NLM_F_ACK, NLM_F_CREATE,
 };
+use crate::{create_wrapper_type, MsgType, ProtocolFamily, Table};
 use std::convert::TryFrom;
 use std::fmt::Debug;
 
@@ -28,28 +30,15 @@ pub enum HookClass {
     PostRouting = libc::NF_INET_POST_ROUTING,
 }
 
-create_wrapper_type!(
-    nested: Hook,
-    [
-        // Define the action netfilter will apply to packets processed by this chain, but that did not match any rules in it.
-        (
-            get_class,
-            set_class,
-            with_class,
-            sys::NFTA_HOOK_HOOKNUM,
-            class,
-            u32
-        ),
-        (
-            get_priority,
-            set_priority,
-            with_priority,
-            sys::NFTA_HOOK_PRIORITY,
-            priority,
-            u32
-        )
-    ]
-);
+#[derive(Clone, PartialEq, Eq, Default, Debug)]
+#[nfnetlink_struct(nested = true)]
+pub struct Hook {
+    /// Define the action netfilter will apply to packets processed by this chain, but that did not match any rules in it.
+    #[field(NFTA_HOOK_HOOKNUM)]
+    class: u32,
+    #[field(NFTA_HOOK_PRIORITY)]
+    priority: u32,
+}
 
 impl Hook {
     pub fn new(class: HookClass, priority: ChainPriority) -> Self {
@@ -151,16 +140,24 @@ impl NfNetlinkDeserializable for ChainType {
 /// [`Table`]: struct.Table.html
 /// [`Rule`]: struct.Rule.html
 /// [`set_hook`]: #method.set_hook
-#[derive(PartialEq, Eq, Default)]
+#[derive(PartialEq, Eq, Default, Debug)]
+#[nfnetlink_struct(derive_deserialize = false)]
 pub struct Chain {
     family: ProtocolFamily,
-    flags: Option<u32>,
-    name: Option<String>,
-    hook: Option<Hook>,
-    policy: Option<ChainPolicy>,
-    table: Option<String>,
-    chain_type: Option<ChainType>,
-    userdata: Option<Vec<u8>>,
+    #[field(NFTA_CHAIN_TABLE)]
+    table: String,
+    #[field(NFTA_CHAIN_NAME)]
+    name: String,
+    #[field(NFTA_CHAIN_HOOK)]
+    hook: Hook,
+    #[field(NFTA_CHAIN_POLICY)]
+    policy: ChainPolicy,
+    #[field(NFTA_CHAIN_TYPE, name_in_functions = "type")]
+    chain_type: ChainType,
+    #[field(NFTA_CHAIN_FLAGS)]
+    flags: u32,
+    #[field(NFTA_CHAIN_USERDATA)]
+    userdata: Vec<u8>,
 }
 
 impl Chain {
@@ -208,14 +205,6 @@ impl PartialEq for Chain {
 }
 */
 
-impl Debug for Chain {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let mut res = f.debug_struct("Chain");
-        res.field("family", &self.family);
-        self.inner_format_struct(res)?.finish()
-    }
-}
-
 impl NfNetlinkObject for Chain {
     fn add_or_remove<'a>(&self, writer: &mut NfNetlinkWriter<'a>, msg_type: MsgType, seq: u32) {
         let raw_msg_type = match msg_type {
@@ -250,50 +239,6 @@ impl NfNetlinkDeserializable for Chain {
         Ok((obj, remaining_data))
     }
 }
-
-impl_attr_getters_and_setters!(
-    Chain,
-    [
-        (get_table, set_table, with_table, sys::NFTA_CHAIN_TABLE, table, String),
-        (get_name, set_name, with_name, sys::NFTA_CHAIN_NAME, name, String),
-        // Sets the hook and priority for this chain. Without calling this method the chain will
-        // become a "regular chain" without any hook and will thus not receive any traffic unless
-        // some rule forward packets to it via goto or jump verdicts.
-        //
-        // By calling `set_hook` with a hook the chain that is created will be registered with that
-        // hook and is thus a "base chain". A "base chain" is an entry point for packets from the
-        // networking stack.
-        (get_hook, set_hook, with_hook, sys::NFTA_CHAIN_HOOK, hook, Hook),
-        (get_policy, set_policy, with_policy, sys::NFTA_CHAIN_POLICY, policy, ChainPolicy),
-        // This only applies if the chain has been registered with a hook by calling `set_hook`.
-        (get_type, set_type, with_type, sys::NFTA_CHAIN_TYPE, chain_type, ChainType),
-        (get_flags, set_flags, with_flags, sys::NFTA_CHAIN_FLAGS, flags, u32),
-        (
-            get_userdata,
-            set_userdata,
-            with_userdata,
-            sys::NFTA_CHAIN_USERDATA,
-            userdata,
-            Vec<u8>
-        )
-    ]
-);
-
-impl_nfnetlinkattribute!(
-    inline : Chain,
-    [
-        (sys::NFTA_CHAIN_TABLE, table),
-        (sys::NFTA_CHAIN_NAME, name),
-        (sys::NFTA_CHAIN_HOOK, hook),
-        (sys::NFTA_CHAIN_POLICY, policy),
-        (sys::NFTA_CHAIN_TYPE, chain_type),
-        (sys::NFTA_CHAIN_FLAGS, flags),
-        (
-            sys::NFTA_CHAIN_USERDATA,
-            userdata
-        )
-    ]
-);
 
 pub fn list_chains_for_table(table: &Table) -> Result<Vec<Chain>, crate::query::Error> {
     let mut result = Vec::new();
