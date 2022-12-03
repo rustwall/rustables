@@ -3,24 +3,17 @@
 //!
 //! [`Rule`]: struct.Rule.html
 
-use std::borrow::Cow;
 use std::fmt::Debug;
 use std::mem::transmute;
-use std::net::IpAddr;
-use std::net::Ipv4Addr;
-use std::net::Ipv6Addr;
-use std::slice::Iter;
 
 use super::rule::Rule;
 use crate::create_wrapper_type;
-use crate::nlmsg::AttributeDecoder;
 use crate::nlmsg::NfNetlinkAttribute;
 use crate::nlmsg::NfNetlinkDeserializable;
 use crate::parser::pad_netlink_object;
 use crate::parser::pad_netlink_object_with_variable_size;
 use crate::parser::write_attribute;
 use crate::parser::DecodeError;
-use crate::parser::InnerFormat;
 use crate::sys::{self, nlattr};
 use libc::NLA_TYPE_MASK;
 use thiserror::Error;

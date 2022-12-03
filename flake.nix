@@ -32,12 +32,15 @@
         inherit system;
         overlays = [ (import "${nixpkgs-mozilla}/rust-overlay.nix") rustOverlay rustDevOverlay ];
       };
+      nativeBuildInputs = with pkgs; [ pkg-config ];
+      buildInputs = with pkgs; [ clang linuxHeaders ];
+      LIBCLANG_PATH = pkgs.lib.makeLibraryPath [ pkgs.llvmPackages_latest.libclang.lib ];
       customBuildCrate = pkgs: pkgs.buildRustCrate.override {
         defaultCrateOverrides = pkgs.defaultCrateOverrides // {
-          rustables = attrs: with pkgs; {
-            nativeBuildInputs = [ pkg-config ];
-            buildInputs = [ clang linuxHeaders ];
-            LIBCLANG_PATH = "${llvmPackages.libclang.lib}/lib";
+          rustables = attrs: {
+            nativeBuildInputs = nativeBuildInputs;
+            buildInputs = buildInputs;
+            LIBCLANG_PATH = LIBCLANG_PATH;
           };
         };
       };
@@ -53,10 +56,10 @@
         };
         devShell = pkgs.mkShell {
           name = "rustables";
-          nativeBuildInputs = cargoNix.rootCrate.build.nativeBuildInputs;
-          BuildInputs = cargoNix.rootCrate.build.dependencies;
+          nativeBuildInputs = nativeBuildInputs;
+          buildInputs = buildInputs;
+          LIBCLANG_PATH = LIBCLANG_PATH;
           packages = with pkgs; [ rust-analyzer rustc-with-src ];
-          LIBCLANG_PATH = pkgs.lib.makeLibraryPath [ pkgs.llvmPackages_latest.libclang.lib ];
         };
       }
     );

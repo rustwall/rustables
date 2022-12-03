@@ -1,11 +1,14 @@
 use std::convert::TryFrom;
 use std::fmt::Debug;
 
+use rustables_macros::nfnetlink_struct;
+
 use crate::nlmsg::{NfNetlinkAttribute, NfNetlinkDeserializable, NfNetlinkObject, NfNetlinkWriter};
 use crate::parser::Parsable;
 use crate::parser::{DecodeError, InnerFormat};
 use crate::sys::{
-    self, NFT_MSG_DELTABLE, NFT_MSG_GETTABLE, NFT_MSG_NEWTABLE, NLM_F_ACK, NLM_F_CREATE,
+    self, NFTA_TABLE_FLAGS, NFTA_TABLE_NAME, NFTA_TABLE_USERDATA, NFT_MSG_DELTABLE,
+    NFT_MSG_GETTABLE, NFT_MSG_NEWTABLE, NLM_F_ACK, NLM_F_CREATE,
 };
 use crate::{impl_attr_getters_and_setters, impl_nfnetlinkattribute, MsgType, ProtocolFamily};
 
@@ -13,11 +16,15 @@ use crate::{impl_attr_getters_and_setters, impl_nfnetlinkattribute, MsgType, Pro
 /// family and contains [`Chain`]s that in turn hold the rules.
 ///
 /// [`Chain`]: struct.Chain.html
-#[derive(Default, PartialEq, Eq)]
+#[derive(Default, PartialEq, Eq, Debug)]
+#[nfnetlink_struct]
 pub struct Table {
-    flags: Option<u32>,
-    name: Option<String>,
-    userdata: Option<Vec<u8>>,
+    #[field(NFTA_TABLE_NAME)]
+    name: String,
+    #[field(NFTA_TABLE_FLAGS)]
+    flags: u32,
+    #[field(NFTA_TABLE_USERDATA)]
+    userdata: Vec<u8>,
     pub family: ProtocolFamily,
 }
 
@@ -26,14 +33,6 @@ impl Table {
         let mut res = Self::default();
         res.family = family;
         res
-    }
-}
-
-impl Debug for Table {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let mut res = f.debug_struct("Table");
-        res.field("family", &self.family);
-        self.inner_format_struct(res)?.finish()
     }
 }
 
@@ -71,31 +70,6 @@ impl NfNetlinkDeserializable for Table {
         Ok((obj, remaining_data))
     }
 }
-
-impl_attr_getters_and_setters!(
-    Table,
-    [
-        (get_name, set_name, with_name, sys::NFTA_TABLE_NAME, name, String),
-        (get_flags, set_flags, with_flags, sys::NFTA_TABLE_FLAGS, flags, u32),
-        (
-            get_userdata,
-            set_userdata,
-            with_userdata,
-            sys::NFTA_TABLE_USERDATA,
-            userdata,
-            Vec<u8>
-        )
-    ]
-);
-
-impl_nfnetlinkattribute!(
-    inline : Table,
-    [
-        (sys::NFTA_TABLE_NAME, name),
-        (sys::NFTA_TABLE_FLAGS, flags),
-        (sys::NFTA_TABLE_USERDATA, userdata)
-    ]
-);
 
 pub fn list_tables() -> Result<Vec<Table>, crate::query::Error> {
     let mut result = Vec::new();
