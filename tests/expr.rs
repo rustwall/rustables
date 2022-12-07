@@ -1,16 +1,20 @@
 use rustables::{
     expr::{
-        Bitwise, ExpressionList, IcmpCode, Immediate, Log, Meta, MetaType, Register, Reject,
-        RejectType, VerdictKind,
+        Bitwise, ExpressionList, HeaderField, HighLevelPayload, IcmpCode, Immediate, Log, Meta,
+        MetaType, Nat, NatType, Register, Reject, RejectType, TCPHeaderField, TransportHeaderField,
+        VerdictKind,
     },
     sys::{
         NFTA_BITWISE_DREG, NFTA_BITWISE_LEN, NFTA_BITWISE_MASK, NFTA_BITWISE_SREG,
         NFTA_BITWISE_XOR, NFTA_DATA_VALUE, NFTA_DATA_VERDICT, NFTA_EXPR_DATA, NFTA_EXPR_NAME,
         NFTA_IMMEDIATE_DATA, NFTA_IMMEDIATE_DREG, NFTA_LIST_ELEM, NFTA_LOG_GROUP, NFTA_LOG_PREFIX,
-        NFTA_META_DREG, NFTA_META_KEY, NFTA_REJECT_ICMP_CODE, NFTA_REJECT_TYPE, NFTA_RULE_CHAIN,
-        NFTA_RULE_EXPRESSIONS, NFTA_RULE_TABLE, NFTA_VERDICT_CODE, NFT_META_PROTOCOL, NFT_REG_1,
-        NFT_REG_VERDICT, NFT_REJECT_ICMPX_UNREACH,
+        NFTA_META_DREG, NFTA_META_KEY, NFTA_NAT_FAMILY, NFTA_NAT_REG_ADDR_MIN, NFTA_NAT_TYPE,
+        NFTA_PAYLOAD_BASE, NFTA_PAYLOAD_DREG, NFTA_PAYLOAD_LEN, NFTA_PAYLOAD_OFFSET,
+        NFTA_REJECT_ICMP_CODE, NFTA_REJECT_TYPE, NFTA_RULE_CHAIN, NFTA_RULE_EXPRESSIONS,
+        NFTA_RULE_TABLE, NFTA_VERDICT_CODE, NFT_META_PROTOCOL, NFT_NAT_SNAT,
+        NFT_PAYLOAD_TRANSPORT_HEADER, NFT_REG_1, NFT_REG_VERDICT, NFT_REJECT_ICMPX_UNREACH,
     },
+    ProtocolFamily,
 };
 //use rustables::expr::{
 //    Bitwise, Cmp, CmpOp, Conntrack, Counter, Expression, HeaderField, IcmpCode, Immediate, Log,
@@ -393,103 +397,105 @@ fn meta_expr_is_valid() {
         .to_raw()
     );
 }
-//
-//#[test]
-//fn nat_expr_is_valid() {
-//    let nat = Nat {
-//        nat_type: NatType::SNat,
-//        family: ProtoFamily::Ipv4,
-//        ip_register: Register::Reg1,
-//        port_register: None,
-//    };
-//    let mut rule = get_test_rule();
-//    let (nlmsghdr, _nfgenmsg, raw_expr) = get_test_nlmsg_from_expr(&mut rule, &nat);
-//    assert_eq!(nlmsghdr.nlmsg_len, 96);
-//
-//    assert_eq!(
-//        raw_expr,
-//        NetlinkExpr::List(vec![
-//            NetlinkExpr::Final(NFTA_RULE_TABLE, TABLE_NAME.to_vec()),
-//            NetlinkExpr::Final(NFTA_RULE_CHAIN, CHAIN_NAME.to_vec()),
-//            NetlinkExpr::Nested(
-//                NFTA_RULE_EXPRESSIONS,
-//                vec![NetlinkExpr::Nested(
-//                    NFTA_LIST_ELEM,
-//                    vec![
-//                        NetlinkExpr::Final(NFTA_EXPR_NAME, b"nat\0".to_vec()),
-//                        NetlinkExpr::Nested(
-//                            NFTA_EXPR_DATA,
-//                            vec![
-//                                NetlinkExpr::Final(
-//                                    NFTA_NAT_TYPE,
-//                                    NFT_NAT_SNAT.to_be_bytes().to_vec()
-//                                ),
-//                                NetlinkExpr::Final(
-//                                    NFTA_NAT_FAMILY,
-//                                    (ProtoFamily::Ipv4 as u32).to_be_bytes().to_vec(),
-//                                ),
-//                                NetlinkExpr::Final(
-//                                    NFTA_NAT_REG_ADDR_MIN,
-//                                    NFT_REG_1.to_be_bytes().to_vec()
-//                                )
-//                            ]
-//                        )
-//                    ]
-//                )]
-//            )
-//        ])
-//        .to_raw()
-//    );
-//}
-//
-//#[test]
-//fn payload_expr_is_valid() {
-//    let tcp_header_field = TcpHeaderField::Sport;
-//    let transport_header_field = TransportHeaderField::Tcp(tcp_header_field);
-//    let payload = Payload::Transport(transport_header_field);
-//    let mut rule = get_test_rule();
-//    let (nlmsghdr, _nfgenmsg, raw_expr) = get_test_nlmsg_from_expr(&mut rule, &payload);
-//    assert_eq!(nlmsghdr.nlmsg_len, 108);
-//
-//    assert_eq!(
-//        raw_expr,
-//        NetlinkExpr::List(vec![
-//            NetlinkExpr::Final(NFTA_RULE_TABLE, TABLE_NAME.to_vec()),
-//            NetlinkExpr::Final(NFTA_RULE_CHAIN, CHAIN_NAME.to_vec()),
-//            NetlinkExpr::Nested(
-//                NFTA_RULE_EXPRESSIONS,
-//                vec![NetlinkExpr::Nested(
-//                    NFTA_LIST_ELEM,
-//                    vec![
-//                        NetlinkExpr::Final(NFTA_EXPR_NAME, b"payload\0".to_vec()),
-//                        NetlinkExpr::Nested(
-//                            NFTA_EXPR_DATA,
-//                            vec![
-//                                NetlinkExpr::Final(
-//                                    NFTA_PAYLOAD_DREG,
-//                                    NFT_REG_1.to_be_bytes().to_vec()
-//                                ),
-//                                NetlinkExpr::Final(
-//                                    NFTA_PAYLOAD_BASE,
-//                                    NFT_PAYLOAD_TRANSPORT_HEADER.to_be_bytes().to_vec()
-//                                ),
-//                                NetlinkExpr::Final(
-//                                    NFTA_PAYLOAD_OFFSET,
-//                                    tcp_header_field.offset().to_be_bytes().to_vec()
-//                                ),
-//                                NetlinkExpr::Final(
-//                                    NFTA_PAYLOAD_LEN,
-//                                    tcp_header_field.len().to_be_bytes().to_vec()
-//                                ),
-//                            ]
-//                        )
-//                    ]
-//                )]
-//            )
-//        ])
-//        .to_raw()
-//    );
-//}
+
+#[test]
+fn nat_expr_is_valid() {
+    let nat = Nat::default()
+        .with_nat_type(NatType::SNat)
+        .with_family(ProtocolFamily::Ipv4)
+        .with_ip_register(Register::Reg1);
+    let mut rule = get_test_rule().with_expressions(vec![nat]);
+
+    let mut buf = Vec::new();
+    let (nlmsghdr, _nfgenmsg, raw_expr) = get_test_nlmsg(&mut buf, &mut rule);
+    assert_eq!(nlmsghdr.nlmsg_len, 96);
+
+    assert_eq!(
+        raw_expr,
+        NetlinkExpr::List(vec![
+            NetlinkExpr::Final(NFTA_RULE_TABLE, TABLE_NAME.as_bytes().to_vec()),
+            NetlinkExpr::Final(NFTA_RULE_CHAIN, CHAIN_NAME.as_bytes().to_vec()),
+            NetlinkExpr::Nested(
+                NFTA_RULE_EXPRESSIONS,
+                vec![NetlinkExpr::Nested(
+                    NFTA_LIST_ELEM,
+                    vec![
+                        NetlinkExpr::Final(NFTA_EXPR_NAME, b"nat".to_vec()),
+                        NetlinkExpr::Nested(
+                            NFTA_EXPR_DATA,
+                            vec![
+                                NetlinkExpr::Final(
+                                    NFTA_NAT_TYPE,
+                                    NFT_NAT_SNAT.to_be_bytes().to_vec()
+                                ),
+                                NetlinkExpr::Final(
+                                    NFTA_NAT_FAMILY,
+                                    (ProtocolFamily::Ipv4 as u32).to_be_bytes().to_vec(),
+                                ),
+                                NetlinkExpr::Final(
+                                    NFTA_NAT_REG_ADDR_MIN,
+                                    NFT_REG_1.to_be_bytes().to_vec()
+                                )
+                            ]
+                        )
+                    ]
+                )]
+            )
+        ])
+        .to_raw()
+    );
+}
+
+#[test]
+fn payload_expr_is_valid() {
+    let tcp_header_field = TCPHeaderField::Sport;
+    let transport_header_field = TransportHeaderField::Tcp(tcp_header_field);
+    let payload = HighLevelPayload::Transport(transport_header_field);
+    let mut rule = get_test_rule().with_expressions(vec![payload.build()]);
+
+    let mut buf = Vec::new();
+    let (nlmsghdr, _nfgenmsg, raw_expr) = get_test_nlmsg(&mut buf, &mut rule);
+    assert_eq!(nlmsghdr.nlmsg_len, 108);
+
+    assert_eq!(
+        raw_expr,
+        NetlinkExpr::List(vec![
+            NetlinkExpr::Final(NFTA_RULE_TABLE, TABLE_NAME.as_bytes().to_vec()),
+            NetlinkExpr::Final(NFTA_RULE_CHAIN, CHAIN_NAME.as_bytes().to_vec()),
+            NetlinkExpr::Nested(
+                NFTA_RULE_EXPRESSIONS,
+                vec![NetlinkExpr::Nested(
+                    NFTA_LIST_ELEM,
+                    vec![
+                        NetlinkExpr::Final(NFTA_EXPR_NAME, b"payload".to_vec()),
+                        NetlinkExpr::Nested(
+                            NFTA_EXPR_DATA,
+                            vec![
+                                NetlinkExpr::Final(
+                                    NFTA_PAYLOAD_DREG,
+                                    NFT_REG_1.to_be_bytes().to_vec()
+                                ),
+                                NetlinkExpr::Final(
+                                    NFTA_PAYLOAD_BASE,
+                                    NFT_PAYLOAD_TRANSPORT_HEADER.to_be_bytes().to_vec()
+                                ),
+                                NetlinkExpr::Final(
+                                    NFTA_PAYLOAD_OFFSET,
+                                    tcp_header_field.offset().to_be_bytes().to_vec()
+                                ),
+                                NetlinkExpr::Final(
+                                    NFTA_PAYLOAD_LEN,
+                                    tcp_header_field.len().to_be_bytes().to_vec()
+                                ),
+                            ]
+                        )
+                    ]
+                )]
+            )
+        ])
+        .to_raw()
+    );
+}
 
 #[test]
 fn reject_expr_is_valid() {

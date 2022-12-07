@@ -1,41 +1,41 @@
-use super::{DeserializationError, Expression, Register, Rule};
-use crate::ProtoFamily;
-use crate::sys::{self, libc};
-use std::{convert::TryFrom, os::raw::c_char};
+use rustables_macros::{nfnetlink_enum, nfnetlink_struct};
+
+use super::{Expression, Register};
+use crate::{
+    sys::{self, NFT_NAT_DNAT, NFT_NAT_SNAT},
+    ProtocolFamily,
+};
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Hash)]
-#[repr(i32)]
+#[nfnetlink_enum(i32)]
 pub enum NatType {
     /// Source NAT. Changes the source address of a packet.
-    SNat = libc::NFT_NAT_SNAT,
+    SNat = NFT_NAT_SNAT,
     /// Destination NAT. Changes the destination address of a packet.
-    DNat = libc::NFT_NAT_DNAT,
-}
-
-impl NatType {
-    fn from_raw(val: u32) -> Result<Self, DeserializationError> {
-        match val as i32 {
-            libc::NFT_NAT_SNAT => Ok(NatType::SNat),
-            libc::NFT_NAT_DNAT => Ok(NatType::DNat),
-            _ => Err(DeserializationError::InvalidValue),
-        }
-    }
+    DNat = NFT_NAT_DNAT,
 }
 
 /// A source or destination NAT statement. Modifies the source or destination address (and possibly
 /// port) of packets.
-#[derive(Debug, PartialEq)]
+#[derive(Default, Debug, Clone, PartialEq, Eq)]
+#[nfnetlink_struct(nested = true)]
 pub struct Nat {
+    #[field(sys::NFTA_NAT_TYPE)]
     pub nat_type: NatType,
-    pub family: ProtoFamily,
+    #[field(sys::NFTA_NAT_FAMILY)]
+    pub family: ProtocolFamily,
+    #[field(sys::NFTA_NAT_REG_ADDR_MIN)]
     pub ip_register: Register,
-    pub port_register: Option<Register>,
+    #[field(sys::NFTA_NAT_REG_PROTO_MIN)]
+    pub port_register: Register,
 }
 
 impl Expression for Nat {
-    fn get_raw_name() -> *const libc::c_char {
-        b"nat\0" as *const _ as *const c_char
+    fn get_name() -> &'static str {
+        "nat"
     }
+}
+/*
 
     fn from_expr(expr: *const sys::nftnl_expr) -> Result<Self, DeserializationError>
     where
@@ -97,3 +97,4 @@ impl Expression for Nat {
         expr
     }
 }
+*/

@@ -76,6 +76,39 @@ pub enum DecodeError {
     #[error("Invalid type for a verdict expression")]
     UnknownVerdictType(i32),
 
+    #[error("Invalid type for a nat expression")]
+    UnknownNatType(i32),
+
+    #[error("Invalid type for a payload expression")]
+    UnknownPayloadType(u32),
+
+    #[error("Unsupported value for a link layer header field")]
+    UnknownLinkLayerHeaderField(u32, u32),
+
+    #[error("Unsupported value for an IPv4 header field")]
+    UnknownIPv4HeaderField(u32, u32),
+
+    #[error("Unsupported value for an IPv6 header field")]
+    UnknownIPv6HeaderField(u32, u32),
+
+    #[error("Unsupported value for a TCP header field")]
+    UnknownTCPHeaderField(u32, u32),
+
+    #[error("Unsupported value for an UDP header field")]
+    UnknownUDPHeaderField(u32, u32),
+
+    #[error("Unsupported value for an ICMPv6 header field")]
+    UnknownICMPv6HeaderField(u32, u32),
+
+    #[error("Missing the 'base' attribute to deserialize the payload object")]
+    PayloadMissingBase,
+
+    #[error("Missing the 'offset' attribute to deserialize the payload object")]
+    PayloadMissingOffset,
+
+    #[error("Missing the 'len' attribute to deserialize the payload object")]
+    PayloadMissingLen,
+
     #[error("The object does not contain a name for the expression being parsed")]
     MissingExpressionName,
 

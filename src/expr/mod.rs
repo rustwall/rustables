@@ -52,13 +52,11 @@ pub use self::masquerade::*;
 mod meta;
 pub use self::meta::*;
 
-/*
 mod nat;
 pub use self::nat::*;
 
 mod payload;
 pub use self::payload::*;
-*/
 
 mod reject;
 pub use self::reject::{IcmpCode, Reject, RejectType};
@@ -225,7 +223,9 @@ create_expr_variant!(
     [ExpressionRaw, ExpressionRaw],
     [Meta, Meta],
     [Reject, Reject],
-    [Counter, Counter]
+    [Counter, Counter],
+    [Nat, Nat],
+    [Payload, Payload]
 );
 
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
