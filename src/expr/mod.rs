@@ -40,10 +40,10 @@ pub use self::log::*;
 
 mod lookup;
 pub use self::lookup::*;
+*/
 
 mod masquerade;
 pub use self::masquerade::*;
-*/
 
 mod meta;
 pub use self::meta::*;
@@ -62,12 +62,6 @@ pub use self::register::Register;
 
 mod verdict;
 pub use self::verdict::*;
-
-/*
-
-mod wrapper;
-pub use self::wrapper::ExpressionWrapper;
-*/
 
 #[derive(Debug, Error)]
 pub enum ExpressionError {
@@ -223,7 +217,8 @@ create_expr_variant!(
     [Nat, Nat],
     [Payload, Payload],
     [Cmp, Cmp],
-    [Conntrack, Conntrack]
+    [Conntrack, Conntrack],
+    [Masquerade, Masquerade]
 );
 
 #[derive(Debug, Clone, PartialEq, Eq, Default)]

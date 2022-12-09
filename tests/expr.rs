@@ -1,8 +1,8 @@
 use rustables::{
     expr::{
         Bitwise, Cmp, CmpOp, Conntrack, ConntrackKey, Counter, ExpressionList, HeaderField,
-        HighLevelPayload, IcmpCode, Immediate, Log, Meta, MetaType, Nat, NatType, Register, Reject,
-        RejectType, TCPHeaderField, TransportHeaderField, VerdictKind,
+        HighLevelPayload, IcmpCode, Immediate, Log, Masquerade, Meta, MetaType, Nat, NatType,
+        Register, Reject, RejectType, TCPHeaderField, TransportHeaderField, VerdictKind,
     },
     sys::{
         NFTA_BITWISE_DREG, NFTA_BITWISE_LEN, NFTA_BITWISE_MASK, NFTA_BITWISE_SREG,
@@ -335,35 +335,36 @@ fn log_expr_is_valid() {
 //        .to_raw()
 //    );
 //}
-//
-//use rustables::expr::Masquerade;
-//#[test]
-//fn masquerade_expr_is_valid() {
-//    let masquerade = Masquerade;
-//    let mut rule = get_test_rule();
-//    let (nlmsghdr, _nfgenmsg, raw_expr) = get_test_nlmsg_from_expr(&mut rule, &masquerade);
-//    assert_eq!(nlmsghdr.nlmsg_len, 76);
-//
-//    assert_eq!(
-//        raw_expr,
-//        NetlinkExpr::List(vec![
-//            NetlinkExpr::Final(NFTA_RULE_TABLE, TABLE_NAME.to_vec()),
-//            NetlinkExpr::Final(NFTA_RULE_CHAIN, CHAIN_NAME.to_vec()),
-//            NetlinkExpr::Nested(
-//                NFTA_RULE_EXPRESSIONS,
-//                vec![NetlinkExpr::Nested(
-//                    NFTA_LIST_ELEM,
-//                    vec![
-//                        NetlinkExpr::Final(NFTA_EXPR_NAME, b"masq\0".to_vec()),
-//                        NetlinkExpr::Nested(NFTA_EXPR_DATA, vec![]),
-//                    ]
-//                )]
-//            )
-//        ])
-//        .to_raw()
-//    );
-//}
-//
+
+#[test]
+fn masquerade_expr_is_valid() {
+    let masquerade = Masquerade::default();
+    let mut rule = get_test_rule().with_expressions(vec![masquerade]);
+
+    let mut buf = Vec::new();
+    let (nlmsghdr, _nfgenmsg, raw_expr) = get_test_nlmsg(&mut buf, &mut rule);
+    assert_eq!(nlmsghdr.nlmsg_len, 72);
+
+    assert_eq!(
+        raw_expr,
+        NetlinkExpr::List(vec![
+            NetlinkExpr::Final(NFTA_RULE_TABLE, TABLE_NAME.as_bytes().to_vec()),
+            NetlinkExpr::Final(NFTA_RULE_CHAIN, CHAIN_NAME.as_bytes().to_vec()),
+            NetlinkExpr::Nested(
+                NFTA_RULE_EXPRESSIONS,
+                vec![NetlinkExpr::Nested(
+                    NFTA_LIST_ELEM,
+                    vec![
+                        NetlinkExpr::Final(NFTA_EXPR_NAME, b"masq".to_vec()),
+                        NetlinkExpr::Nested(NFTA_EXPR_DATA, vec![]),
+                    ]
+                )]
+            )
+        ])
+        .to_raw()
+    );
+}
+
 #[test]
 fn meta_expr_is_valid() {
     let meta = Meta::default()
