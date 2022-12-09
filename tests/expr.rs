@@ -1,17 +1,18 @@
 use rustables::{
     expr::{
-        Bitwise, ExpressionList, HeaderField, HighLevelPayload, IcmpCode, Immediate, Log, Meta,
-        MetaType, Nat, NatType, Register, Reject, RejectType, TCPHeaderField, TransportHeaderField,
-        VerdictKind,
+        Bitwise, Cmp, CmpOp, ExpressionList, HeaderField, HighLevelPayload, IcmpCode, Immediate,
+        Log, Meta, MetaType, Nat, NatType, Register, Reject, RejectType, TCPHeaderField,
+        TransportHeaderField, VerdictKind,
     },
     sys::{
         NFTA_BITWISE_DREG, NFTA_BITWISE_LEN, NFTA_BITWISE_MASK, NFTA_BITWISE_SREG,
-        NFTA_BITWISE_XOR, NFTA_DATA_VALUE, NFTA_DATA_VERDICT, NFTA_EXPR_DATA, NFTA_EXPR_NAME,
-        NFTA_IMMEDIATE_DATA, NFTA_IMMEDIATE_DREG, NFTA_LIST_ELEM, NFTA_LOG_GROUP, NFTA_LOG_PREFIX,
-        NFTA_META_DREG, NFTA_META_KEY, NFTA_NAT_FAMILY, NFTA_NAT_REG_ADDR_MIN, NFTA_NAT_TYPE,
-        NFTA_PAYLOAD_BASE, NFTA_PAYLOAD_DREG, NFTA_PAYLOAD_LEN, NFTA_PAYLOAD_OFFSET,
-        NFTA_REJECT_ICMP_CODE, NFTA_REJECT_TYPE, NFTA_RULE_CHAIN, NFTA_RULE_EXPRESSIONS,
-        NFTA_RULE_TABLE, NFTA_VERDICT_CODE, NFT_META_PROTOCOL, NFT_NAT_SNAT,
+        NFTA_BITWISE_XOR, NFTA_CMP_DATA, NFTA_CMP_OP, NFTA_CMP_SREG, NFTA_DATA_VALUE,
+        NFTA_DATA_VERDICT, NFTA_EXPR_DATA, NFTA_EXPR_NAME, NFTA_IMMEDIATE_DATA,
+        NFTA_IMMEDIATE_DREG, NFTA_LIST_ELEM, NFTA_LOG_GROUP, NFTA_LOG_PREFIX, NFTA_META_DREG,
+        NFTA_META_KEY, NFTA_NAT_FAMILY, NFTA_NAT_REG_ADDR_MIN, NFTA_NAT_TYPE, NFTA_PAYLOAD_BASE,
+        NFTA_PAYLOAD_DREG, NFTA_PAYLOAD_LEN, NFTA_PAYLOAD_OFFSET, NFTA_REJECT_ICMP_CODE,
+        NFTA_REJECT_TYPE, NFTA_RULE_CHAIN, NFTA_RULE_EXPRESSIONS, NFTA_RULE_TABLE,
+        NFTA_VERDICT_CODE, NFT_CMP_EQ, NFT_META_PROTOCOL, NFT_NAT_SNAT,
         NFT_PAYLOAD_TRANSPORT_HEADER, NFT_REG_1, NFT_REG_VERDICT, NFT_REJECT_ICMPX_UNREACH,
     },
     ProtocolFamily,
@@ -38,7 +39,7 @@ fn bitwise_expr_is_valid() {
     let netmask = Ipv4Addr::new(255, 255, 255, 0);
     let bitwise = Bitwise::new(netmask.octets(), [0, 0, 0, 0]).unwrap();
     let mut rule =
-        get_test_rule().with_expressions(ExpressionList::builder().with_expression(bitwise));
+        get_test_rule().with_expressions(ExpressionList::default().with_expression(bitwise));
 
     let mut buf = Vec::new();
     let (nlmsghdr, _nfgenmsg, raw_expr) = get_test_nlmsg(&mut buf, &mut rule);
@@ -90,44 +91,47 @@ fn bitwise_expr_is_valid() {
         .to_raw()
     );
 }
-//
-//#[test]
-//fn cmp_expr_is_valid() {
-//    let cmp = Cmp::new(CmpOp::Eq, 0);
-//    let mut rule = get_test_rule();
-//    let (nlmsghdr, _nfgenmsg, raw_expr) = get_test_nlmsg_from_expr(&mut rule, &cmp);
-//    assert_eq!(nlmsghdr.nlmsg_len, 100);
-//
-//    assert_eq!(
-//        raw_expr,
-//        NetlinkExpr::List(vec![
-//            NetlinkExpr::Final(NFTA_RULE_TABLE, TABLE_NAME.to_vec()),
-//            NetlinkExpr::Final(NFTA_RULE_CHAIN, CHAIN_NAME.to_vec()),
-//            NetlinkExpr::Nested(
-//                NFTA_RULE_EXPRESSIONS,
-//                vec![NetlinkExpr::Nested(
-//                    NFTA_LIST_ELEM,
-//                    vec![
-//                        NetlinkExpr::Final(NFTA_EXPR_NAME, b"cmp\0".to_vec()),
-//                        NetlinkExpr::Nested(
-//                            NFTA_EXPR_DATA,
-//                            vec![
-//                                NetlinkExpr::Final(NFTA_CMP_SREG, NFT_REG_1.to_be_bytes().to_vec()),
-//                                NetlinkExpr::Final(NFTA_CMP_OP, NFT_CMP_EQ.to_be_bytes().to_vec()),
-//                                NetlinkExpr::Nested(
-//                                    NFTA_CMP_DATA,
-//                                    vec![NetlinkExpr::Final(1u16, 0u32.to_be_bytes().to_vec())]
-//                                )
-//                            ]
-//                        )
-//                    ]
-//                )]
-//            )
-//        ])
-//        .to_raw()
-//    );
-//}
-//
+
+#[test]
+fn cmp_expr_is_valid() {
+    let val = vec![1u8, 2, 3, 4];
+    let cmp = Cmp::new(CmpOp::Eq, val.clone());
+    let mut rule = get_test_rule().with_expressions(vec![cmp]);
+
+    let mut buf = Vec::new();
+    let (nlmsghdr, _nfgenmsg, raw_expr) = get_test_nlmsg(&mut buf, &mut rule);
+    assert_eq!(nlmsghdr.nlmsg_len, 100);
+
+    assert_eq!(
+        raw_expr,
+        NetlinkExpr::List(vec![
+            NetlinkExpr::Final(NFTA_RULE_TABLE, TABLE_NAME.as_bytes().to_vec()),
+            NetlinkExpr::Final(NFTA_RULE_CHAIN, CHAIN_NAME.as_bytes().to_vec()),
+            NetlinkExpr::Nested(
+                NFTA_RULE_EXPRESSIONS,
+                vec![NetlinkExpr::Nested(
+                    NFTA_LIST_ELEM,
+                    vec![
+                        NetlinkExpr::Final(NFTA_EXPR_NAME, b"cmp".to_vec()),
+                        NetlinkExpr::Nested(
+                            NFTA_EXPR_DATA,
+                            vec![
+                                NetlinkExpr::Final(NFTA_CMP_SREG, NFT_REG_1.to_be_bytes().to_vec()),
+                                NetlinkExpr::Final(NFTA_CMP_OP, NFT_CMP_EQ.to_be_bytes().to_vec()),
+                                NetlinkExpr::Nested(
+                                    NFTA_CMP_DATA,
+                                    vec![NetlinkExpr::Final(NFTA_DATA_VALUE, val)]
+                                )
+                            ]
+                        )
+                    ]
+                )]
+            )
+        ])
+        .to_raw()
+    );
+}
+
 //#[test]
 //fn counter_expr_is_valid() {
 //    let nb_bytes = 123456u64;
@@ -212,7 +216,7 @@ fn bitwise_expr_is_valid() {
 fn immediate_expr_is_valid() {
     let immediate = Immediate::new_data(vec![42u8], Register::Reg1);
     let mut rule =
-        get_test_rule().with_expressions(ExpressionList::builder().with_expression(immediate));
+        get_test_rule().with_expressions(ExpressionList::default().with_expression(immediate));
 
     let mut buf = Vec::new();
     let (nlmsghdr, _nfgenmsg, raw_expr) = get_test_nlmsg(&mut buf, &mut rule);
@@ -253,7 +257,7 @@ fn immediate_expr_is_valid() {
 #[test]
 fn log_expr_is_valid() {
     let log = Log::new(Some(1337), Some("mockprefix")).expect("Could not build a log expression");
-    let mut rule = get_test_rule().with_expressions(ExpressionList::builder().with_expression(log));
+    let mut rule = get_test_rule().with_expressions(ExpressionList::default().with_expression(log));
 
     let mut buf = Vec::new();
     let (nlmsghdr, _nfgenmsg, raw_expr) = get_test_nlmsg(&mut buf, &mut rule);
@@ -543,8 +547,8 @@ fn reject_expr_is_valid() {
 #[test]
 fn verdict_expr_is_valid() {
     let verdict = Immediate::new_verdict(VerdictKind::Drop);
-    let mut rule = get_test_rule();
-    rule.set_expressions(ExpressionList::builder().with_expression(verdict));
+    let mut rule =
+        get_test_rule().with_expressions(ExpressionList::default().with_expression(verdict));
 
     let mut buf = Vec::new();
     let (nlmsghdr, _nfgenmsg, raw_expr) = get_test_nlmsg(&mut buf, &mut rule);

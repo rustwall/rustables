@@ -22,10 +22,8 @@ use thiserror::Error;
 mod bitwise;
 pub use self::bitwise::*;
 
-/*
 mod cmp;
 pub use self::cmp::*;
-*/
 
 mod counter;
 pub use self::counter::*;
@@ -225,7 +223,8 @@ create_expr_variant!(
     [Reject, Reject],
     [Counter, Counter],
     [Nat, Nat],
-    [Payload, Payload]
+    [Payload, Payload],
+    [Cmp, Cmp]
 );
 
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
@@ -234,10 +233,6 @@ pub struct ExpressionList {
 }
 
 impl ExpressionList {
-    pub fn builder() -> Self {
-        Self { exprs: Vec::new() }
-    }
-
     /// Useful to add raw expressions because RawExpression cannot infer alone its type
     pub fn add_raw_expression(&mut self, e: RawExpression) {
         self.exprs.push(e);

@@ -82,7 +82,7 @@ fn main() -> Result<(), Error> {
     batch.add(&in_chain, MsgType::Add);
 
     let rule = Rule::new(&in_chain)?.with_expressions(
-        ExpressionList::builder().with_expression(Immediate::new_verdict(VerdictKind::Accept)),
+        ExpressionList::default().with_expression(Immediate::new_verdict(VerdictKind::Accept)),
     );
 
     batch.add(&rule, MsgType::Add);

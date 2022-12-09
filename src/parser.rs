@@ -82,6 +82,9 @@ pub enum DecodeError {
     #[error("Invalid type for a payload expression")]
     UnknownPayloadType(u32),
 
+    #[error("Invalid type for a compare expression")]
+    UnknownCmpOp(u32),
+
     #[error("Unsupported value for a link layer header field")]
     UnknownLinkLayerHeaderField(u32, u32),
 
