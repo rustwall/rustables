@@ -2,7 +2,6 @@ use rustables_macros::nfnetlink_struct;
 
 use super::{Expression, Register};
 use crate::{
-    nlmsg::{NfNetlinkAttribute, NfNetlinkDeserializable},
     parser::DecodeError,
     sys::{self, NFT_PAYLOAD_LL_HEADER, NFT_PAYLOAD_NETWORK_HEADER, NFT_PAYLOAD_TRANSPORT_HEADER},
 };
@@ -66,7 +65,7 @@ pub enum PayloadType {
 }
 
 impl PayloadType {
-    fn parse_from_payload(raw: &Payload) -> Result<Self, DecodeError> {
+    pub fn parse_from_payload(raw: &Payload) -> Result<Self, DecodeError> {
         if raw.base.is_none() {
             return Err(DecodeError::PayloadMissingBase);
         }

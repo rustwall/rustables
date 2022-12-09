@@ -27,11 +27,9 @@ pub use self::cmp::*;
 
 mod counter;
 pub use self::counter::*;
-/*
 
 pub mod ct;
 pub use self::ct::*;
-*/
 
 mod immediate;
 pub use self::immediate::*;
@@ -224,7 +222,8 @@ create_expr_variant!(
     [Counter, Counter],
     [Nat, Nat],
     [Payload, Payload],
-    [Cmp, Cmp]
+    [Cmp, Cmp],
+    [Conntrack, Conntrack]
 );
 
 #[derive(Debug, Clone, PartialEq, Eq, Default)]

@@ -1,9 +1,13 @@
-use super::{DeserializationError, Expression, Rule};
-use crate::sys::{self, libc};
-use std::os::raw::c_char;
+use rustables_macros::{nfnetlink_enum, nfnetlink_struct};
+
+use crate::sys::{
+    NFTA_CT_DIRECTION, NFTA_CT_DREG, NFTA_CT_KEY, NFTA_CT_SREG, NFT_CT_MARK, NFT_CT_STATE,
+};
+
+use super::{Expression, Register};
 
 bitflags::bitflags! {
-    pub struct States: u32 {
+    pub struct ConnTrackState: u32 {
         const INVALID = 1;
         const ESTABLISHED = 2;
         const RELATED = 4;
@@ -12,76 +16,50 @@ bitflags::bitflags! {
     }
 }
 
-pub enum Conntrack {
-    State,
-    Mark { set: bool },
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+#[nfnetlink_enum(u32, nested = true)]
+pub enum ConntrackKey {
+    State = NFT_CT_STATE,
+    Mark = NFT_CT_MARK,
 }
 
-impl Conntrack {
-    fn raw_key(&self) -> u32 {
-        match *self {
-            Conntrack::State => libc::NFT_CT_STATE as u32,
-            Conntrack::Mark { .. } => libc::NFT_CT_MARK as u32,
-        }
-    }
+#[derive(Default, Clone, Debug, PartialEq, Eq)]
+#[nfnetlink_struct(nested = true)]
+pub struct Conntrack {
+    #[field(NFTA_CT_DREG)]
+    pub dreg: Register,
+    #[field(NFTA_CT_KEY)]
+    pub key: ConntrackKey,
+    #[field(NFTA_CT_DIRECTION)]
+    pub direction: u8,
+    #[field(NFTA_CT_SREG)]
+    pub sreg: Register,
 }
 
 impl Expression for Conntrack {
-    fn get_raw_name() -> *const c_char {
-        b"ct\0" as *const _ as *const c_char
-    }
-
-    fn from_expr(expr: *const sys::nftnl_expr) -> Result<Self, DeserializationError>
-    where
-        Self: Sized,
-    {
-        unsafe {
-            let ct_key = sys::nftnl_expr_get_u32(expr, sys::NFTNL_EXPR_CT_KEY as u16);
-            let ct_sreg_is_set = sys::nftnl_expr_is_set(expr, sys::NFTNL_EXPR_CT_SREG as u16);
-
-            match ct_key as i32 {
-                libc::NFT_CT_STATE => Ok(Conntrack::State),
-                libc::NFT_CT_MARK => Ok(Conntrack::Mark {
-                    set: ct_sreg_is_set,
-                }),
-                _ => Err(DeserializationError::InvalidValue),
-            }
-        }
-    }
-
-    fn to_expr(&self, _rule: &Rule) -> *mut sys::nftnl_expr {
-        unsafe {
-            let expr = try_alloc!(sys::nftnl_expr_alloc(Self::get_raw_name()));
-
-            if let Conntrack::Mark { set: true } = self {
-                sys::nftnl_expr_set_u32(
-                    expr,
-                    sys::NFTNL_EXPR_CT_SREG as u16,
-                    libc::NFT_REG_1 as u32,
-                );
-            } else {
-                sys::nftnl_expr_set_u32(
-                    expr,
-                    sys::NFTNL_EXPR_CT_DREG as u16,
-                    libc::NFT_REG_1 as u32,
-                );
-            }
-            sys::nftnl_expr_set_u32(expr, sys::NFTNL_EXPR_CT_KEY as u16, self.raw_key());
-
-            expr
-        }
+    fn get_name() -> &'static str {
+        "ct"
     }
 }
 
-#[macro_export]
-macro_rules! nft_expr_ct {
-    (state) => {
-        $crate::expr::Conntrack::State
-    };
-    (mark set) => {
-        $crate::expr::Conntrack::Mark { set: true }
-    };
-    (mark) => {
-        $crate::expr::Conntrack::Mark { set: false }
-    };
+impl Conntrack {
+    pub fn set_mark_value(&mut self, reg: Register) {
+        self.set_sreg(reg);
+        self.set_key(ConntrackKey::Mark);
+    }
+
+    pub fn with_mark_value(mut self, reg: Register) -> Self {
+        self.set_mark_value(reg);
+        self
+    }
+
+    pub fn retrieve_value(&mut self, key: ConntrackKey) {
+        self.set_key(key);
+        self.set_dreg(Register::Reg1);
+    }
+
+    pub fn with_retrieve_value(mut self, key: ConntrackKey) -> Self {
+        self.retrieve_value(key);
+        self
+    }
 }

@@ -85,6 +85,9 @@ pub enum DecodeError {
     #[error("Invalid type for a compare expression")]
     UnknownCmpOp(u32),
 
+    #[error("Invalid type for a conntrack key")]
+    UnknownConntrackKey(u32),
+
     #[error("Unsupported value for a link layer header field")]
     UnknownLinkLayerHeaderField(u32, u32),
 

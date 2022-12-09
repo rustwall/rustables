@@ -1,19 +1,20 @@
 use rustables::{
     expr::{
-        Bitwise, Cmp, CmpOp, ExpressionList, HeaderField, HighLevelPayload, IcmpCode, Immediate,
-        Log, Meta, MetaType, Nat, NatType, Register, Reject, RejectType, TCPHeaderField,
-        TransportHeaderField, VerdictKind,
+        Bitwise, Cmp, CmpOp, Conntrack, ConntrackKey, Counter, ExpressionList, HeaderField,
+        HighLevelPayload, IcmpCode, Immediate, Log, Meta, MetaType, Nat, NatType, Register, Reject,
+        RejectType, TCPHeaderField, TransportHeaderField, VerdictKind,
     },
     sys::{
         NFTA_BITWISE_DREG, NFTA_BITWISE_LEN, NFTA_BITWISE_MASK, NFTA_BITWISE_SREG,
-        NFTA_BITWISE_XOR, NFTA_CMP_DATA, NFTA_CMP_OP, NFTA_CMP_SREG, NFTA_DATA_VALUE,
-        NFTA_DATA_VERDICT, NFTA_EXPR_DATA, NFTA_EXPR_NAME, NFTA_IMMEDIATE_DATA,
-        NFTA_IMMEDIATE_DREG, NFTA_LIST_ELEM, NFTA_LOG_GROUP, NFTA_LOG_PREFIX, NFTA_META_DREG,
-        NFTA_META_KEY, NFTA_NAT_FAMILY, NFTA_NAT_REG_ADDR_MIN, NFTA_NAT_TYPE, NFTA_PAYLOAD_BASE,
-        NFTA_PAYLOAD_DREG, NFTA_PAYLOAD_LEN, NFTA_PAYLOAD_OFFSET, NFTA_REJECT_ICMP_CODE,
-        NFTA_REJECT_TYPE, NFTA_RULE_CHAIN, NFTA_RULE_EXPRESSIONS, NFTA_RULE_TABLE,
-        NFTA_VERDICT_CODE, NFT_CMP_EQ, NFT_META_PROTOCOL, NFT_NAT_SNAT,
-        NFT_PAYLOAD_TRANSPORT_HEADER, NFT_REG_1, NFT_REG_VERDICT, NFT_REJECT_ICMPX_UNREACH,
+        NFTA_BITWISE_XOR, NFTA_CMP_DATA, NFTA_CMP_OP, NFTA_CMP_SREG, NFTA_COUNTER_BYTES,
+        NFTA_COUNTER_PACKETS, NFTA_CT_DREG, NFTA_CT_KEY, NFTA_DATA_VALUE, NFTA_DATA_VERDICT,
+        NFTA_EXPR_DATA, NFTA_EXPR_NAME, NFTA_IMMEDIATE_DATA, NFTA_IMMEDIATE_DREG, NFTA_LIST_ELEM,
+        NFTA_LOG_GROUP, NFTA_LOG_PREFIX, NFTA_META_DREG, NFTA_META_KEY, NFTA_NAT_FAMILY,
+        NFTA_NAT_REG_ADDR_MIN, NFTA_NAT_TYPE, NFTA_PAYLOAD_BASE, NFTA_PAYLOAD_DREG,
+        NFTA_PAYLOAD_LEN, NFTA_PAYLOAD_OFFSET, NFTA_REJECT_ICMP_CODE, NFTA_REJECT_TYPE,
+        NFTA_RULE_CHAIN, NFTA_RULE_EXPRESSIONS, NFTA_RULE_TABLE, NFTA_VERDICT_CODE, NFT_CMP_EQ,
+        NFT_CT_STATE, NFT_META_PROTOCOL, NFT_NAT_SNAT, NFT_PAYLOAD_TRANSPORT_HEADER, NFT_REG_1,
+        NFT_REG_VERDICT, NFT_REJECT_ICMPX_UNREACH,
     },
     ProtocolFamily,
 };
@@ -132,86 +133,90 @@ fn cmp_expr_is_valid() {
     );
 }
 
-//#[test]
-//fn counter_expr_is_valid() {
-//    let nb_bytes = 123456u64;
-//    let nb_packets = 987u64;
-//    let mut counter = Counter::new();
-//    counter.nb_bytes = nb_bytes;
-//    counter.nb_packets = nb_packets;
-//
-//    let mut rule = get_test_rule();
-//    let (nlmsghdr, _nfgenmsg, raw_expr) = get_test_nlmsg_from_expr(&mut rule, &counter);
-//    assert_eq!(nlmsghdr.nlmsg_len, 100);
-//
-//    assert_eq!(
-//        raw_expr,
-//        NetlinkExpr::List(vec![
-//            NetlinkExpr::Final(NFTA_RULE_TABLE, TABLE_NAME.to_vec()),
-//            NetlinkExpr::Final(NFTA_RULE_CHAIN, CHAIN_NAME.to_vec()),
-//            NetlinkExpr::Nested(
-//                NFTA_RULE_EXPRESSIONS,
-//                vec![NetlinkExpr::Nested(
-//                    NFTA_LIST_ELEM,
-//                    vec![
-//                        NetlinkExpr::Final(NFTA_EXPR_NAME, b"counter\0".to_vec()),
-//                        NetlinkExpr::Nested(
-//                            NFTA_EXPR_DATA,
-//                            vec![
-//                                NetlinkExpr::Final(
-//                                    NFTA_COUNTER_BYTES,
-//                                    nb_bytes.to_be_bytes().to_vec()
-//                                ),
-//                                NetlinkExpr::Final(
-//                                    NFTA_COUNTER_PACKETS,
-//                                    nb_packets.to_be_bytes().to_vec()
-//                                )
-//                            ]
-//                        )
-//                    ]
-//                )]
-//            )
-//        ])
-//        .to_raw()
-//    );
-//}
-//
-//#[test]
-//fn ct_expr_is_valid() {
-//    let ct = Conntrack::State;
-//    let mut rule = get_test_rule();
-//    let (nlmsghdr, _nfgenmsg, raw_expr) = get_test_nlmsg_from_expr(&mut rule, &ct);
-//    assert_eq!(nlmsghdr.nlmsg_len, 88);
-//
-//    assert_eq!(
-//        raw_expr,
-//        NetlinkExpr::List(vec![
-//            NetlinkExpr::Final(NFTA_RULE_TABLE, TABLE_NAME.to_vec()),
-//            NetlinkExpr::Final(NFTA_RULE_CHAIN, CHAIN_NAME.to_vec()),
-//            NetlinkExpr::Nested(
-//                NFTA_RULE_EXPRESSIONS,
-//                vec![NetlinkExpr::Nested(
-//                    NFTA_LIST_ELEM,
-//                    vec![
-//                        NetlinkExpr::Final(NFTA_EXPR_NAME, b"ct\0".to_vec()),
-//                        NetlinkExpr::Nested(
-//                            NFTA_EXPR_DATA,
-//                            vec![
-//                                NetlinkExpr::Final(
-//                                    NFTA_CT_KEY,
-//                                    NFT_CT_STATE.to_be_bytes().to_vec()
-//                                ),
-//                                NetlinkExpr::Final(NFTA_CT_DREG, NFT_REG_1.to_be_bytes().to_vec())
-//                            ]
-//                        )
-//                    ]
-//                )]
-//            )
-//        ])
-//        .to_raw()
-//    )
-//}
-//
+#[test]
+fn counter_expr_is_valid() {
+    let nb_bytes = 123456u64;
+    let nb_packets = 987u64;
+    let counter = Counter::default()
+        .with_nb_bytes(nb_bytes)
+        .with_nb_packets(nb_packets);
+
+    let mut rule = get_test_rule().with_expressions(vec![counter]);
+
+    let mut buf = Vec::new();
+    let (nlmsghdr, _nfgenmsg, raw_expr) = get_test_nlmsg(&mut buf, &mut rule);
+    assert_eq!(nlmsghdr.nlmsg_len, 100);
+
+    assert_eq!(
+        raw_expr,
+        NetlinkExpr::List(vec![
+            NetlinkExpr::Final(NFTA_RULE_TABLE, TABLE_NAME.as_bytes().to_vec()),
+            NetlinkExpr::Final(NFTA_RULE_CHAIN, CHAIN_NAME.as_bytes().to_vec()),
+            NetlinkExpr::Nested(
+                NFTA_RULE_EXPRESSIONS,
+                vec![NetlinkExpr::Nested(
+                    NFTA_LIST_ELEM,
+                    vec![
+                        NetlinkExpr::Final(NFTA_EXPR_NAME, b"counter".to_vec()),
+                        NetlinkExpr::Nested(
+                            NFTA_EXPR_DATA,
+                            vec![
+                                NetlinkExpr::Final(
+                                    NFTA_COUNTER_BYTES,
+                                    nb_bytes.to_be_bytes().to_vec()
+                                ),
+                                NetlinkExpr::Final(
+                                    NFTA_COUNTER_PACKETS,
+                                    nb_packets.to_be_bytes().to_vec()
+                                )
+                            ]
+                        )
+                    ]
+                )]
+            )
+        ])
+        .to_raw()
+    );
+}
+
+#[test]
+fn ct_expr_is_valid() {
+    let ct = Conntrack::default().with_retrieve_value(ConntrackKey::State);
+    let mut rule = get_test_rule().with_expressions(vec![ct]);
+
+    let mut buf = Vec::new();
+    let (nlmsghdr, _nfgenmsg, raw_expr) = get_test_nlmsg(&mut buf, &mut rule);
+    assert_eq!(nlmsghdr.nlmsg_len, 88);
+
+    assert_eq!(
+        raw_expr,
+        NetlinkExpr::List(vec![
+            NetlinkExpr::Final(NFTA_RULE_TABLE, TABLE_NAME.as_bytes().to_vec()),
+            NetlinkExpr::Final(NFTA_RULE_CHAIN, CHAIN_NAME.as_bytes().to_vec()),
+            NetlinkExpr::Nested(
+                NFTA_RULE_EXPRESSIONS,
+                vec![NetlinkExpr::Nested(
+                    NFTA_LIST_ELEM,
+                    vec![
+                        NetlinkExpr::Final(NFTA_EXPR_NAME, b"ct".to_vec()),
+                        NetlinkExpr::Nested(
+                            NFTA_EXPR_DATA,
+                            vec![
+                                NetlinkExpr::Final(
+                                    NFTA_CT_KEY,
+                                    NFT_CT_STATE.to_be_bytes().to_vec()
+                                ),
+                                NetlinkExpr::Final(NFTA_CT_DREG, NFT_REG_1.to_be_bytes().to_vec())
+                            ]
+                        )
+                    ]
+                )]
+            )
+        ])
+        .to_raw()
+    )
+}
+
 #[test]
 fn immediate_expr_is_valid() {
     let immediate = Immediate::new_data(vec![42u8], Register::Reg1);
