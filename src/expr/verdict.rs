@@ -3,7 +3,6 @@ use std::fmt::Debug;
 use libc::{NF_ACCEPT, NF_DROP, NF_QUEUE};
 use rustables_macros::{nfnetlink_enum, nfnetlink_struct};
 
-use super::{ExpressionData, Immediate, Register};
 use crate::sys::{
     NFTA_VERDICT_CHAIN, NFTA_VERDICT_CHAIN_ID, NFTA_VERDICT_CODE, NFT_BREAK, NFT_CONTINUE,
     NFT_GOTO, NFT_JUMP, NFT_RETURN,
@@ -24,7 +23,7 @@ pub enum VerdictType {
 
 #[derive(Clone, PartialEq, Eq, Default, Debug)]
 #[nfnetlink_struct(nested = true)]
-pub struct VerdictAttribute {
+pub struct Verdict {
     #[field(NFTA_VERDICT_CODE)]
     code: VerdictType,
     #[field(NFTA_VERDICT_CHAIN)]
@@ -49,26 +48,4 @@ pub enum VerdictKind {
         chain: String,
     },
     Return,
-}
-
-impl Immediate {
-    pub fn new_verdict(kind: VerdictKind) -> Self {
-        let code = match kind {
-            VerdictKind::Drop => VerdictType::Drop,
-            VerdictKind::Accept => VerdictType::Accept,
-            VerdictKind::Queue => VerdictType::Queue,
-            VerdictKind::Continue => VerdictType::Continue,
-            VerdictKind::Break => VerdictType::Break,
-            VerdictKind::Jump { .. } => VerdictType::Jump,
-            VerdictKind::Goto { .. } => VerdictType::Goto,
-            VerdictKind::Return => VerdictType::Return,
-        };
-        let mut data = VerdictAttribute::default().with_code(code);
-        if let VerdictKind::Jump { chain } | VerdictKind::Goto { chain } = kind {
-            data.set_chain(chain);
-        }
-        Immediate::default()
-            .with_dreg(Register::Verdict)
-            .with_data(ExpressionData::default().with_verdict(data))
-    }
 }

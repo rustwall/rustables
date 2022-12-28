@@ -2,7 +2,7 @@ use rustables_macros::nfnetlink_struct;
 
 use super::{Expression, Register};
 use crate::{
-    parser::DecodeError,
+    error::DecodeError,
     sys::{self, NFT_PAYLOAD_LL_HEADER, NFT_PAYLOAD_NETWORK_HEADER, NFT_PAYLOAD_TRANSPORT_HEADER},
 };
 

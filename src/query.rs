@@ -1,71 +1,31 @@
 use std::os::unix::prelude::RawFd;
 
+use nix::sys::socket::{self, AddressFamily, MsgFlags, SockFlag, SockProtocol, SockType};
+
 use crate::{
-    nlmsg::{NfNetlinkAttribute, NfNetlinkObject, NfNetlinkWriter},
-    parser::{nft_nlmsg_maxsize, pad_netlink_object_with_variable_size},
-    sys::{nlmsgerr, NLM_F_DUMP, NLM_F_MULTI},
+    error::QueryError,
+    nlmsg::{
+        nft_nlmsg_maxsize, pad_netlink_object_with_variable_size, NfNetlinkAttribute,
+        NfNetlinkObject, NfNetlinkWriter,
+    },
+    parser::{parse_nlmsg, NlMsg},
+    sys::{NLM_F_DUMP, NLM_F_MULTI},
     ProtocolFamily,
 };
-
-use nix::{
-    errno::Errno,
-    sys::socket::{self, AddressFamily, MsgFlags, SockFlag, SockProtocol, SockType},
-};
-
-use crate::parser::{parse_nlmsg, DecodeError, NlMsg};
-
-#[derive(thiserror::Error, Debug)]
-pub enum Error {
-    #[error("Unable to open netlink socket to netfilter")]
-    NetlinkOpenError(#[source] nix::Error),
-
-    #[error("Unable to send netlink command to netfilter")]
-    NetlinkSendError(#[source] nix::Error),
-
-    #[error("Error while reading from netlink socket")]
-    NetlinkRecvError(#[source] nix::Error),
-
-    #[error("Error while processing an incoming netlink message")]
-    ProcessNetlinkError(#[from] DecodeError),
-
-    #[error("Error received from the kernel")]
-    NetlinkError(nlmsgerr),
-
-    #[error("Custom error when customizing the query")]
-    InitError(#[from] Box<dyn std::error::Error + Send + 'static>),
-
-    #[error("Couldn't allocate a netlink object, out of memory ?")]
-    NetlinkAllocationFailed,
-
-    #[error("This socket is not a netlink socket")]
-    NotNetlinkSocket,
-
-    #[error("Couldn't retrieve information on a socket")]
-    RetrievingSocketInfoFailed,
-
-    #[error("Only a part of the message was sent")]
-    TruncatedSend,
-
-    #[error("Got a message without the NLM_F_MULTI flag, but a maximum sequence number was not specified")]
-    UndecidableMessageTermination,
-
-    #[error("Couldn't close the socket")]
-    CloseFailed(#[source] Errno),
-}
 
 pub(crate) fn recv_and_process<'a, T>(
     sock: RawFd,
     max_seq: Option<u32>,
-    cb: Option<&dyn Fn(&[u8], &mut T) -> Result<(), Error>>,
+    cb: Option<&dyn Fn(&[u8], &mut T) -> Result<(), QueryError>>,
     working_data: &'a mut T,
-) -> Result<(), Error> {
+) -> Result<(), QueryError> {
     let mut msg_buffer = vec![0; 2 * nft_nlmsg_maxsize() as usize];
     let mut buf_start = 0;
     let mut end_pos = 0;
 
     loop {
         let nb_recv = socket::recv(sock, &mut msg_buffer[end_pos..], MsgFlags::empty())
-            .map_err(Error::NetlinkRecvError)?;
+            .map_err(QueryError::NetlinkRecvError)?;
         if nb_recv <= 0 {
             return Ok(());
         }
@@ -87,7 +47,7 @@ pub(crate) fn recv_and_process<'a, T>(
                 }
                 NlMsg::Error(e) => {
                     if e.error != 0 {
-                        return Err(Error::NetlinkError(e));
+                        return Err(QueryError::NetlinkError(e));
                     }
                 }
                 NlMsg::Noop => {}
@@ -101,7 +61,7 @@ pub(crate) fn recv_and_process<'a, T>(
             // we cannot know when a sequence of messages will end if the messages do not end
             // with an NlMsg::Done marker while if a maximum sequence number wasn't specified
             if max_seq.is_none() && nlmsghdr.nlmsg_flags & NLM_F_MULTI as u16 == 0 {
-                return Err(Error::UndecidableMessageTermination);
+                return Err(QueryError::UndecidableMessageTermination);
             }
 
             // retrieve the next message
@@ -136,15 +96,15 @@ pub(crate) fn recv_and_process<'a, T>(
 pub(crate) fn socket_close_wrapper<E>(
     sock: RawFd,
     cb: impl FnOnce(RawFd) -> Result<(), E>,
-) -> Result<(), Error>
+) -> Result<(), QueryError>
 where
-    Error: From<E>,
+    QueryError: From<E>,
 {
     let ret = cb(sock);
 
     // we don't need to shutdown the socket (in fact, Linux doesn't support that operation;
     // and return EOPNOTSUPP if we try)
-    nix::unistd::close(sock).map_err(Error::CloseFailed)?;
+    nix::unistd::close(sock).map_err(QueryError::CloseFailed)?;
 
     Ok(ret?)
 }
@@ -156,7 +116,7 @@ pub fn get_list_of_objects<T: NfNetlinkAttribute>(
     msg_type: u16,
     seq: u32,
     filter: Option<&T>,
-) -> Result<Vec<u8>, Error> {
+) -> Result<Vec<u8>, QueryError> {
     let mut buffer = Vec::new();
     let mut writer = NfNetlinkWriter::new(&mut buffer);
     writer.write_header(
@@ -182,10 +142,10 @@ pub fn get_list_of_objects<T: NfNetlinkAttribute>(
 /// and of the output vector, to which it should append the parsed object it received.
 pub fn list_objects_with_data<'a, Object, Accumulator>(
     data_type: u16,
-    cb: &dyn Fn(Object, &mut Accumulator) -> Result<(), Error>,
+    cb: &dyn Fn(Object, &mut Accumulator) -> Result<(), QueryError>,
     filter: Option<&Object>,
     working_data: &'a mut Accumulator,
-) -> Result<(), Error>
+) -> Result<(), QueryError>
 where
     Object: NfNetlinkObject + NfNetlinkAttribute,
 {
@@ -196,12 +156,12 @@ where
         SockFlag::empty(),
         SockProtocol::NetlinkNetFilter,
     )
-    .map_err(Error::NetlinkOpenError)?;
+    .map_err(QueryError::NetlinkOpenError)?;
 
     let seq = 0;
 
     let chains_buf = get_list_of_objects(data_type, seq, filter)?;
-    socket::send(sock, &chains_buf, MsgFlags::empty()).map_err(Error::NetlinkSendError)?;
+    socket::send(sock, &chains_buf, MsgFlags::empty()).map_err(QueryError::NetlinkSendError)?;
 
     socket_close_wrapper(sock, move |sock| {
         // the kernel should return NLM_F_MULTI objects

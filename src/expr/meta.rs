@@ -49,6 +49,12 @@ pub struct Meta {
     sreg: Register,
 }
 
+impl Meta {
+    pub fn new(ty: MetaType) -> Self {
+        Meta::default().with_dreg(Register::Reg1).with_key(ty)
+    }
+}
+
 impl Expression for Meta {
     fn get_name() -> &'static str {
         "meta"

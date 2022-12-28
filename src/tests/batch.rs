@@ -3,13 +3,12 @@ use std::mem::size_of;
 use libc::{AF_UNSPEC, NFNL_MSG_BATCH_BEGIN, NLM_F_REQUEST};
 use nix::libc::NFNL_MSG_BATCH_END;
 
-use rustables::nlmsg::NfNetlinkDeserializable;
-use rustables::parser::{pad_netlink_object_with_variable_size, parse_nlmsg, NlMsg};
-use rustables::sys::{nfgenmsg, nlmsghdr, NFNETLINK_V0, NFNL_SUBSYS_NFTABLES};
-use rustables::{Batch, MsgType, Table};
+use crate::nlmsg::{pad_netlink_object_with_variable_size, NfNetlinkDeserializable};
+use crate::parser::{parse_nlmsg, NlMsg};
+use crate::sys::{nfgenmsg, nlmsghdr, NFNETLINK_V0, NFNL_SUBSYS_NFTABLES};
+use crate::{Batch, MsgType, Table};
 
-mod common;
-use common::*;
+use super::get_test_table;
 
 const HEADER_SIZE: u32 =
     pad_netlink_object_with_variable_size(size_of::<nlmsghdr>() + size_of::<nfgenmsg>()) as u32;
@@ -42,7 +41,6 @@ const DEFAULT_BATCH_END_HDR: nlmsghdr = nlmsghdr {
 fn batch_empty() {
     let batch = Batch::new();
     let buf = batch.finalize();
-    println!("{:?}", buf);
 
     let (hdr, msg) = parse_nlmsg(&buf).expect("Invalid nlmsg message");
     assert_eq!(hdr, DEFAULT_BATCH_BEGIN_HDR);

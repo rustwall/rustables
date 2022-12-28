@@ -1,15 +1,14 @@
 use libc::{NF_ACCEPT, NF_DROP};
 use rustables_macros::nfnetlink_struct;
 
-use crate::nlmsg::{NfNetlinkAttribute, NfNetlinkDeserializable, NfNetlinkObject, NfNetlinkWriter};
-use crate::parser::{DecodeError, Parsable};
+use crate::error::{DecodeError, QueryError};
+use crate::nlmsg::{NfNetlinkAttribute, NfNetlinkDeserializable, NfNetlinkObject};
 use crate::sys::{
     NFTA_CHAIN_FLAGS, NFTA_CHAIN_HOOK, NFTA_CHAIN_NAME, NFTA_CHAIN_POLICY, NFTA_CHAIN_TABLE,
     NFTA_CHAIN_TYPE, NFTA_CHAIN_USERDATA, NFTA_HOOK_HOOKNUM, NFTA_HOOK_PRIORITY, NFT_MSG_DELCHAIN,
-    NFT_MSG_NEWCHAIN, NLM_F_ACK, NLM_F_CREATE,
+    NFT_MSG_NEWCHAIN,
 };
-use crate::{MsgType, ProtocolFamily, Table};
-use std::convert::TryFrom;
+use crate::{ProtocolFamily, Table};
 use std::fmt::Debug;
 
 pub type ChainPriority = i32;
@@ -132,14 +131,10 @@ impl NfNetlinkDeserializable for ChainType {
     }
 }
 
-/// Abstraction of a `nftnl_chain`. Chains reside inside [`Table`]s and they hold [`Rule`]s.
-///
-/// There are two types of chains, "base chain" and "regular chain". See [`set_hook`] for more
-/// details.
+/// Abstraction over an nftable chain. Chains reside inside [`Table`]s and they hold [`Rule`]s.
 ///
 /// [`Table`]: struct.Table.html
 /// [`Rule`]: struct.Rule.html
-/// [`set_hook`]: #method.set_hook
 #[derive(PartialEq, Eq, Default, Debug)]
 #[nfnetlink_struct(derive_deserialize = false)]
 pub struct Chain {
@@ -166,7 +161,7 @@ impl Chain {
     /// [`Table`]: struct.Table.html
     pub fn new(table: &Table) -> Chain {
         let mut chain = Chain::default();
-        chain.family = table.family;
+        chain.family = table.get_family();
 
         if let Some(table_name) = table.get_name() {
             chain.set_table(table_name);
@@ -174,73 +169,22 @@ impl Chain {
 
         chain
     }
+}
 
-    pub fn get_family(&self) -> ProtocolFamily {
+impl NfNetlinkObject for Chain {
+    const MSG_TYPE_ADD: u32 = NFT_MSG_NEWCHAIN;
+    const MSG_TYPE_DEL: u32 = NFT_MSG_DELCHAIN;
+
+    fn get_family(&self) -> ProtocolFamily {
         self.family
     }
 
-    /*
-    /// Returns a textual description of the chain.
-    pub fn get_str(&self) -> CString {
-        let mut descr_buf = vec![0i8; 4096];
-        unsafe {
-            sys::nftnl_chain_snprintf(
-                descr_buf.as_mut_ptr() as *mut c_char,
-                (descr_buf.len() - 1) as u64,
-                self.chain,
-                sys::NFTNL_OUTPUT_DEFAULT,
-                0,
-            );
-            CStr::from_ptr(descr_buf.as_ptr() as *mut c_char).to_owned()
-        }
-    }
-    */
-}
-
-/*
-impl PartialEq for Chain {
-    fn eq(&self, other: &Self) -> bool {
-        self.get_table() == other.get_table() && self.get_name() == other.get_name()
-    }
-}
-*/
-
-impl NfNetlinkObject for Chain {
-    fn add_or_remove<'a>(&self, writer: &mut NfNetlinkWriter<'a>, msg_type: MsgType, seq: u32) {
-        let raw_msg_type = match msg_type {
-            MsgType::Add => NFT_MSG_NEWCHAIN,
-            MsgType::Del => NFT_MSG_DELCHAIN,
-        } as u16;
-        writer.write_header(
-            raw_msg_type,
-            self.family,
-            (if let MsgType::Add = msg_type {
-                NLM_F_CREATE
-            } else {
-                0
-            } | NLM_F_ACK) as u16,
-            seq,
-            None,
-        );
-        let buf = writer.add_data_zeroed(self.get_size());
-        unsafe {
-            self.write_payload(buf.as_mut_ptr());
-        }
-        writer.finalize_writing_object();
+    fn set_family(&mut self, family: ProtocolFamily) {
+        self.family = family;
     }
 }
 
-impl NfNetlinkDeserializable for Chain {
-    fn deserialize(buf: &[u8]) -> Result<(Self, &[u8]), DecodeError> {
-        let (mut obj, nfgenmsg, remaining_data) =
-            Self::parse_object(buf, NFT_MSG_NEWCHAIN, NFT_MSG_DELCHAIN)?;
-        obj.family = ProtocolFamily::try_from(nfgenmsg.nfgen_family as i32)?;
-
-        Ok((obj, remaining_data))
-    }
-}
-
-pub fn list_chains_for_table(table: &Table) -> Result<Vec<Chain>, crate::query::Error> {
+pub fn list_chains_for_table(table: &Table) -> Result<Vec<Chain>, QueryError> {
     let mut result = Vec::new();
     crate::query::list_objects_with_data(
         libc::NFT_MSG_GETCHAIN as u16,

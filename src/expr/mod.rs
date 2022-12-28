@@ -4,20 +4,14 @@
 //! [`Rule`]: struct.Rule.html
 
 use std::fmt::Debug;
-use std::mem::transmute;
 
-use crate::nlmsg::NfNetlinkAttribute;
-use crate::nlmsg::NfNetlinkDeserializable;
-use crate::parser::pad_netlink_object;
-use crate::parser::pad_netlink_object_with_variable_size;
-use crate::parser::write_attribute;
-use crate::parser::DecodeError;
-use crate::sys::{self, nlattr};
-use crate::sys::{
-    NFTA_DATA_VALUE, NFTA_DATA_VERDICT, NFTA_EXPR_DATA, NFTA_EXPR_NAME, NLA_TYPE_MASK,
-};
 use rustables_macros::nfnetlink_struct;
 use thiserror::Error;
+
+use crate::error::DecodeError;
+use crate::nlmsg::{NfNetlinkAttribute, NfNetlinkDeserializable};
+use crate::parser_impls::NfNetlinkList;
+use crate::sys::{self, NFTA_EXPR_DATA, NFTA_EXPR_NAME};
 
 mod bitwise;
 pub use self::bitwise::*;
@@ -36,11 +30,9 @@ pub use self::immediate::*;
 
 mod log;
 pub use self::log::*;
-/*
 
 mod lookup;
 pub use self::lookup::*;
-*/
 
 mod masquerade;
 pub use self::masquerade::*;
@@ -105,19 +97,18 @@ pub struct RawExpression {
     data: ExpressionVariant,
 }
 
-impl RawExpression {
-    pub fn new<T>(expr: T) -> Self
-    where
-        T: Expression,
-        ExpressionVariant: From<T>,
-    {
+impl<T> From<T> for RawExpression
+where
+    T: Expression,
+    ExpressionVariant: From<T>,
+{
+    fn from(val: T) -> Self {
         RawExpression::default()
             .with_name(T::get_name())
-            .with_data(ExpressionVariant::from(expr))
+            .with_data(ExpressionVariant::from(val))
     }
 }
 
-#[macro_export]
 macro_rules! create_expr_variant {
     ($enum:ident $(, [$name:ident, $type:ty])+) => {
         #[derive(Debug, Clone, PartialEq, Eq)]
@@ -162,14 +153,14 @@ macro_rules! create_expr_variant {
                 &mut self,
                 attr_type: u16,
                 buf: &[u8],
-            ) -> Result<(), $crate::parser::DecodeError> {
+            ) -> Result<(), $crate::error::DecodeError> {
                 debug!("Decoding attribute {} in an expression", attr_type);
                 match attr_type {
                     x if x == sys::NFTA_EXPR_NAME => {
                         debug!("Calling {}::deserialize()", std::any::type_name::<String>());
                         let (val, remaining) = String::deserialize(buf)?;
                         if remaining.len() != 0 {
-                            return Err($crate::parser::DecodeError::InvalidDataSize);
+                            return Err($crate::error::DecodeError::InvalidDataSize);
                         }
                         self.name = Some(val);
                         Ok(())
@@ -178,14 +169,14 @@ macro_rules! create_expr_variant {
                         // we can assume we have already the name parsed, as that's how we identify the
                         // type of expression
                         let name = self.name.as_ref()
-                            .ok_or($crate::parser::DecodeError::MissingExpressionName)?;
+                            .ok_or($crate::error::DecodeError::MissingExpressionName)?;
                         match name {
                             $(
                                 x if x == <$type>::get_name() => {
                                     debug!("Calling {}::deserialize()", std::any::type_name::<$type>());
                                     let (res, remaining) =  <$type>::deserialize(buf)?;
                                     if remaining.len() != 0 {
-                                            return Err($crate::parser::DecodeError::InvalidDataSize);
+                                            return Err($crate::error::DecodeError::InvalidDataSize);
                                     }
                                     self.data = Some(ExpressionVariant::from(res));
                                     Ok(())
@@ -207,126 +198,22 @@ macro_rules! create_expr_variant {
 
 create_expr_variant!(
     ExpressionVariant,
-    [Log, Log],
-    [Immediate, Immediate],
     [Bitwise, Bitwise],
-    [ExpressionRaw, ExpressionRaw],
-    [Meta, Meta],
-    [Reject, Reject],
-    [Counter, Counter],
-    [Nat, Nat],
-    [Payload, Payload],
     [Cmp, Cmp],
     [Conntrack, Conntrack],
-    [Masquerade, Masquerade]
+    [Counter, Counter],
+    [ExpressionRaw, ExpressionRaw],
+    [Immediate, Immediate],
+    [Log, Log],
+    [Lookup, Lookup],
+    [Masquerade, Masquerade],
+    [Meta, Meta],
+    [Nat, Nat],
+    [Payload, Payload],
+    [Reject, Reject]
 );
 
-#[derive(Debug, Clone, PartialEq, Eq, Default)]
-pub struct ExpressionList {
-    exprs: Vec<RawExpression>,
-}
-
-impl ExpressionList {
-    /// Useful to add raw expressions because RawExpression cannot infer alone its type
-    pub fn add_raw_expression(&mut self, e: RawExpression) {
-        self.exprs.push(e);
-    }
-
-    pub fn add_expression<T>(&mut self, e: T)
-    where
-        T: Expression,
-        ExpressionVariant: From<T>,
-    {
-        self.exprs.push(RawExpression::new(e));
-    }
-
-    pub fn with_expression<T>(mut self, e: T) -> Self
-    where
-        T: Expression,
-        ExpressionVariant: From<T>,
-    {
-        self.add_expression(e);
-        self
-    }
-
-    pub fn iter<'a>(&'a self) -> impl Iterator<Item = &'a ExpressionVariant> {
-        self.exprs.iter().map(|e| e.get_data().unwrap())
-    }
-}
-
-impl NfNetlinkAttribute for ExpressionList {
-    fn is_nested(&self) -> bool {
-        true
-    }
-
-    fn get_size(&self) -> usize {
-        // one nlattr LIST_ELEM per object
-        self.exprs.iter().fold(0, |acc, item| {
-            acc + item.get_size() + pad_netlink_object::<nlattr>()
-        })
-    }
-
-    unsafe fn write_payload(&self, mut addr: *mut u8) {
-        for item in &self.exprs {
-            write_attribute(sys::NFTA_LIST_ELEM, item, addr);
-            addr = addr.offset((pad_netlink_object::<nlattr>() + item.get_size()) as isize);
-        }
-    }
-}
-
-impl NfNetlinkDeserializable for ExpressionList {
-    fn deserialize(buf: &[u8]) -> Result<(Self, &[u8]), DecodeError> {
-        let mut exprs = Vec::new();
-
-        let mut pos = 0;
-        while buf.len() - pos > pad_netlink_object::<nlattr>() {
-            let nlattr = unsafe { *transmute::<*const u8, *const nlattr>(buf[pos..].as_ptr()) };
-            // ignore the byteorder and nested attributes
-            let nla_type = nlattr.nla_type & NLA_TYPE_MASK as u16;
-
-            if nla_type != sys::NFTA_LIST_ELEM {
-                return Err(DecodeError::UnsupportedAttributeType(nla_type));
-            }
-
-            let (expr, remaining) = RawExpression::deserialize(
-                &buf[pos + pad_netlink_object::<nlattr>()..pos + nlattr.nla_len as usize],
-            )?;
-            if remaining.len() != 0 {
-                return Err(DecodeError::InvalidDataSize);
-            }
-            exprs.push(expr);
-
-            pos += pad_netlink_object_with_variable_size(nlattr.nla_len as usize);
-        }
-
-        if pos != buf.len() {
-            Err(DecodeError::InvalidDataSize)
-        } else {
-            Ok((Self { exprs }, &[]))
-        }
-    }
-}
-
-impl<T> From<Vec<T>> for ExpressionList
-where
-    ExpressionVariant: From<T>,
-    T: Expression,
-{
-    fn from(v: Vec<T>) -> Self {
-        ExpressionList {
-            exprs: v.into_iter().map(RawExpression::new).collect(),
-        }
-    }
-}
-
-#[derive(Clone, PartialEq, Eq, Default, Debug)]
-#[nfnetlink_struct(nested = true)]
-pub struct ExpressionData {
-    #[field(NFTA_DATA_VALUE)]
-    value: Vec<u8>,
-    #[field(NFTA_DATA_VERDICT)]
-    verdict: VerdictAttribute,
-}
+pub type ExpressionList = NfNetlinkList<RawExpression>;
 
 // default type for expressions that we do not handle yet
 #[derive(Debug, Clone, PartialEq, Eq)]

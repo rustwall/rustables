@@ -1,13 +1,41 @@
 use std::{fmt::Debug, mem::size_of};
 
 use crate::{
-    parser::{pad_netlink_object, pad_netlink_object_with_variable_size, DecodeError},
+    error::DecodeError,
     sys::{
         nfgenmsg, nlmsghdr, NFNETLINK_V0, NFNL_MSG_BATCH_BEGIN, NFNL_MSG_BATCH_END,
-        NFNL_SUBSYS_NFTABLES,
+        NFNL_SUBSYS_NFTABLES, NLMSG_ALIGNTO, NLM_F_ACK, NLM_F_CREATE,
     },
     MsgType, ProtocolFamily,
 };
+///
+/// The largest nf_tables netlink message is the set element message, which contains the
+/// NFTA_SET_ELEM_LIST_ELEMENTS attribute. This attribute is a nest that describes the set
+/// elements. Given that the netlink attribute length (nla_len) is 16 bits, the largest message is
+/// a bit larger than 64 KBytes.
+pub fn nft_nlmsg_maxsize() -> u32 {
+    u32::from(::std::u16::MAX) + unsafe { libc::sysconf(libc::_SC_PAGESIZE) } as u32
+}
+
+#[inline]
+pub const fn pad_netlink_object_with_variable_size(size: usize) -> usize {
+    // align on a 4 bytes boundary
+    (size + (NLMSG_ALIGNTO as usize - 1)) & !(NLMSG_ALIGNTO as usize - 1)
+}
+
+#[inline]
+pub const fn pad_netlink_object<T>() -> usize {
+    let size = size_of::<T>();
+    pad_netlink_object_with_variable_size(size)
+}
+
+pub fn get_subsystem_from_nlmsghdr_type(x: u16) -> u8 {
+    ((x & 0xff00) >> 8) as u8
+}
+
+pub fn get_operation_from_nlmsghdr_type(x: u16) -> u8 {
+    (x & 0x00ff) as u8
+}
 
 pub struct NfNetlinkWriter<'a> {
     buf: &'a mut Vec<u8>,
@@ -92,8 +120,53 @@ pub trait NfNetlinkDeserializable: Sized {
     fn deserialize(buf: &[u8]) -> Result<(Self, &[u8]), DecodeError>;
 }
 
-pub trait NfNetlinkObject: Sized + AttributeDecoder + NfNetlinkDeserializable {
-    fn add_or_remove<'a>(&self, writer: &mut NfNetlinkWriter<'a>, msg_type: MsgType, seq: u32);
+pub trait NfNetlinkObject:
+    Sized + AttributeDecoder + NfNetlinkDeserializable + NfNetlinkAttribute
+{
+    const MSG_TYPE_ADD: u32;
+    const MSG_TYPE_DEL: u32;
+
+    fn add_or_remove<'a>(&self, writer: &mut NfNetlinkWriter<'a>, msg_type: MsgType, seq: u32) {
+        let raw_msg_type = match msg_type {
+            MsgType::Add => Self::MSG_TYPE_ADD,
+            MsgType::Del => Self::MSG_TYPE_DEL,
+        } as u16;
+        writer.write_header(
+            raw_msg_type,
+            self.get_family(),
+            (if let MsgType::Add = msg_type {
+                self.get_add_flags()
+            } else {
+                self.get_del_flags()
+            } | NLM_F_ACK) as u16,
+            seq,
+            None,
+        );
+        let buf = writer.add_data_zeroed(self.get_size());
+        unsafe {
+            self.write_payload(buf.as_mut_ptr());
+        }
+        writer.finalize_writing_object();
+    }
+
+    fn get_family(&self) -> ProtocolFamily;
+
+    fn set_family(&mut self, _family: ProtocolFamily) {
+        // the default impl do nothing, because some types are family-agnostic
+    }
+
+    fn with_family(mut self, family: ProtocolFamily) -> Self {
+        self.set_family(family);
+        self
+    }
+
+    fn get_add_flags(&self) -> u32 {
+        NLM_F_CREATE
+    }
+
+    fn get_del_flags(&self) -> u32 {
+        0
+    }
 }
 
 pub type NetlinkType = u16;
@@ -111,57 +184,3 @@ pub trait NfNetlinkAttribute: Debug + Sized {
     // example body: std::ptr::copy_nonoverlapping(self as *const Self as *const u8, addr, self.get_size());
     unsafe fn write_payload(&self, addr: *mut u8);
 }
-
-/*
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct NfNetlinkAttributes {
-    pub attributes: BTreeMap<NetlinkType, AttributeType>,
-}
-
-impl NfNetlinkAttributes {
-    pub fn new() -> Self {
-        NfNetlinkAttributes {
-            attributes: BTreeMap::new(),
-        }
-    }
-
-    pub fn set_attr(&mut self, ty: NetlinkType, obj: AttributeType) {
-        self.attributes.insert(ty, obj);
-    }
-
-    pub fn get_attr(&self, ty: NetlinkType) -> Option<&AttributeType> {
-        self.attributes.get(&ty)
-    }
-
-    pub fn serialize<'a>(&self, writer: &mut NfNetlinkWriter<'a>) {
-        let buf = writer.add_data_zeroed(self.get_size());
-        unsafe {
-            self.write_payload(buf.as_mut_ptr());
-        }
-    }
-}
-
-impl NfNetlinkAttribute for NfNetlinkAttributes {
-    fn get_size(&self) -> usize {
-        let mut size = 0;
-
-        for (_type, attr) in self.attributes.iter() {
-            // Attribute header + attribute value
-            size += pad_netlink_object::<nlattr>()
-                + pad_netlink_object_with_variable_size(attr.get_size());
-        }
-
-        size
-    }
-
-    unsafe fn write_payload(&self, mut addr: *mut u8) {
-        for (ty, attr) in self.attributes.iter() {
-            debug!("writing attribute {} - {:?}", ty, attr);
-            write_attribute(*ty, attr, addr);
-            let size = pad_netlink_object::<nlattr>()
-                + pad_netlink_object_with_variable_size(attr.get_size());
-            addr = addr.offset(size as isize);
-        }
-    }
-}
-*/

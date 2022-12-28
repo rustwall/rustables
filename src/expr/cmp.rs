@@ -1,11 +1,15 @@
 use rustables_macros::{nfnetlink_enum, nfnetlink_struct};
 
-use crate::sys::{
-    NFTA_CMP_DATA, NFTA_CMP_OP, NFTA_CMP_SREG, NFT_CMP_EQ, NFT_CMP_GT, NFT_CMP_GTE, NFT_CMP_LT,
-    NFT_CMP_LTE, NFT_CMP_NEQ,
+use crate::{
+    data_type::DataType,
+    parser_impls::NfNetlinkData,
+    sys::{
+        NFTA_CMP_DATA, NFTA_CMP_OP, NFTA_CMP_SREG, NFT_CMP_EQ, NFT_CMP_GT, NFT_CMP_GTE, NFT_CMP_LT,
+        NFT_CMP_LTE, NFT_CMP_NEQ,
+    },
 };
 
-use super::{Expression, ExpressionData, Register};
+use super::{Expression, Register};
 
 /// Comparison operator.
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
@@ -34,17 +38,17 @@ pub struct Cmp {
     #[field(NFTA_CMP_OP)]
     op: CmpOp,
     #[field(NFTA_CMP_DATA)]
-    data: ExpressionData,
+    data: NfNetlinkData,
 }
 
 impl Cmp {
     /// Returns a new comparison expression comparing the value loaded in the register with the
     /// data in `data` using the comparison operator `op`.
-    pub fn new(op: CmpOp, data: impl Into<Vec<u8>>) -> Self {
+    pub fn new(op: CmpOp, data: impl DataType) -> Self {
         Cmp {
             sreg: Some(Register::Reg1),
             op: Some(op),
-            data: Some(ExpressionData::default().with_value(data)),
+            data: Some(NfNetlinkData::default().with_value(data.data())),
         }
     }
 }

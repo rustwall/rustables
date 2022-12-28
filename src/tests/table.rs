@@ -1,12 +1,13 @@
-use rustables::{
-    nlmsg::NfNetlinkDeserializable,
-    parser::{get_operation_from_nlmsghdr_type, nft_nlmsg_maxsize},
+use crate::{
+    nlmsg::{get_operation_from_nlmsghdr_type, nft_nlmsg_maxsize, NfNetlinkDeserializable},
     sys::{NFT_MSG_DELTABLE, NFT_MSG_NEWTABLE},
     MsgType, Table,
 };
 
-mod common;
-use common::*;
+use super::{
+    get_test_nlmsg, get_test_nlmsg_with_msg_type, get_test_table, get_test_table_raw_expr,
+    get_test_table_with_userdata_raw_expr, TABLE_USERDATA,
+};
 
 #[test]
 fn new_empty_table() {

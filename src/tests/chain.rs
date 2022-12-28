@@ -1,5 +1,5 @@
-use rustables::{
-    parser::get_operation_from_nlmsghdr_type,
+use crate::{
+    nlmsg::get_operation_from_nlmsghdr_type,
     sys::{
         NFTA_CHAIN_HOOK, NFTA_CHAIN_NAME, NFTA_CHAIN_TABLE, NFTA_CHAIN_TYPE, NFTA_CHAIN_USERDATA,
         NFTA_HOOK_HOOKNUM, NFTA_HOOK_PRIORITY, NFT_MSG_DELCHAIN, NFT_MSG_NEWCHAIN,
@@ -7,8 +7,10 @@ use rustables::{
     ChainType, Hook, HookClass, MsgType,
 };
 
-mod common;
-use common::*;
+use super::{
+    get_test_chain, get_test_nlmsg, get_test_nlmsg_with_msg_type, NetlinkExpr, CHAIN_NAME,
+    CHAIN_USERDATA, TABLE_NAME,
+};
 
 #[test]
 fn new_empty_chain() {

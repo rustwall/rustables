@@ -38,7 +38,7 @@
 
 use ipnetwork::{IpNetwork, Ipv4Network};
 use rustables::{
-    expr::{ExpressionList, Immediate, VerdictKind},
+    expr::{Cmp, CmpOp, ExpressionList, Immediate, Meta, MetaType, Verdict, VerdictKind},
     list_chains_for_table, list_rules_for_chain, list_tables, Batch, Chain, ChainPolicy, Hook,
     HookClass, MsgType, ProtocolFamily, Rule, Table,
 };
@@ -82,7 +82,12 @@ fn main() -> Result<(), Error> {
     batch.add(&in_chain, MsgType::Add);
 
     let rule = Rule::new(&in_chain)?.with_expressions(
-        ExpressionList::default().with_expression(Immediate::new_verdict(VerdictKind::Accept)),
+        ExpressionList::default().with_value(Immediate::new_verdict(VerdictKind::Accept)),
+    );
+    batch.add(&rule, MsgType::Add);
+
+    let rule = Rule::new(&in_chain)?.with_expressions(
+        ExpressionList::default().with_value(Immediate::new_verdict(VerdictKind::Continue)),
     );
 
     batch.add(&rule, MsgType::Add);
@@ -94,26 +99,28 @@ fn main() -> Result<(), Error> {
     // Lookup the interface index of the loopback interface.
     let lo_iface_index = iface_index("lo")?;
 
-    // First expression to be evaluated in this rule is load the meta information "iif"
-    // (incoming interface index) into the comparison register of netfilter.
-    // When an incoming network packet is processed by this rule it will first be processed by this
-    // expression, which will load the interface index of the interface the packet came from into
-    // a special "register" in netfilter.
-    //allow_loopback_in_rule.set_expressions(ExpressionList::builder().with_expression());
-    //add_expr(&nft_expr!(meta iif));
-    //    // Next expression in the rule is to compare the value loaded into the register with our desired
-    //    // interface index, and succeed only if it's equal. For any packet processed where the equality
-    //    // does not hold the packet is said to not match this rule, and the packet moves on to be
-    //    // processed by the next rule in the chain instead.
-    //    allow_loopback_in_rule.add_expr(&nft_expr!(cmp == lo_iface_index));
-    //
-    //    // Add a verdict expression to the rule. Any packet getting this far in the expression
-    //    // processing without failing any expression will be given the verdict added here.
-    //    allow_loopback_in_rule.add_expr(&nft_expr!(verdict accept));
-    //
-    //    // Add the rule to the batch.
-    //    batch.add(&allow_loopback_in_rule, rustables::MsgType::Add);
-    //
+    allow_loopback_in_rule.set_expressions(
+        ExpressionList::default()
+        // First expression to be evaluated in this rule is load the meta information "iif"
+        // (incoming interface index) into the comparison register of netfilter.
+        // When an incoming network packet is processed by this rule it will first be processed by this
+        // expression, which will load the interface index of the interface the packet came from into
+        // a special "register" in netfilter.
+        .with_value(Meta::new(MetaType::Iif))
+        // Next expression in the rule is to compare the value loaded into the register with our desired
+        // interface index, and succeed only if it's equal. For any packet processed where the equality
+        // does not hold the packet is said to not match this rule, and the packet moves on to be
+        // processed by the next rule in the chain instead.
+        .with_value(Cmp::new(CmpOp::Eq, lo_iface_index.to_le_bytes()))
+
+        // Add a verdict expression to the rule. Any packet getting this far in the expression
+        // processing without failing any expression will be given the verdict added here.
+        .with_value(Immediate::new_verdict(VerdictKind::Accept)),
+    );
+
+    // Add the rule to the batch.
+    batch.add(&allow_loopback_in_rule, rustables::MsgType::Add);
+
     //    // === ADD A RULE ALLOWING (AND COUNTING) ALL PACKETS TO THE 10.1.0.0/24 NETWORK ===
     //
     //    let mut block_out_to_private_net_rule = Rule::new(Rc::clone(&out_chain));

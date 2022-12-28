@@ -220,7 +220,7 @@ pub fn nfnetlink_struct(attrs: TokenStream, item: TokenStream) -> TokenStream {
                     debug!("Calling {}::deserialize()", std::any::type_name::<#field_type>());
                     let (val, remaining) = <#field_type>::deserialize(buf)?;
                     if remaining.len() != 0 {
-                        return Err(crate::parser::DecodeError::InvalidDataSize);
+                        return Err(crate::error::DecodeError::InvalidDataSize);
                     }
                     self.#field_name = Some(val);
                     Ok(())
@@ -230,12 +230,12 @@ pub fn nfnetlink_struct(attrs: TokenStream, item: TokenStream) -> TokenStream {
         quote!(
             impl crate::nlmsg::AttributeDecoder for #name {
                 #[allow(dead_code)]
-                fn decode_attribute(&mut self, attr_type: u16, buf: &[u8]) -> Result<(), crate::parser::DecodeError> {
+                fn decode_attribute(&mut self, attr_type: u16, buf: &[u8]) -> Result<(), crate::error::DecodeError> {
                     use crate::nlmsg::NfNetlinkDeserializable;
                     debug!("Decoding attribute {} in type {}", attr_type, std::any::type_name::<#name>());
                     match attr_type {
                         #(#match_entries),*
-                        _ => Err(crate::parser::DecodeError::UnsupportedAttributeType(attr_type)),
+                        _ => Err(crate::error::DecodeError::UnsupportedAttributeType(attr_type)),
                     }
                 }
             }
@@ -250,8 +250,8 @@ pub fn nfnetlink_struct(attrs: TokenStream, item: TokenStream) -> TokenStream {
             quote!(
                 if let Some(val) = &self.#field_name {
                     // Attribute header + attribute value
-                    size += crate::parser::pad_netlink_object::<crate::sys::nlattr>()
-                        + crate::parser::pad_netlink_object_with_variable_size(val.get_size());
+                    size += crate::nlmsg::pad_netlink_object::<crate::sys::nlattr>()
+                        + crate::nlmsg::pad_netlink_object_with_variable_size(val.get_size());
                 }
             )
         });
@@ -267,8 +267,8 @@ pub fn nfnetlink_struct(attrs: TokenStream, item: TokenStream) -> TokenStream {
 
                     #[allow(unused)]
                     {
-                        let size = crate::parser::pad_netlink_object::<crate::sys::nlattr>()
-                            + crate::parser::pad_netlink_object_with_variable_size(val.get_size());
+                        let size = crate::nlmsg::pad_netlink_object::<crate::sys::nlattr>()
+                            + crate::nlmsg::pad_netlink_object_with_variable_size(val.get_size());
                         addr = addr.offset(size as isize);
                     }
                 }
@@ -310,7 +310,7 @@ pub fn nfnetlink_struct(attrs: TokenStream, item: TokenStream) -> TokenStream {
     let nfnetlinkdeserialize_impl = if args.derive_deserialize {
         quote!(
             impl crate::nlmsg::NfNetlinkDeserializable for #name {
-                fn deserialize(buf: &[u8]) -> Result<(Self, &[u8]), crate::parser::DecodeError> {
+                fn deserialize(buf: &[u8]) -> Result<(Self, &[u8]), crate::error::DecodeError> {
                     Ok((crate::parser::read_attributes(buf)?, &[]))
                 }
             }
@@ -424,20 +424,26 @@ pub fn nfnetlink_enum(attrs: TokenStream, item: TokenStream) -> TokenStream {
     let match_entries = variants.iter().map(|variant| {
         let variant_name = variant.name;
         let variant_value = &variant.value;
-        quote!( x if x == (#variant_value as #repr_type) => Self::#variant_name, )
+        quote!( x if x == (#variant_value as #repr_type) => Ok(Self::#variant_name), )
     });
     let unknown_type_ident = Ident::new(&format!("Unknown{}", name.to_string()), name.span());
+    let tryfrom_impl = quote!(
+        impl ::core::convert::TryFrom<#repr_type> for #name {
+            type Error = crate::error::DecodeError;
+
+            fn try_from(val: #repr_type) -> Result<Self, Self::Error> {
+                    match val {
+                        #(#match_entries) *
+                        value => Err(crate::error::DecodeError::#unknown_type_ident(value))
+                    }
+            }
+        }
+    );
     let nfnetlinkdeserialize_impl = quote!(
         impl crate::nlmsg::NfNetlinkDeserializable for #name {
-            fn deserialize(buf: &[u8]) -> Result<(Self, &[u8]), crate::parser::DecodeError> {
+            fn deserialize(buf: &[u8]) -> Result<(Self, &[u8]), crate::error::DecodeError> {
                 let (v, remaining_data) = #repr_type::deserialize(buf)?;
-                Ok((
-                    match v {
-                        #(#match_entries) *
-                        value => return Err(crate::parser::DecodeError::#unknown_type_ident(value))
-                    },
-                    remaining_data,
-                ))
+                <#name>::try_from(v).map(|x| (x, remaining_data))
             }
         }
     );
@@ -475,8 +481,9 @@ pub fn nfnetlink_enum(attrs: TokenStream, item: TokenStream) -> TokenStream {
             }
         }
 
-        #nfnetlinkdeserialize_impl
+        #tryfrom_impl
 
+        #nfnetlinkdeserialize_impl
     };
 
     res.into()

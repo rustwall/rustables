@@ -1,11 +1,15 @@
-#![allow(dead_code)]
-use std::ffi::CString;
+use crate::data_type::DataType;
+use crate::nlmsg::{NfNetlinkObject, NfNetlinkWriter};
+use crate::parser::{parse_nlmsg, NlMsg};
+use crate::set::{Set, SetBuilder};
+use crate::{sys::*, Chain, MsgType, ProtocolFamily, Rule, Table};
 
-use rustables::nlmsg::{NfNetlinkObject, NfNetlinkWriter};
-//use rustables::set::SetKey;
-use rustables::{sys::*, Chain, MsgType, ProtocolFamily, Rule, Table};
-
-//use rustables::{nft_nlmsg_maxsize, Chain, MsgType, NlMsg, Rule, Set, Table};
+mod batch;
+mod chain;
+mod expr;
+mod rule;
+mod set;
+mod table;
 
 pub const TABLE_NAME: &'static str = "mocktable";
 pub const CHAIN_NAME: &'static str = "mockchain";
@@ -130,10 +134,7 @@ pub fn get_test_table() -> Table {
 pub fn get_test_table_raw_expr() -> NetlinkExpr {
     NetlinkExpr::List(vec![
         NetlinkExpr::Final(NFTA_TABLE_FLAGS, 0u32.to_be_bytes().to_vec()),
-        NetlinkExpr::Final(
-            NFTA_TABLE_NAME,
-            CString::new(TABLE_NAME).unwrap().to_bytes().to_vec(),
-        ),
+        NetlinkExpr::Final(NFTA_TABLE_NAME, TABLE_NAME.as_bytes().to_vec()),
     ])
     .sort()
 }
@@ -141,14 +142,8 @@ pub fn get_test_table_raw_expr() -> NetlinkExpr {
 pub fn get_test_table_with_userdata_raw_expr() -> NetlinkExpr {
     NetlinkExpr::List(vec![
         NetlinkExpr::Final(NFTA_TABLE_FLAGS, 0u32.to_be_bytes().to_vec()),
-        NetlinkExpr::Final(
-            NFTA_TABLE_NAME,
-            CString::new(TABLE_NAME).unwrap().to_bytes().to_vec(),
-        ),
-        NetlinkExpr::Final(
-            NFTA_TABLE_USERDATA,
-            CString::new(TABLE_USERDATA).unwrap().to_bytes().to_vec(),
-        ),
+        NetlinkExpr::Final(NFTA_TABLE_NAME, TABLE_NAME.as_bytes().to_vec()),
+        NetlinkExpr::Final(NFTA_TABLE_USERDATA, TABLE_USERDATA.as_bytes().to_vec()),
     ])
     .sort()
 }
@@ -161,11 +156,13 @@ pub fn get_test_rule() -> Rule {
     Rule::new(&get_test_chain()).unwrap()
 }
 
-/*
-pub fn get_test_set<T: SetKey>() -> Set<T> {
-    Set::new(SET_NAME, SET_ID, Rc::new(get_test_table()))
+pub fn get_test_set<K: DataType>() -> Set {
+    SetBuilder::<K>::new(SET_NAME, SET_ID, &get_test_table())
+        .expect("Couldn't create a set")
+        .finish()
+        .0
+        .with_userdata(SET_USERDATA)
 }
-*/
 
 pub fn get_test_nlmsg_with_msg_type<'a>(
     buf: &'a mut Vec<u8>,
@@ -175,11 +172,10 @@ pub fn get_test_nlmsg_with_msg_type<'a>(
     let mut writer = NfNetlinkWriter::new(buf);
     obj.add_or_remove(&mut writer, msg_type, 0);
 
-    let (hdr, msg) =
-        rustables::parser::parse_nlmsg(buf.as_slice()).expect("Couldn't parse the message");
+    let (hdr, msg) = parse_nlmsg(buf.as_slice()).expect("Couldn't parse the message");
 
     let (nfgenmsg, raw_value) = match msg {
-        rustables::parser::NlMsg::NfGenMsg(nfgenmsg, raw_value) => (nfgenmsg, raw_value),
+        NlMsg::NfGenMsg(nfgenmsg, raw_value) => (nfgenmsg, raw_value),
         _ => panic!("Invalid return value type, expected a valid message"),
     };
 

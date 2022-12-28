@@ -2,11 +2,11 @@ use libc;
 
 use thiserror::Error;
 
+use crate::error::QueryError;
 use crate::nlmsg::{NfNetlinkObject, NfNetlinkWriter};
 use crate::sys::NFNL_SUBSYS_NFTABLES;
 use crate::{MsgType, ProtocolFamily};
 
-use crate::query::Error;
 use nix::sys::socket::{
     self, AddressFamily, MsgFlags, NetlinkAddr, SockAddr, SockFlag, SockProtocol, SockType,
 };
@@ -88,7 +88,7 @@ impl Batch {
         *self.buf
     }
 
-    pub fn send(mut self) -> Result<(), Error> {
+    pub fn send(self) -> Result<(), QueryError> {
         use crate::query::{recv_and_process, socket_close_wrapper};
 
         let sock = socket::socket(
@@ -97,7 +97,7 @@ impl Batch {
             SockFlag::empty(),
             SockProtocol::NetlinkNetFilter,
         )
-        .map_err(Error::NetlinkOpenError)?;
+        .map_err(QueryError::NetlinkOpenError)?;
 
         let max_seq = self.seq - 1;
 
@@ -110,7 +110,7 @@ impl Batch {
         let mut sent = 0;
         while sent != to_send.len() {
             sent += socket::send(sock, &to_send[sent..], MsgFlags::empty())
-                .map_err(Error::NetlinkSendError)?;
+                .map_err(QueryError::NetlinkSendError)?;
         }
 
         Ok(socket_close_wrapper(sock, move |sock| {

@@ -1,5 +1,5 @@
-use rustables::{
-    parser::get_operation_from_nlmsghdr_type,
+use crate::{
+    nlmsg::get_operation_from_nlmsghdr_type,
     sys::{
         NFTA_RULE_CHAIN, NFTA_RULE_HANDLE, NFTA_RULE_POSITION, NFTA_RULE_TABLE, NFTA_RULE_USERDATA,
         NFT_MSG_DELRULE, NFT_MSG_NEWRULE,
@@ -7,8 +7,10 @@ use rustables::{
     MsgType,
 };
 
-mod common;
-use common::*;
+use super::{
+    get_test_nlmsg, get_test_nlmsg_with_msg_type, get_test_rule, NetlinkExpr, CHAIN_NAME,
+    RULE_USERDATA, TABLE_NAME,
+};
 
 #[test]
 fn new_empty_rule() {

@@ -85,9 +85,9 @@ rec {
     crates = {
       "aho-corasick" = rec {
         crateName = "aho-corasick";
-        version = "0.7.19";
+        version = "0.7.20";
         edition = "2018";
-        sha256 = "0knl5n9f396068qk4zrvhcf01d5qp9ja2my4j7ywny093bcmpxdl";
+        sha256 = "1b3if3nav4qzgjz9bf75b2cv2h2yisrqfs0np70i38kgz4cn94yc";
         libName = "aho_corasick";
         authors = [
           "Andrew Gallant <jamslam@gmail.com>"
@@ -295,10 +295,10 @@ rec {
       };
       "cc" = rec {
         crateName = "cc";
-        version = "1.0.74";
+        version = "1.0.78";
         edition = "2018";
         crateBin = [];
-        sha256 = "0x0m14cizayy1ydiyvw76gl0wij8120w8ppb7zm55b1sj2x5s7sq";
+        sha256 = "0gcch8g41jsjs4zk8fy7k4jhc33sfqdab4nxsrcsds2w6gi080d2";
         authors = [
           "Alex Crichton <alex@alexcrichton.com>"
         ];
@@ -548,9 +548,9 @@ rec {
       };
       "glob" = rec {
         crateName = "glob";
-        version = "0.3.0";
+        version = "0.3.1";
         edition = "2015";
-        sha256 = "0x25wfr7vg3mzxc9x05dcphvd3nwlcmbnxrvwcvrrdwplcrrk4cv";
+        sha256 = "16zca52nglanv23q5qrwd5jinw3d3as5ylya6y1pbx47vkxvrynj";
         authors = [
           "The Rust Project Developers"
         ];
@@ -649,9 +649,9 @@ rec {
       };
       "libc" = rec {
         crateName = "libc";
-        version = "0.2.137";
+        version = "0.2.139";
         edition = "2015";
-        sha256 = "12dz2lk4a7lm03k079n2rkm1l6cpdhvy6nrngbfprzrv19icqzzw";
+        sha256 = "0yaz3z56c72p2nfgv2y2zdi8bzi7x3kdq2hzgishgw0da8ky6790";
         authors = [
           "The Rust Project Developers"
         ];
@@ -751,9 +751,9 @@ rec {
       };
       "nix" = rec {
         crateName = "nix";
-        version = "0.23.1";
+        version = "0.23.2";
         edition = "2018";
-        sha256 = "1iimixk7y2qk0jswqich4mkd8kqyzdghcgy6203j8fmxmhbn71lz";
+        sha256 = "0p5kxhm5d8lry0szqbsllpcb5i3z7lg1dkglw0ni2l011b090dwg";
         authors = [
           "The nix-rust Project Developers"
         ];
@@ -829,11 +829,79 @@ rec {
         ];
 
       };
+      "proc-macro-error" = rec {
+        crateName = "proc-macro-error";
+        version = "1.0.4";
+        edition = "2018";
+        sha256 = "1373bhxaf0pagd8zkyd03kkx6bchzf6g0dkwrwzsnal9z47lj9fs";
+        authors = [
+          "CreepySkeleton <creepy-skeleton@yandex.ru>"
+        ];
+        dependencies = [
+          {
+            name = "proc-macro-error-attr";
+            packageId = "proc-macro-error-attr";
+          }
+          {
+            name = "proc-macro2";
+            packageId = "proc-macro2";
+          }
+          {
+            name = "quote";
+            packageId = "quote";
+          }
+          {
+            name = "syn";
+            packageId = "syn";
+            optional = true;
+            usesDefaultFeatures = false;
+          }
+        ];
+        buildDependencies = [
+          {
+            name = "version_check";
+            packageId = "version_check";
+          }
+        ];
+        features = {
+          "default" = [ "syn-error" ];
+          "syn" = [ "dep:syn" ];
+          "syn-error" = [ "syn" ];
+        };
+        resolvedDefaultFeatures = [ "default" "syn" "syn-error" ];
+      };
+      "proc-macro-error-attr" = rec {
+        crateName = "proc-macro-error-attr";
+        version = "1.0.4";
+        edition = "2018";
+        sha256 = "0sgq6m5jfmasmwwy8x4mjygx5l7kp8s4j60bv25ckv2j1qc41gm1";
+        procMacro = true;
+        authors = [
+          "CreepySkeleton <creepy-skeleton@yandex.ru>"
+        ];
+        dependencies = [
+          {
+            name = "proc-macro2";
+            packageId = "proc-macro2";
+          }
+          {
+            name = "quote";
+            packageId = "quote";
+          }
+        ];
+        buildDependencies = [
+          {
+            name = "version_check";
+            packageId = "version_check";
+          }
+        ];
+
+      };
       "proc-macro2" = rec {
         crateName = "proc-macro2";
-        version = "1.0.47";
+        version = "1.0.49";
         edition = "2018";
-        sha256 = "09g7alc7mlbycsadfh7lwskr1qfxbiic9qp9z751cqz3n04dk8sy";
+        sha256 = "19b3xdfmnay9mchza82lhb3n8qjrfzkxwd23f50xxzy4z6lyra2p";
         authors = [
           "David Tolnay <dtolnay@gmail.com>"
           "Alex Crichton <alex@alexcrichton.com>"
@@ -862,9 +930,9 @@ rec {
       };
       "quote" = rec {
         crateName = "quote";
-        version = "1.0.21";
+        version = "1.0.23";
         edition = "2018";
-        sha256 = "0yai5cyd9h95n7hkwjcx8ig3yv0hindmz5gm60g9dmm7fzrlir5v";
+        sha256 = "0ywwzw5xfwwgq62ihp4fbjbfdjb3ilss2vh3fka18ai59lvdhml8";
         authors = [
           "David Tolnay <dtolnay@gmail.com>"
         ];
@@ -883,9 +951,9 @@ rec {
       };
       "regex" = rec {
         crateName = "regex";
-        version = "1.6.0";
+        version = "1.7.0";
         edition = "2018";
-        sha256 = "12wqvyh4i75j7pc8sgvmqh4yy3qaj4inc4alyv1cdf3lf4kb6kjc";
+        sha256 = "12l6if07cb6fa6nigql90qrw0happnbnzqvr6jpg4hg2z2g5axp0";
         authors = [
           "The Rust Project Developers"
         ];
@@ -927,9 +995,9 @@ rec {
       };
       "regex-syntax" = rec {
         crateName = "regex-syntax";
-        version = "0.6.27";
+        version = "0.6.28";
         edition = "2018";
-        sha256 = "0i32nnvyzzkvz1rqp2qyfxrp2170859z8ck37jd63c8irrrppy53";
+        sha256 = "0j68z4jnxshfymb08j1drvxn9wgs1469047lfaq4im78wcxn0v25";
         authors = [
           "The Rust Project Developers"
         ];
@@ -942,7 +1010,7 @@ rec {
       "rustables" = rec {
         crateName = "rustables";
         version = "0.7.0";
-        edition = "2018";
+        edition = "2021";
         # We can't filter paths with references in Nix 2.4
         # See https://github.com/NixOS/nix/issues/5410
         src = if (lib.versionOlder builtins.nixVersion "2.4pre20211007")
@@ -974,6 +1042,10 @@ rec {
             packageId = "nix";
           }
           {
+            name = "rustables-macros";
+            packageId = "rustables-macros";
+          }
+          {
             name = "thiserror";
             packageId = "thiserror";
           }
@@ -996,6 +1068,37 @@ rec {
           {
             name = "env_logger";
             packageId = "env_logger 0.9.3";
+          }
+        ];
+
+      };
+      "rustables-macros" = rec {
+        crateName = "rustables-macros";
+        version = "0.1.0";
+        edition = "2021";
+        # We can't filter paths with references in Nix 2.4
+        # See https://github.com/NixOS/nix/issues/5410
+        src = if (lib.versionOlder builtins.nixVersion "2.4pre20211007")
+          then lib.cleanSourceWith { filter = sourceFilter;  src = ./macros; }
+          else ./macros;
+        procMacro = true;
+        dependencies = [
+          {
+            name = "proc-macro-error";
+            packageId = "proc-macro-error";
+          }
+          {
+            name = "proc-macro2";
+            packageId = "proc-macro2";
+          }
+          {
+            name = "quote";
+            packageId = "quote";
+          }
+          {
+            name = "syn";
+            packageId = "syn";
+            features = [ "full" ];
           }
         ];
 
@@ -1035,9 +1138,9 @@ rec {
       };
       "syn" = rec {
         crateName = "syn";
-        version = "1.0.103";
+        version = "1.0.107";
         edition = "2018";
-        sha256 = "0pa4b6g938drphblgdhmjnzclp7gcbf4zdgkmfaxlfhk54i08r58";
+        sha256 = "1xg3315vx8civ8y0l5zxq5mkx07qskaqwnjak18aw0vfn6sn8h0z";
         authors = [
           "David Tolnay <dtolnay@gmail.com>"
         ];
@@ -1065,7 +1168,7 @@ rec {
           "quote" = [ "dep:quote" ];
           "test" = [ "syn-test-suite/all-features" ];
         };
-        resolvedDefaultFeatures = [ "clone-impls" "default" "derive" "parsing" "printing" "proc-macro" "quote" ];
+        resolvedDefaultFeatures = [ "clone-impls" "default" "derive" "full" "parsing" "printing" "proc-macro" "quote" ];
       };
       "termcolor" = rec {
         crateName = "termcolor";
@@ -1105,9 +1208,9 @@ rec {
       };
       "thiserror" = rec {
         crateName = "thiserror";
-        version = "1.0.37";
+        version = "1.0.38";
         edition = "2018";
-        sha256 = "0gky83x4i87gd87w3fknnp920wvk9yycp7dgkf5h3jg364vb7phh";
+        sha256 = "1l7yh18iqcr2jnl6qjx3ywvhny98cvda3biwc334ap3xm65d373a";
         authors = [
           "David Tolnay <dtolnay@gmail.com>"
         ];
@@ -1121,9 +1224,9 @@ rec {
       };
       "thiserror-impl" = rec {
         crateName = "thiserror-impl";
-        version = "1.0.37";
+        version = "1.0.38";
         edition = "2018";
-        sha256 = "1fydmpksd14x1mkc24zas01qjssz8q43sbn2ywl6n527dda1fbcq";
+        sha256 = "0vzkcjqkzzgrwwby92xvnbp11a8d70b1gkybm0zx1r458spjgcqz";
         procMacro = true;
         authors = [
           "David Tolnay <dtolnay@gmail.com>"
@@ -1146,9 +1249,9 @@ rec {
       };
       "unicode-ident" = rec {
         crateName = "unicode-ident";
-        version = "1.0.5";
+        version = "1.0.6";
         edition = "2018";
-        sha256 = "1wznr6ax3jl09vxkvj4a62vip2avfgif13js9sflkjg4b6fv7skc";
+        sha256 = "1g2fdsw5sv9l1m73whm99za3lxq3nw4gzx5kvi562h4b46gjp8l4";
         authors = [
           "David Tolnay <dtolnay@gmail.com>"
         ];
