@@ -21,7 +21,7 @@ pub enum MetaType {
     /// Packet output interface name (dev->name).
     OifName = sys::NFT_META_OIFNAME,
     /// Packet input interface type (dev->type).
-    IifType = sys::NFT_META_IFTYPE,
+    IifType = libc::NFT_META_IIFTYPE,
     /// Packet output interface type (dev->type).
     OifType = sys::NFT_META_OIFTYPE,
     /// Originating socket UID (fsuid).
