@@ -21,7 +21,7 @@ test:alpine:
     RUSTDOCFLAGS: "-C target-feature=-crt-static"  
   before_script:
     - apk update
-    - apk add build-base libmnl-dev libnftnl-dev clang-libs
+    - apk add build-base clang-dev llvm-dev
   script:
     - mkdir -p target cargo
     - du -sh target cargo
@@ -35,7 +35,7 @@ test:debian-stable:
     CARGO_HOME: $CI_PROJECT_DIR/cargo
   before_script:
     - apt-get -y update
-    - apt-get -y install libmnl-dev libnftnl-dev libclang-11-dev
+    - apt-get -y install libclang-13-dev llvm-13-dev
   script:
     - mkdir -p target cargo
     - du -sh target cargo
