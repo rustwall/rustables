@@ -1,9 +1,3 @@
-default:
-  cache:
-    paths:
-      - target/
-      - cargo/
-
 test:alpine:
   # Official language image. Look for the different tagged releases at:
   # https://hub.docker.com/r/library/rust/tags/
@@ -24,7 +18,6 @@ test:alpine:
     - apk add build-base clang-dev llvm-dev
   script:
     - mkdir -p target cargo
-    - du -sh target cargo
     - rustc --version && cargo --version
     - cargo test --workspace --verbose --release
 
@@ -38,6 +31,5 @@ test:debian-stable:
     - apt-get -y install libclang-13-dev llvm-13-dev
   script:
     - mkdir -p target cargo
-    - du -sh target cargo
     - rustc --version && cargo --version
     - cargo test --workspace --verbose --release
