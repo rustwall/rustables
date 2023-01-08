@@ -1,7 +1,6 @@
 //! This build script leverages `bindgen` to generate rust sys files.
 
 use bindgen;
-use lazy_static::lazy_static;
 use regex::{Captures, Regex};
 use std::borrow::Cow;
 use std::fs::File;
@@ -49,10 +48,8 @@ fn generate_sys() {
 
 /// Recast nft_*_attributes from u32 to u16 in header string `header`.
 fn reformat_units(header: &str) -> Cow<str> {
-    lazy_static! {
-        static ref RE: Regex = Regex::new(r"(pub type nft[a-zA-Z_]*_attributes) = u32;").unwrap();
-    }
-    RE.replace_all(header, |captures: &Captures| {
+    let re = Regex::new(r"(pub type nft[a-zA-Z_]*_attributes) = u32;").unwrap();
+    re.replace_all(header, |captures: &Captures| {
         format!("{} = u16;", &captures[1])
     })
 }

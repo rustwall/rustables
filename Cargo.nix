@@ -1056,10 +1056,6 @@ rec {
             packageId = "bindgen";
           }
           {
-            name = "lazy_static";
-            packageId = "lazy_static";
-          }
-          {
             name = "regex";
             packageId = "regex";
           }
