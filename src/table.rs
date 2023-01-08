@@ -8,7 +8,7 @@ use crate::sys::{
     NFTA_TABLE_FLAGS, NFTA_TABLE_NAME, NFTA_TABLE_USERDATA, NFT_MSG_DELTABLE, NFT_MSG_GETTABLE,
     NFT_MSG_NEWTABLE,
 };
-use crate::ProtocolFamily;
+use crate::{Batch, ProtocolFamily};
 
 /// Abstraction of a `nftnl_table`, the top level container in netfilter. A table has a protocol
 /// family and contains [`Chain`]s that in turn hold the rules.
@@ -31,6 +31,12 @@ impl Table {
         let mut res = Self::default();
         res.family = family;
         res
+    }
+
+    /// Appends this rule to `batch`
+    pub fn add_to_batch(self, batch: &mut Batch) -> Self {
+        batch.add(&self, crate::MsgType::Add);
+        self
     }
 }
 

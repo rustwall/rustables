@@ -62,10 +62,6 @@ impl<'a> NfNetlinkWriter<'a> {
         &mut self.buf[start..start + size]
     }
 
-    pub fn extract_buffer(self) -> &'a mut Vec<u8> {
-        self.buf
-    }
-
     // rewrite of `__nftnl_nlmsg_build_hdr`
     pub fn write_header(
         &mut self,

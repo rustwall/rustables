@@ -4,7 +4,7 @@ use rustables_macros::nfnetlink_struct;
 
 use crate::chain::Chain;
 use crate::error::{BuilderError, QueryError};
-use crate::expr::ExpressionList;
+use crate::expr::{ExpressionList, RawExpression};
 use crate::nlmsg::NfNetlinkObject;
 use crate::query::list_objects_with_data;
 use crate::sys::{
@@ -12,7 +12,7 @@ use crate::sys::{
     NFTA_RULE_TABLE, NFTA_RULE_USERDATA, NFT_MSG_DELRULE, NFT_MSG_NEWRULE, NLM_F_APPEND,
     NLM_F_CREATE,
 };
-use crate::ProtocolFamily;
+use crate::{Batch, ProtocolFamily};
 
 /// A nftables firewall rule.
 #[derive(Clone, PartialEq, Eq, Default, Debug)]
@@ -52,6 +52,28 @@ impl Rule {
                     .get_name()
                     .ok_or(BuilderError::MissingChainInformationError)?,
             ))
+    }
+
+    pub fn add_expr(&mut self, e: impl Into<RawExpression>) {
+        let exprs = match self.get_mut_expressions() {
+            Some(x) => x,
+            None => {
+                self.set_expressions(ExpressionList::default());
+                self.get_mut_expressions().unwrap()
+            }
+        };
+        exprs.add_value(e);
+    }
+
+    pub fn with_expr(mut self, e: impl Into<RawExpression>) -> Self {
+        self.add_expr(e);
+        self
+    }
+
+    /// Appends this rule to `batch`
+    pub fn add_to_batch(self, batch: &mut Batch) -> Self {
+        batch.add(&self, crate::MsgType::Add);
+        self
     }
 }
 

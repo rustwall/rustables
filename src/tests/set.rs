@@ -6,16 +6,16 @@ use crate::{
     set::SetBuilder,
     sys::{
         NFTA_DATA_VALUE, NFTA_LIST_ELEM, NFTA_SET_ELEM_KEY, NFTA_SET_ELEM_LIST_ELEMENTS,
-        NFTA_SET_ELEM_LIST_SET, NFTA_SET_ELEM_LIST_TABLE, NFTA_SET_ID, NFTA_SET_KEY_LEN,
-        NFTA_SET_KEY_TYPE, NFTA_SET_NAME, NFTA_SET_TABLE, NFTA_SET_USERDATA, NFT_MSG_DELSET,
-        NFT_MSG_NEWSET, NFT_MSG_NEWSETELEM,
+        NFTA_SET_ELEM_LIST_SET, NFTA_SET_ELEM_LIST_TABLE, NFTA_SET_KEY_LEN, NFTA_SET_KEY_TYPE,
+        NFTA_SET_NAME, NFTA_SET_TABLE, NFTA_SET_USERDATA, NFT_MSG_DELSET, NFT_MSG_NEWSET,
+        NFT_MSG_NEWSETELEM,
     },
     MsgType,
 };
 
 use super::{
     get_test_nlmsg, get_test_nlmsg_with_msg_type, get_test_set, get_test_table, NetlinkExpr,
-    SET_ID, SET_NAME, SET_USERDATA, TABLE_NAME,
+    SET_NAME, SET_USERDATA, TABLE_NAME,
 };
 
 #[test]
@@ -28,7 +28,7 @@ fn new_empty_set() {
         get_operation_from_nlmsghdr_type(nlmsghdr.nlmsg_type),
         NFT_MSG_NEWSET as u8
     );
-    assert_eq!(nlmsghdr.nlmsg_len, 88);
+    assert_eq!(nlmsghdr.nlmsg_len, 80);
 
     assert_eq!(
         raw_expr,
@@ -37,7 +37,6 @@ fn new_empty_set() {
             NetlinkExpr::Final(NFTA_SET_NAME, SET_NAME.as_bytes().to_vec()),
             NetlinkExpr::Final(NFTA_SET_KEY_TYPE, Ipv4Addr::TYPE.to_be_bytes().to_vec()),
             NetlinkExpr::Final(NFTA_SET_KEY_LEN, Ipv4Addr::LEN.to_be_bytes().to_vec()),
-            NetlinkExpr::Final(NFTA_SET_ID, SET_ID.to_be_bytes().to_vec()),
             NetlinkExpr::Final(NFTA_SET_USERDATA, SET_USERDATA.as_bytes().to_vec()),
         ])
         .to_raw()
@@ -55,7 +54,7 @@ fn delete_empty_set() {
         get_operation_from_nlmsghdr_type(nlmsghdr.nlmsg_type),
         NFT_MSG_DELSET as u8
     );
-    assert_eq!(nlmsghdr.nlmsg_len, 88);
+    assert_eq!(nlmsghdr.nlmsg_len, 80);
 
     assert_eq!(
         raw_expr,
@@ -64,7 +63,6 @@ fn delete_empty_set() {
             NetlinkExpr::Final(NFTA_SET_NAME, SET_NAME.as_bytes().to_vec()),
             NetlinkExpr::Final(NFTA_SET_KEY_TYPE, Ipv6Addr::TYPE.to_be_bytes().to_vec()),
             NetlinkExpr::Final(NFTA_SET_KEY_LEN, Ipv6Addr::LEN.to_be_bytes().to_vec()),
-            NetlinkExpr::Final(NFTA_SET_ID, SET_ID.to_be_bytes().to_vec()),
             NetlinkExpr::Final(NFTA_SET_USERDATA, SET_USERDATA.as_bytes().to_vec()),
         ])
         .to_raw()
@@ -75,9 +73,8 @@ fn delete_empty_set() {
 fn new_set_with_data() {
     let ip1 = Ipv4Addr::new(127, 0, 0, 1);
     let ip2 = Ipv4Addr::new(1, 1, 1, 1);
-    let mut set_builder =
-        SetBuilder::<Ipv4Addr>::new(SET_NAME.to_string(), SET_ID, &get_test_table())
-            .expect("Couldn't create a set");
+    let mut set_builder = SetBuilder::<Ipv4Addr>::new(SET_NAME.to_string(), &get_test_table())
+        .expect("Couldn't create a set");
 
     set_builder.add(&ip1);
     set_builder.add(&ip2);

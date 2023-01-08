@@ -6,7 +6,6 @@
 use std::fmt::Debug;
 
 use rustables_macros::nfnetlink_struct;
-use thiserror::Error;
 
 use crate::error::DecodeError;
 use crate::nlmsg::{NfNetlinkAttribute, NfNetlinkDeserializable};
@@ -54,35 +53,6 @@ pub use self::register::Register;
 
 mod verdict;
 pub use self::verdict::*;
-
-#[derive(Debug, Error)]
-pub enum ExpressionError {
-    #[error("The log prefix string is more than 127 characters long")]
-    /// The log prefix string is more than 127 characters long
-    TooLongLogPrefix,
-
-    #[error("The expected expression type doesn't match the name of the raw expression")]
-    /// The expected expression type doesn't match the name of the raw expression.
-    InvalidExpressionKind,
-
-    #[error("Deserializing the requested type isn't implemented yet")]
-    /// Deserializing the requested type isn't implemented yet.
-    NotImplemented,
-
-    #[error("The expression value cannot be deserialized to the requested type")]
-    /// The expression value cannot be deserialized to the requested type.
-    InvalidValue,
-
-    #[error("A pointer was null while a non-null pointer was expected")]
-    /// A pointer was null while a non-null pointer was expected.
-    NullPointer,
-
-    #[error(
-        "The size of a raw value was incoherent with the expected type of the deserialized value"
-    )]
-    /// The size of a raw value was incoherent with the expected type of the deserialized value/
-    InvalidDataSize,
-}
 
 pub trait Expression {
     fn get_name() -> &'static str;

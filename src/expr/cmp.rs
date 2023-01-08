@@ -1,7 +1,6 @@
 use rustables_macros::{nfnetlink_enum, nfnetlink_struct};
 
 use crate::{
-    data_type::DataType,
     parser_impls::NfNetlinkData,
     sys::{
         NFTA_CMP_DATA, NFTA_CMP_OP, NFTA_CMP_SREG, NFT_CMP_EQ, NFT_CMP_GT, NFT_CMP_GTE, NFT_CMP_LT,
@@ -44,11 +43,11 @@ pub struct Cmp {
 impl Cmp {
     /// Returns a new comparison expression comparing the value loaded in the register with the
     /// data in `data` using the comparison operator `op`.
-    pub fn new(op: CmpOp, data: impl DataType) -> Self {
+    pub fn new(op: CmpOp, data: impl Into<Vec<u8>>) -> Self {
         Cmp {
             sreg: Some(Register::Reg1),
             op: Some(op),
-            data: Some(NfNetlinkData::default().with_value(data.data())),
+            data: Some(NfNetlinkData::default().with_value(data.into())),
         }
     }
 }

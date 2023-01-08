@@ -187,6 +187,9 @@ pub fn nfnetlink_struct(attrs: TokenStream, item: TokenStream) -> TokenStream {
         let getter_name = format!("get_{}", field_str);
         let getter_name = Ident::new(&getter_name, field.name.span());
 
+        let muttable_getter_name = format!("get_mut_{}", field_str);
+        let muttable_getter_name = Ident::new(&muttable_getter_name, field.name.span());
+
         let setter_name = format!("set_{}", field_str);
         let setter_name = Ident::new(&setter_name, field.name.span());
 
@@ -197,6 +200,10 @@ pub fn nfnetlink_struct(attrs: TokenStream, item: TokenStream) -> TokenStream {
             impl #name {
             pub fn #getter_name(&self) -> Option<&#field_type> {
                 self.#field_name.as_ref()
+            }
+
+            pub fn #muttable_getter_name(&mut self) -> Option<&mut #field_type> {
+                self.#field_name.as_mut()
             }
 
             pub fn #setter_name(&mut self, val: impl Into<#field_type>) {

@@ -43,6 +43,10 @@ impl Expression for Conntrack {
 }
 
 impl Conntrack {
+    pub fn new(key: ConntrackKey) -> Self {
+        Self::default().with_dreg(Register::Reg1).with_key(key)
+    }
+
     pub fn set_mark_value(&mut self, reg: Register) {
         self.set_sreg(reg);
         self.set_key(ConntrackKey::Mark);

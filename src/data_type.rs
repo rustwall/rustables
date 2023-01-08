@@ -1,4 +1,4 @@
-use std::net::{Ipv4Addr, Ipv6Addr};
+use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
 
 pub trait DataType {
     const TYPE: u32;
@@ -31,5 +31,12 @@ impl<const N: usize> DataType for [u8; N] {
 
     fn data(&self) -> Vec<u8> {
         self.to_vec()
+    }
+}
+
+pub fn ip_to_vec(ip: IpAddr) -> Vec<u8> {
+    match ip {
+        IpAddr::V4(x) => x.octets().to_vec(),
+        IpAddr::V6(x) => x.octets().to_vec(),
     }
 }

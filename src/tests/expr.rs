@@ -5,21 +5,23 @@ use libc::NF_DROP;
 use crate::{
     expr::{
         Bitwise, Cmp, CmpOp, Conntrack, ConntrackKey, Counter, ExpressionList, HeaderField,
-        HighLevelPayload, IcmpCode, Immediate, Log, Masquerade, Meta, MetaType, Nat, NatType,
-        Register, Reject, RejectType, TCPHeaderField, TransportHeaderField, VerdictKind,
+        HighLevelPayload, IcmpCode, Immediate, Log, Lookup, Masquerade, Meta, MetaType, Nat,
+        NatType, Register, Reject, RejectType, TCPHeaderField, TransportHeaderField, VerdictKind,
     },
+    set::SetBuilder,
     sys::{
         NFTA_BITWISE_DREG, NFTA_BITWISE_LEN, NFTA_BITWISE_MASK, NFTA_BITWISE_SREG,
         NFTA_BITWISE_XOR, NFTA_CMP_DATA, NFTA_CMP_OP, NFTA_CMP_SREG, NFTA_COUNTER_BYTES,
         NFTA_COUNTER_PACKETS, NFTA_CT_DREG, NFTA_CT_KEY, NFTA_DATA_VALUE, NFTA_DATA_VERDICT,
         NFTA_EXPR_DATA, NFTA_EXPR_NAME, NFTA_IMMEDIATE_DATA, NFTA_IMMEDIATE_DREG, NFTA_LIST_ELEM,
-        NFTA_LOG_GROUP, NFTA_LOG_PREFIX, NFTA_META_DREG, NFTA_META_KEY, NFTA_NAT_FAMILY,
-        NFTA_NAT_REG_ADDR_MIN, NFTA_NAT_TYPE, NFTA_PAYLOAD_BASE, NFTA_PAYLOAD_DREG,
-        NFTA_PAYLOAD_LEN, NFTA_PAYLOAD_OFFSET, NFTA_REJECT_ICMP_CODE, NFTA_REJECT_TYPE,
-        NFTA_RULE_CHAIN, NFTA_RULE_EXPRESSIONS, NFTA_RULE_TABLE, NFTA_VERDICT_CODE, NFT_CMP_EQ,
-        NFT_CT_STATE, NFT_META_PROTOCOL, NFT_NAT_SNAT, NFT_PAYLOAD_TRANSPORT_HEADER, NFT_REG_1,
-        NFT_REG_VERDICT, NFT_REJECT_ICMPX_UNREACH,
+        NFTA_LOG_GROUP, NFTA_LOG_PREFIX, NFTA_LOOKUP_SET, NFTA_LOOKUP_SREG, NFTA_META_DREG,
+        NFTA_META_KEY, NFTA_NAT_FAMILY, NFTA_NAT_REG_ADDR_MIN, NFTA_NAT_TYPE, NFTA_PAYLOAD_BASE,
+        NFTA_PAYLOAD_DREG, NFTA_PAYLOAD_LEN, NFTA_PAYLOAD_OFFSET, NFTA_REJECT_ICMP_CODE,
+        NFTA_REJECT_TYPE, NFTA_RULE_CHAIN, NFTA_RULE_EXPRESSIONS, NFTA_RULE_TABLE,
+        NFTA_VERDICT_CODE, NFT_CMP_EQ, NFT_CT_STATE, NFT_META_PROTOCOL, NFT_NAT_SNAT,
+        NFT_PAYLOAD_TRANSPORT_HEADER, NFT_REG_1, NFT_REG_VERDICT, NFT_REJECT_ICMPX_UNREACH,
     },
+    tests::{get_test_table, SET_NAME},
     ProtocolFamily,
 };
 
@@ -283,39 +285,40 @@ fn log_expr_is_valid() {
     );
 }
 
-/*
 #[test]
 fn lookup_expr_is_valid() {
-    let set_name = &CStr::from_bytes_with_nul(b"mockset\0").unwrap();
-    let mut rule = get_test_rule();
-    let table = rule.get_chain().get_table();
-    let mut set = Set::new(set_name, 0, table);
+    let table = get_test_table();
+    let mut set_builder = SetBuilder::new(SET_NAME, &table).unwrap();
     let address: Ipv4Addr = [8, 8, 8, 8].into();
-    set.add(&address);
+    set_builder.add(&address);
+    let (set, _set_elements) = set_builder.finish();
     let lookup = Lookup::new(&set).unwrap();
-    let (nlmsghdr, _nfgenmsg, raw_expr) = get_test_nlmsg_from_expr(&mut rule, &lookup);
-    assert_eq!(nlmsghdr.nlmsg_len, 104);
+
+    let mut rule = get_test_rule().with_expressions(ExpressionList::default().with_value(lookup));
+
+    let mut buf = Vec::new();
+    let (nlmsghdr, _nfgenmsg, raw_expr) = get_test_nlmsg(&mut buf, &mut rule);
+    assert_eq!(nlmsghdr.nlmsg_len, 96);
 
     assert_eq!(
         raw_expr,
         NetlinkExpr::List(vec![
-            NetlinkExpr::Final(NFTA_RULE_TABLE, TABLE_NAME.to_vec()),
-            NetlinkExpr::Final(NFTA_RULE_CHAIN, CHAIN_NAME.to_vec()),
+            NetlinkExpr::Final(NFTA_RULE_TABLE, TABLE_NAME.as_bytes().to_vec()),
+            NetlinkExpr::Final(NFTA_RULE_CHAIN, CHAIN_NAME.as_bytes().to_vec()),
             NetlinkExpr::Nested(
                 NFTA_RULE_EXPRESSIONS,
                 vec![NetlinkExpr::Nested(
                     NFTA_LIST_ELEM,
                     vec![
-                        NetlinkExpr::Final(NFTA_EXPR_NAME, b"lookup\0".to_vec()),
+                        NetlinkExpr::Final(NFTA_EXPR_NAME, b"lookup".to_vec()),
                         NetlinkExpr::Nested(
                             NFTA_EXPR_DATA,
                             vec![
+                                NetlinkExpr::Final(NFTA_LOOKUP_SET, b"mockset".to_vec()),
                                 NetlinkExpr::Final(
                                     NFTA_LOOKUP_SREG,
                                     NFT_REG_1.to_be_bytes().to_vec()
                                 ),
-                                NetlinkExpr::Final(NFTA_LOOKUP_SET, b"mockset\0".to_vec()),
-                                NetlinkExpr::Final(NFTA_LOOKUP_SET_ID, 0u32.to_be_bytes().to_vec()),
                             ]
                         )
                     ]
@@ -325,7 +328,6 @@ fn lookup_expr_is_valid() {
         .to_raw()
     );
 }
-*/
 
 #[test]
 fn masquerade_expr_is_valid() {

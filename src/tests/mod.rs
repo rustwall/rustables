@@ -20,8 +20,6 @@ pub const CHAIN_USERDATA: &'static str = "mockchaindata";
 pub const RULE_USERDATA: &'static str = "mockruledata";
 pub const SET_USERDATA: &'static str = "mocksetdata";
 
-pub const SET_ID: u32 = 123456;
-
 type NetLinkType = u16;
 
 #[derive(Debug, thiserror::Error)]
@@ -157,7 +155,7 @@ pub fn get_test_rule() -> Rule {
 }
 
 pub fn get_test_set<K: DataType>() -> Set {
-    SetBuilder::<K>::new(SET_NAME, SET_ID, &get_test_table())
+    SetBuilder::<K>::new(SET_NAME, &get_test_table())
         .expect("Couldn't create a set")
         .finish()
         .0

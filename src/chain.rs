@@ -8,7 +8,7 @@ use crate::sys::{
     NFTA_CHAIN_TYPE, NFTA_CHAIN_USERDATA, NFTA_HOOK_HOOKNUM, NFTA_HOOK_PRIORITY, NFT_MSG_DELCHAIN,
     NFT_MSG_NEWCHAIN,
 };
-use crate::{ProtocolFamily, Table};
+use crate::{Batch, ProtocolFamily, Table};
 use std::fmt::Debug;
 
 pub type ChainPriority = i32;
@@ -168,6 +168,12 @@ impl Chain {
         }
 
         chain
+    }
+
+    /// Appends this chain to `batch`
+    pub fn add_to_batch(self, batch: &mut Batch) -> Self {
+        batch.add(&self, crate::MsgType::Add);
+        self
     }
 }
 

@@ -55,11 +55,10 @@ pub struct SetBuilder<K: DataType> {
 }
 
 impl<K: DataType> SetBuilder<K> {
-    pub fn new(name: impl Into<String>, id: u32, table: &Table) -> Result<Self, BuilderError> {
+    pub fn new(name: impl Into<String>, table: &Table) -> Result<Self, BuilderError> {
         let table_name = table.get_name().ok_or(BuilderError::MissingTableName)?;
         let set_name = name.into();
         let set = Set::default()
-            .with_id(id)
             .with_key_type(K::TYPE)
             .with_key_len(K::LEN)
             .with_table(table_name)

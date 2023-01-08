@@ -129,6 +129,12 @@ pub enum BuilderError {
 
     #[error("Missing name for the set")]
     MissingSetName,
+
+    #[error("The interface name is too long to be written")]
+    InterfaceNameTooLong,
+
+    #[error("The log prefix string is more than 127 characters long")]
+    TooLongLogPrefix,
 }
 
 #[derive(thiserror::Error, Debug)]

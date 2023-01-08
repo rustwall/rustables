@@ -53,7 +53,7 @@ use std::convert::TryFrom;
 mod batch;
 pub use batch::{default_batch_page_size, Batch};
 
-mod data_type;
+pub mod data_type;
 
 mod table;
 pub use table::list_tables;
@@ -64,9 +64,6 @@ pub use chain::list_chains_for_table;
 pub use chain::{Chain, ChainPolicy, ChainPriority, ChainType, Hook, HookClass};
 
 pub mod error;
-
-//mod chain_methods;
-//pub use chain_methods::ChainMethods;
 
 pub mod query;
 
@@ -80,8 +77,8 @@ pub use rule::Rule;
 
 pub mod expr;
 
-//mod rule_methods;
-//pub use rule_methods::{iface_index, Error as MatchError, Protocol, RuleMethods};
+mod rule_methods;
+pub use rule_methods::{iface_index, Protocol};
 
 pub mod set;
 pub use set::Set;

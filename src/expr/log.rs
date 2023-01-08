@@ -1,7 +1,10 @@
 use rustables_macros::nfnetlink_struct;
 
-use super::{Expression, ExpressionError};
-use crate::sys::{NFTA_LOG_GROUP, NFTA_LOG_PREFIX};
+use super::Expression;
+use crate::{
+    error::BuilderError,
+    sys::{NFTA_LOG_GROUP, NFTA_LOG_PREFIX},
+};
 
 #[derive(Clone, PartialEq, Eq, Default, Debug)]
 #[nfnetlink_struct]
@@ -14,10 +17,7 @@ pub struct Log {
 }
 
 impl Log {
-    pub fn new(
-        group: Option<u16>,
-        prefix: Option<impl Into<String>>,
-    ) -> Result<Log, ExpressionError> {
+    pub fn new(group: Option<u16>, prefix: Option<impl Into<String>>) -> Result<Log, BuilderError> {
         let mut res = Log::default();
         if let Some(group) = group {
             res.set_group(group);
@@ -26,7 +26,7 @@ impl Log {
             let prefix = prefix.into();
 
             if prefix.bytes().count() > 127 {
-                return Err(ExpressionError::TooLongLogPrefix);
+                return Err(BuilderError::TooLongLogPrefix);
             }
             res.set_prefix(prefix);
         }
