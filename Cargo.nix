@@ -951,9 +951,9 @@ rec {
       };
       "regex" = rec {
         crateName = "regex";
-        version = "1.7.0";
+        version = "1.7.1";
         edition = "2018";
-        sha256 = "12l6if07cb6fa6nigql90qrw0happnbnzqvr6jpg4hg2z2g5axp0";
+        sha256 = "0czp6hxg02lm02hvlhp9xjkd65cjcagw119crnaznwd5idsabaj8";
         authors = [
           "The Rust Project Developers"
         ];
@@ -1009,7 +1009,7 @@ rec {
       };
       "rustables" = rec {
         crateName = "rustables";
-        version = "0.7.0";
+        version = "0.8.0";
         edition = "2021";
         # We can't filter paths with references in Nix 2.4
         # See https://github.com/NixOS/nix/issues/5410
@@ -1017,7 +1017,9 @@ rec {
           then lib.cleanSourceWith { filter = sourceFilter;  src = ./.; }
           else ./.;
         authors = [
-          "lafleur@boum.org, Simon Thoby, Mullvad VPN"
+          "lafleur@boum.org"
+          "Simon Thoby"
+          "Mullvad VPN"
         ];
         dependencies = [
           {
@@ -1072,12 +1074,11 @@ rec {
         crateName = "rustables-macros";
         version = "0.1.0";
         edition = "2021";
-        # We can't filter paths with references in Nix 2.4
-        # See https://github.com/NixOS/nix/issues/5410
-        src = if (lib.versionOlder builtins.nixVersion "2.4pre20211007")
-          then lib.cleanSourceWith { filter = sourceFilter;  src = ./macros; }
-          else ./macros;
+        sha256 = "093ygmvwd4w69qiry4p99xvyzm2g4ywf8zx0hxrqhyrwy1fldqxm";
         procMacro = true;
+        authors = [
+          "Simon Thoby"
+        ];
         dependencies = [
           {
             name = "proc-macro-error";

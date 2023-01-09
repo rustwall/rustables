@@ -3,12 +3,12 @@
 use bindgen;
 use regex::{Captures, Regex};
 use std::borrow::Cow;
+use std::env;
 use std::fs::File;
 use std::io::Write;
 use std::path::PathBuf;
 
 const SYS_HEADER_FILE: &str = "include/wrapper.h";
-const SYS_BINDINGS_FILE: &str = "src/sys.rs";
 
 fn main() {
     generate_sys();
@@ -25,7 +25,6 @@ fn generate_sys() {
         .prepend_enum_name(false)
         .layout_tests(false)
         .derive_partialeq(true)
-        .raw_line("#![allow(non_camel_case_types, dead_code)]\n\n")
         // Tell cargo to invalidate the built crate whenever any of the
         // included header files changed.
         .parse_callbacks(Box::new(bindgen::CargoCallbacks))
@@ -39,7 +38,7 @@ fn generate_sys() {
     let s = reformat_units(&s);
 
     // Write the bindings to the rust header file.
-    let out_path = PathBuf::from(SYS_BINDINGS_FILE);
+    let out_path = PathBuf::from(env::var("OUT_DIR").unwrap()).join("sys.rs");
     File::create(out_path)
         .expect("Error: could not create rust header file.")
         .write_all(&s.as_bytes())

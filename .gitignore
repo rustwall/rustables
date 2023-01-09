@@ -1,5 +1,3 @@
-src/sys.rs
-tests/sys.rs
 /target/
 **/*.rs.bk
 Cargo.lock
