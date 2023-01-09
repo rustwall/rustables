@@ -1,63 +1,69 @@
-//! Adds a table, chain and a rule that blocks all traffic to a given MAC address
-//!
-//! Run the following to print out current active tables, chains and rules in netfilter. Must be
-//! executed as root:
-//! ```bash
-//! # nft list ruleset
-//! ```
-//! After running this example, the output should be the following:
-//! ```ignore
-//! table inet example-filter-ethernet {
-//!         chain chain-for-outgoing-packets {
-//!                 type filter hook output priority 3; policy accept;
-//!                 ether daddr 00:00:00:00:00:00 drop
-//!                 counter packets 0 bytes 0 meta random > 2147483647 counter packets 0 bytes 0
-//!         }
-//! }
-//! ```
-//!
-//!
-//! Everything created by this example can be removed by running
-//! ```bash
-//! # nft delete table inet example-filter-ethernet
-//! ```
-
-use rustables::{nft_expr, sys::libc, Batch, Chain, FinalizedBatch, ProtoFamily, Rule, Table};
-use std::{ffi::CString, io, rc::Rc};
+///! Adds a table, chain and a rule that blocks all traffic to a given MAC address
+///!
+///! Run the following to print out current active tables, chains and rules in netfilter. Must be
+///! executed as root:
+///! ```bash
+///! # nft list ruleset
+///! ```
+///! After running this example, the output should be the following:
+///! ```ignore
+///! table inet example-filter-ethernet {
+///!         chain chain-for-outgoing-packets {
+///!                 type filter hook output priority 3; policy accept;
+///!                 ether daddr 01:02:03:04:05:06 drop
+///!                 counter packets 0 bytes 0 meta random > 2147483647 counter packets 0 bytes 0
+///!         }
+///! }
+///! ```
+///!
+///!
+///! Everything created by this example can be removed by running
+///! ```bash
+///! # nft delete table inet example-filter-ethernet
+///! ```
+use rustables::{
+    expr::{
+        Cmp, CmpOp, Counter, ExpressionList, HighLevelPayload, Immediate, LLHeaderField, Meta,
+        MetaType, VerdictKind,
+    },
+    Batch, Chain, ChainPolicy, Hook, HookClass, ProtocolFamily, Rule, Table,
+};
 
 const TABLE_NAME: &str = "example-filter-ethernet";
 const OUT_CHAIN_NAME: &str = "chain-for-outgoing-packets";
 
-const BLOCK_THIS_MAC: &[u8] = &[0, 0, 0, 0, 0, 0];
+const BLOCK_THIS_MAC: &[u8] = &[1, 2, 3, 4, 5, 6];
 
-fn main() -> Result<(), Error> {
+fn main() {
     // For verbose explanations of what all these lines up until the rule creation does, see the
     // `add-rules` example.
     let mut batch = Batch::new();
-    let table = Rc::new(Table::new(&CString::new(TABLE_NAME).unwrap(), ProtoFamily::Inet));
-    batch.add(&Rc::clone(&table), rustables::MsgType::Add);
+    let table = Table::new(ProtocolFamily::Inet).with_name(TABLE_NAME);
+    batch.add(&table, rustables::MsgType::Add);
 
-    let mut out_chain = Chain::new(&CString::new(OUT_CHAIN_NAME).unwrap(), Rc::clone(&table));
-    out_chain.set_hook(rustables::Hook::Out, 3);
-    out_chain.set_policy(rustables::Policy::Accept);
-    let out_chain = Rc::new(out_chain);
-    batch.add(&Rc::clone(&out_chain), rustables::MsgType::Add);
+    let mut out_chain = Chain::new(&table).with_name(OUT_CHAIN_NAME);
+    out_chain.set_hook(Hook::new(HookClass::Out, 3));
+    out_chain.set_policy(ChainPolicy::Accept);
+    batch.add(&out_chain, rustables::MsgType::Add);
 
     // === ADD RULE DROPPING ALL TRAFFIC TO THE MAC ADDRESS IN `BLOCK_THIS_MAC` ===
 
-    let mut block_ethernet_rule = Rule::new(Rc::clone(&out_chain));
+    let mut block_ethernet_rule = Rule::new(&out_chain).unwrap();
 
-    // Check that the interface type is an ethernet interface. Must be done before we can check
-    // payload values in the ethernet header.
-    block_ethernet_rule.add_expr(&nft_expr!(meta iiftype));
-    block_ethernet_rule.add_expr(&nft_expr!(cmp == libc::ARPHRD_ETHER));
+    block_ethernet_rule.set_expressions(
+        ExpressionList::default()
+        // Check that the interface type is an ethernet interface. Must be done before we can check
+        // payload values in the ethernet header.
+        .with_value(Meta::new(MetaType::IifType))
+        .with_value(Cmp::new(CmpOp::Eq, (libc::ARPHRD_ETHER as u16).to_le_bytes()))
 
-    // Compare the ethernet destination address against the MAC address we want to drop
-    block_ethernet_rule.add_expr(&nft_expr!(payload ethernet daddr));
-    block_ethernet_rule.add_expr(&nft_expr!(cmp == BLOCK_THIS_MAC));
+        // Compare the ethernet destination address against the MAC address we want to drop
+        .with_value(HighLevelPayload::LinkLayer(LLHeaderField::Daddr).build())
+        .with_value(Cmp::new(CmpOp::Eq, BLOCK_THIS_MAC))
 
-    // Drop the matching packets.
-    block_ethernet_rule.add_expr(&nft_expr!(verdict drop));
+        // Drop the matching packets.
+        .with_value(Immediate::new_verdict(VerdictKind::Drop)),
+    );
 
     batch.add(&block_ethernet_rule, rustables::MsgType::Add);
 
@@ -67,67 +73,26 @@ fn main() -> Result<(), Error> {
     // So after a number of packets has passed through this rule, the first counter should have a
     // value approximately double that of the second counter. This rule has no verdict, so it never
     // does anything with the matching packets.
-    let mut random_rule = Rule::new(Rc::clone(&out_chain));
-    // This counter expression will be evaluated (and increment the counter) for all packets coming
-    // through.
-    random_rule.add_expr(&nft_expr!(counter));
+    let mut random_rule = Rule::new(&out_chain).unwrap();
 
-    // Load a pseudo-random 32 bit unsigned integer into the netfilter register.
-    random_rule.add_expr(&nft_expr!(meta random));
-    // Check if the random integer is larger than `u32::MAX/2`, thus having 50% chance of success.
-    random_rule.add_expr(&nft_expr!(cmp > (::std::u32::MAX / 2).to_be()));
+    random_rule.set_expressions(
+        ExpressionList::default()
+        // This counter expression will be evaluated (and increment the counter) for all packets coming
+        // through.
+        .with_value(Counter::default())
 
-    // Add a second counter. This will only be incremented for the packets passing the random check.
-    random_rule.add_expr(&nft_expr!(counter));
+        // Load a pseudo-random 32 bit unsigned integer into the netfilter register.
+        .with_value(Meta::new(MetaType::PRandom))
+        // Check if the random integer is larger than `u32::MAX/2`, thus having 50% chance of success.
+        .with_value(Cmp::new(CmpOp::Gt, (::std::u32::MAX / 2).to_be_bytes()))
+
+        // Add a second counter. This will only be incremented for the packets passing the random check.
+        .with_value(Counter::default()),
+    );
 
     batch.add(&random_rule, rustables::MsgType::Add);
 
     // === FINALIZE THE TRANSACTION AND SEND THE DATA TO NETFILTER ===
 
-    match batch.finalize() {
-        Some(mut finalized_batch) => {
-            send_and_process(&mut finalized_batch)?;
-            Ok(())
-        },
-        None => todo!()
-    }
-}
-
-fn send_and_process(batch: &mut FinalizedBatch) -> Result<(), Error> {
-    // Create a netlink socket to netfilter.
-    let socket = mnl::Socket::new(mnl::Bus::Netfilter)?;
-    // Send all the bytes in the batch.
-    socket.send_all(&mut *batch)?;
-
-    // Try to parse the messages coming back from netfilter. This part is still very unclear.
-    let portid = socket.portid();
-    let mut buffer = vec![0; rustables::nft_nlmsg_maxsize() as usize];
-    let very_unclear_what_this_is_for = 2;
-    while let Some(message) = socket_recv(&socket, &mut buffer[..])? {
-        match mnl::cb_run(message, very_unclear_what_this_is_for, portid)? {
-            mnl::CbResult::Stop => {
-                break;
-            }
-            mnl::CbResult::Ok => (),
-        }
-    }
-    Ok(())
-}
-
-fn socket_recv<'a>(socket: &mnl::Socket, buf: &'a mut [u8]) -> Result<Option<&'a [u8]>, Error> {
-    let ret = socket.recv(buf)?;
-    if ret > 0 {
-        Ok(Some(&buf[..ret]))
-    } else {
-        Ok(None)
-    }
-}
-
-#[derive(Debug)]
-struct Error(String);
-
-impl From<io::Error> for Error {
-    fn from(error: io::Error) -> Self {
-        Error(error.to_string())
-    }
+    batch.send().unwrap();
 }

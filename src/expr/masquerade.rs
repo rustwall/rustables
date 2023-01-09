@@ -1,24 +1,20 @@
-use super::{DeserializationError, Expression, Rule};
-use crate::sys;
-use std::os::raw::c_char;
+use rustables_macros::nfnetlink_struct;
+
+use super::Expression;
 
 /// Sets the source IP to that of the output interface.
-#[derive(Debug, PartialEq)]
+#[derive(Default, Debug, PartialEq, Eq)]
+#[nfnetlink_struct(nested = true)]
 pub struct Masquerade;
 
+impl Clone for Masquerade {
+    fn clone(&self) -> Self {
+        Masquerade {}
+    }
+}
+
 impl Expression for Masquerade {
-    fn get_raw_name() -> *const sys::libc::c_char {
-        b"masq\0" as *const _ as *const c_char
-    }
-
-    fn from_expr(_expr: *const sys::nftnl_expr) -> Result<Self, DeserializationError>
-    where
-        Self: Sized,
-    {
-        Ok(Masquerade)
-    }
-
-    fn to_expr(&self, _rule: &Rule) -> *mut sys::nftnl_expr {
-        try_alloc!(unsafe { sys::nftnl_expr_alloc(Self::get_raw_name()) })
+    fn get_name() -> &'static str {
+        "masq"
     }
 }

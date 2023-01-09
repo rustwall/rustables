@@ -37,110 +37,114 @@
 //! ```
 
 use ipnetwork::{IpNetwork, Ipv4Network};
-use rustables::{nft_expr, sys::libc, Batch, Chain, FinalizedBatch, ProtoFamily, Rule, Table};
-use std::{
-    ffi::{self, CString},
-    io,
-    net::Ipv4Addr,
-    rc::Rc
+use rustables::{
+    data_type::ip_to_vec,
+    expr::{
+        Bitwise, Cmp, CmpOp, Counter, HighLevelPayload, ICMPv6HeaderField, IPv4HeaderField,
+        IcmpCode, Immediate, Meta, MetaType, NetworkHeaderField, TransportHeaderField, VerdictKind,
+    },
+    iface_index, Batch, Chain, ChainPolicy, Hook, HookClass, MsgType, ProtocolFamily, Rule, Table,
 };
+use std::net::Ipv4Addr;
 
 const TABLE_NAME: &str = "example-table";
 const OUT_CHAIN_NAME: &str = "chain-for-outgoing-packets";
 const IN_CHAIN_NAME: &str = "chain-for-incoming-packets";
 
 fn main() -> Result<(), Error> {
+    env_logger::init();
+
     // Create a batch. This is used to store all the netlink messages we will later send.
     // Creating a new batch also automatically writes the initial batch begin message needed
     // to tell netlink this is a single transaction that might arrive over multiple netlink packets.
     let mut batch = Batch::new();
 
     // Create a netfilter table operating on both IPv4 and IPv6 (ProtoFamily::Inet)
-    let table = Rc::new(Table::new(&CString::new(TABLE_NAME).unwrap(), ProtoFamily::Inet));
+    let table = Table::new(ProtocolFamily::Inet).with_name(TABLE_NAME);
     // Add the table to the batch with the `MsgType::Add` type, thus instructing netfilter to add
-    // this table under its `ProtoFamily::Inet` ruleset.
-    batch.add(&Rc::clone(&table), rustables::MsgType::Add);
+    // this table under its `ProtocolFamily::Inet` ruleset.
+    batch.add(&table, MsgType::Add);
 
     // Create input and output chains under the table we created above.
     // Hook the chains to the input and output event hooks, with highest priority (priority zero).
-    // See the `Chain::set_hook` documentation for details.
-    let mut out_chain = Chain::new(&CString::new(OUT_CHAIN_NAME).unwrap(), Rc::clone(&table));
-    let mut in_chain = Chain::new(&CString::new(IN_CHAIN_NAME).unwrap(), Rc::clone(&table));
+    let mut out_chain = Chain::new(&table).with_name(OUT_CHAIN_NAME);
+    let mut in_chain = Chain::new(&table).with_name(IN_CHAIN_NAME);
 
-    out_chain.set_hook(rustables::Hook::Out, 0);
-    in_chain.set_hook(rustables::Hook::In, 0);
+    out_chain.set_hook(Hook::new(HookClass::Out, 0));
+    in_chain.set_hook(Hook::new(HookClass::In, 0));
 
     // Set the default policies on the chains. If no rule matches a packet processed by the
     // `out_chain` or the `in_chain` it will accept the packet.
-    out_chain.set_policy(rustables::Policy::Accept);
-    in_chain.set_policy(rustables::Policy::Accept);
-
-    let out_chain = Rc::new(out_chain);
-    let in_chain = Rc::new(in_chain);
+    out_chain.set_policy(ChainPolicy::Accept);
+    in_chain.set_policy(ChainPolicy::Accept);
 
     // Add the two chains to the batch with the `MsgType` to tell netfilter to create the chains
     // under the table.
-    batch.add(&Rc::clone(&out_chain), rustables::MsgType::Add);
-    batch.add(&Rc::clone(&in_chain), rustables::MsgType::Add);
+    batch.add(&out_chain, MsgType::Add);
+    batch.add(&in_chain, MsgType::Add);
 
     // === ADD RULE ALLOWING ALL TRAFFIC TO THE LOOPBACK DEVICE ===
 
-    // Create a new rule object under the input chain.
-    let mut allow_loopback_in_rule = Rule::new(Rc::clone(&in_chain));
     // Lookup the interface index of the loopback interface.
     let lo_iface_index = iface_index("lo")?;
 
-    // First expression to be evaluated in this rule is load the meta information "iif"
-    // (incoming interface index) into the comparison register of netfilter.
-    // When an incoming network packet is processed by this rule it will first be processed by this
-    // expression, which will load the interface index of the interface the packet came from into
-    // a special "register" in netfilter.
-    allow_loopback_in_rule.add_expr(&nft_expr!(meta iif));
-    // Next expression in the rule is to compare the value loaded into the register with our desired
-    // interface index, and succeed only if it's equal. For any packet processed where the equality
-    // does not hold the packet is said to not match this rule, and the packet moves on to be
-    // processed by the next rule in the chain instead.
-    allow_loopback_in_rule.add_expr(&nft_expr!(cmp == lo_iface_index));
+    // Create a new rule object under the input chain.
+    let allow_loopback_in_rule = Rule::new(&in_chain)?
+        // First expression to be evaluated in this rule is load the meta information "iif"
+        // (incoming interface index) into the comparison register of netfilter.
+        // When an incoming network packet is processed by this rule it will first be processed by this
+        // expression, which will load the interface index of the interface the packet came from into
+        // a special "register" in netfilter.
+        .with_expr(Meta::new(MetaType::Iif))
 
-    // Add a verdict expression to the rule. Any packet getting this far in the expression
-    // processing without failing any expression will be given the verdict added here.
-    allow_loopback_in_rule.add_expr(&nft_expr!(verdict accept));
+        // Next expression in the rule is to compare the value loaded into the register with our desired
+        // interface index, and succeed only if it's equal. For any packet processed where the equality
+        // does not hold the packet is said to not match this rule, and the packet moves on to be
+        // processed by the next rule in the chain instead.
+        .with_expr(Cmp::new(CmpOp::Eq, lo_iface_index.to_le_bytes()))
+
+        // Add a verdict expression to the rule. Any packet getting this far in the expression
+        // processing without failing any expression will be given the verdict added here.
+        .with_expr(Immediate::new_verdict(VerdictKind::Accept));
 
     // Add the rule to the batch.
     batch.add(&allow_loopback_in_rule, rustables::MsgType::Add);
 
     // === ADD A RULE ALLOWING (AND COUNTING) ALL PACKETS TO THE 10.1.0.0/24 NETWORK ===
 
-    let mut block_out_to_private_net_rule = Rule::new(Rc::clone(&out_chain));
     let private_net_ip = Ipv4Addr::new(10, 1, 0, 0);
     let private_net_prefix = 24;
     let private_net = IpNetwork::V4(Ipv4Network::new(private_net_ip, private_net_prefix)?);
 
-    // Load the `nfproto` metadata into the netfilter register. This metadata denotes which layer3
-    // protocol the packet being processed is using.
-    block_out_to_private_net_rule.add_expr(&nft_expr!(meta nfproto));
-    // Check if the currently processed packet is an IPv4 packet. This must be done before payload
-    // data assuming the packet uses IPv4 can be loaded in the next expression.
-    block_out_to_private_net_rule.add_expr(&nft_expr!(cmp == libc::NFPROTO_IPV4 as u8));
+    let block_out_to_private_net_rule = Rule::new(&out_chain)?
+        // Load the `nfproto` metadata into the netfilter register. This metadata denotes which layer3
+        // protocol the packet being processed is using.
+        .with_expr(Meta::new(MetaType::NfProto))
 
-    // Load the IPv4 destination address into the netfilter register.
-    block_out_to_private_net_rule.add_expr(&nft_expr!(payload ipv4 daddr));
-    // Mask out the part of the destination address that is not part of the network bits. The result
-    // of this bitwise masking is stored back into the same netfilter register.
-    block_out_to_private_net_rule.add_expr(&nft_expr!(bitwise mask private_net.mask(), xor 0));
-    // Compare the result of the masking with the IP of the network we are interested in.
-    block_out_to_private_net_rule.add_expr(&nft_expr!(cmp == private_net.ip()));
+        // Check if the currently processed packet is an IPv4 packet. This must be done before payload
+        // data assuming the packet uses IPv4 can be loaded in the next expression.
+        .with_expr(Cmp::new(CmpOp::Eq, [libc::NFPROTO_IPV4 as u8]))
 
-    // Add a packet counter to the rule. Shows how many packets have been evaluated against this
-    // expression. Since expressions are evaluated from first to last, putting this counter before
-    // the above IP net check would make the counter increment on all packets also *not* matching
-    // those expressions. Because the counter would then be evaluated before it fails a check.
-    // Similarly, if the counter was added after the verdict it would always remain at zero. Since
-    // when the packet hits the verdict expression any further processing of expressions stop.
-    block_out_to_private_net_rule.add_expr(&nft_expr!(counter));
+        // Load the IPv4 destination address into the netfilter register.
+        .with_expr(HighLevelPayload::Network(NetworkHeaderField::IPv4(IPv4HeaderField::Daddr)).build())
 
-    // Accept all the packets matching the rule so far.
-    block_out_to_private_net_rule.add_expr(&nft_expr!(verdict accept));
+        // Mask out the part of the destination address that is not part of the network bits. The result
+        // of this bitwise masking is stored back into the same netfilter register.
+        .with_expr(Bitwise::new(ip_to_vec(private_net.mask()), [0u8; 4])?)
+
+        // Compare the result of the masking with the IP of the network we are interested in.
+        .with_expr(Cmp::new(CmpOp::Eq, ip_to_vec(private_net.ip())))
+
+        // Add a packet counter to the rule. Shows how many packets have been evaluated against this
+        // expression. Since expressions are evaluated from first to last, putting this counter before
+        // the above IP net check would make the counter increment on all packets also *not* matching
+        // those expressions. Because the counter would then be evaluated before it fails a check.
+        // Similarly, if the counter was added after the verdict it would always remain at zero. Since
+        // when the packet hits the verdict expression any further processing of expressions stop.
+        .with_expr(Counter::default())
+
+        // Accept all the packets matching the rule so far.
+        .with_expr(Immediate::new_verdict(VerdictKind::Accept));
 
     // Add the rule to the batch. Without this nothing would be sent over netlink and netfilter,
     // and all the work on `block_out_to_private_net_rule` so far would go to waste.
@@ -148,101 +152,40 @@ fn main() -> Result<(), Error> {
 
     // === ADD A RULE ALLOWING ALL OUTGOING ICMPv6 PACKETS WITH TYPE 133 AND CODE 0 ===
 
-    let mut allow_router_solicitation = Rule::new(Rc::clone(&out_chain));
-
-    // Check that the packet is IPv6 and ICMPv6
-    allow_router_solicitation.add_expr(&nft_expr!(meta nfproto));
-    allow_router_solicitation.add_expr(&nft_expr!(cmp == libc::NFPROTO_IPV6 as u8));
-    allow_router_solicitation.add_expr(&nft_expr!(meta l4proto));
-    allow_router_solicitation.add_expr(&nft_expr!(cmp == libc::IPPROTO_ICMPV6 as u8));
-
-    allow_router_solicitation.add_expr(&rustables::expr::Payload::Transport(
-        rustables::expr::TransportHeaderField::Icmpv6(rustables::expr::Icmpv6HeaderField::Type),
-    ));
-    allow_router_solicitation.add_expr(&nft_expr!(cmp == 133u8));
-    allow_router_solicitation.add_expr(&rustables::expr::Payload::Transport(
-        rustables::expr::TransportHeaderField::Icmpv6(rustables::expr::Icmpv6HeaderField::Code),
-    ));
-    allow_router_solicitation.add_expr(&nft_expr!(cmp == 0u8));
-
-    allow_router_solicitation.add_expr(&nft_expr!(verdict accept));
+    let allow_router_solicitation = Rule::new(&out_chain)?
+        // Check that the packet is IPv6 and ICMPv6
+        .with_expr(Meta::new(MetaType::NfProto))
+        .with_expr(Cmp::new(CmpOp::Eq, [libc::NFPROTO_IPV6 as u8]))
+        .with_expr(Meta::new(MetaType::L4Proto))
+        .with_expr(Cmp::new(CmpOp::Eq, [libc::IPPROTO_ICMPV6 as u8]))
+        .with_expr(
+            HighLevelPayload::Transport(TransportHeaderField::ICMPv6(ICMPv6HeaderField::Type))
+                .build(),
+        )
+        .with_expr(Cmp::new(CmpOp::Eq, [133u8]))
+        .with_expr(
+            HighLevelPayload::Transport(TransportHeaderField::ICMPv6(ICMPv6HeaderField::Code))
+                .build(),
+        )
+        .with_expr(Cmp::new(CmpOp::Eq, [IcmpCode::NoRoute as u8]))
+        .with_expr(Immediate::new_verdict(VerdictKind::Accept));
 
     batch.add(&allow_router_solicitation, rustables::MsgType::Add);
 
     // === FINALIZE THE TRANSACTION AND SEND THE DATA TO NETFILTER ===
 
-    // Finalize the batch. This means the batch end message is written into the batch, telling
-    // netfilter the we reached the end of the transaction message. It's also converted to a type
-    // that implements `IntoIterator<Item = &'a [u8]>`, thus allowing us to get the raw netlink data
-    // out so it can be sent over a netlink socket to netfilter.
-    match batch.finalize() {
-        Some(mut finalized_batch) => {
-            // Send the entire batch and process any returned messages.
-            send_and_process(&mut finalized_batch)?;
-            Ok(())
-        },
-        None => todo!()
-    }
-}
-
-// Look up the interface index for a given interface name.
-fn iface_index(name: &str) -> Result<libc::c_uint, Error> {
-    let c_name = CString::new(name)?;
-    let index = unsafe { libc::if_nametoindex(c_name.as_ptr()) };
-    if index == 0 {
-        Err(Error::from(io::Error::last_os_error()))
-    } else {
-        Ok(index)
-    }
-}
-
-fn send_and_process(batch: &mut FinalizedBatch) -> Result<(), Error> {
-    // Create a netlink socket to netfilter.
-    let socket = mnl::Socket::new(mnl::Bus::Netfilter)?;
-    // Send all the bytes in the batch.
-    socket.send_all(&mut *batch)?;
-
-    // Try to parse the messages coming back from netfilter. This part is still very unclear.
-    let portid = socket.portid();
-    let mut buffer = vec![0; rustables::nft_nlmsg_maxsize() as usize];
-    let very_unclear_what_this_is_for = 2;
-    while let Some(message) = socket_recv(&socket, &mut buffer[..])? {
-        match mnl::cb_run(message, very_unclear_what_this_is_for, portid)? {
-            mnl::CbResult::Stop => {
-                break;
-            }
-            mnl::CbResult::Ok => (),
-        }
-    }
-    Ok(())
-}
-
-fn socket_recv<'a>(socket: &mnl::Socket, buf: &'a mut [u8]) -> Result<Option<&'a [u8]>, Error> {
-    let ret = socket.recv(buf)?;
-    if ret > 0 {
-        Ok(Some(&buf[..ret]))
-    } else {
-        Ok(None)
-    }
+    // Finalize the batch and send it. This means the batch end message is written into the batch, telling
+    // netfilter the we reached the end of the transaction message. It's also converted to a
+    // Vec<u8>, containing the raw netlink data so it can be sent over a netlink socket to netfilter.
+    // Finally, the batch is sent over to the kernel.
+    Ok(batch.send()?)
 }
 
 #[derive(Debug)]
 struct Error(String);
 
-impl From<io::Error> for Error {
-    fn from(error: io::Error) -> Self {
-        Error(error.to_string())
-    }
-}
-
-impl From<ffi::NulError> for Error {
-    fn from(error: ffi::NulError) -> Self {
-        Error(error.to_string())
-    }
-}
-
-impl From<ipnetwork::IpNetworkError> for Error {
-    fn from(error: ipnetwork::IpNetworkError) -> Self {
+impl<T: std::error::Error> From<T> for Error {
+    fn from(error: T) -> Self {
         Error(error.to_string())
     }
 }

@@ -1,273 +1,116 @@
-use crate::sys::{self, libc};
-use crate::{table::Table, MsgType, ProtoFamily};
-use std::{
-    cell::Cell,
-    ffi::{c_void, CStr, CString},
-    fmt::Debug,
-    net::{Ipv4Addr, Ipv6Addr},
-    os::raw::c_char,
-    rc::Rc,
+use rustables_macros::nfnetlink_struct;
+
+use crate::data_type::DataType;
+use crate::error::BuilderError;
+use crate::nlmsg::NfNetlinkObject;
+use crate::parser_impls::{NfNetlinkData, NfNetlinkList};
+use crate::sys::{
+    NFTA_SET_ELEM_KEY, NFTA_SET_ELEM_LIST_ELEMENTS, NFTA_SET_ELEM_LIST_SET,
+    NFTA_SET_ELEM_LIST_TABLE, NFTA_SET_FLAGS, NFTA_SET_ID, NFTA_SET_KEY_LEN, NFTA_SET_KEY_TYPE,
+    NFTA_SET_NAME, NFTA_SET_TABLE, NFTA_SET_USERDATA, NFT_MSG_DELSET, NFT_MSG_DELSETELEM,
+    NFT_MSG_NEWSET, NFT_MSG_NEWSETELEM,
 };
+use crate::table::Table;
+use crate::ProtocolFamily;
+use std::fmt::Debug;
+use std::marker::PhantomData;
 
-#[macro_export]
-macro_rules! nft_set {
-    ($name:expr, $id:expr, $table:expr, $family:expr) => {
-        $crate::set::Set::new($name, $id, $table, $family)
-    };
-    ($name:expr, $id:expr, $table:expr, $family:expr; [ ]) => {
-        nft_set!($name, $id, $table, $family)
-    };
-    ($name:expr, $id:expr, $table:expr, $family:expr; [ $($value:expr,)* ]) => {{
-        let mut set = nft_set!($name, $id, $table, $family).expect("Set allocation failed");
-        $(
-            set.add($value).expect(stringify!(Unable to add $value to set $name));
-        )*
-        set
-    }};
+#[derive(Default, Debug, Clone, PartialEq, Eq)]
+#[nfnetlink_struct(derive_deserialize = false)]
+pub struct Set {
+    pub family: ProtocolFamily,
+    #[field(NFTA_SET_TABLE)]
+    pub table: String,
+    #[field(NFTA_SET_NAME)]
+    pub name: String,
+    #[field(NFTA_SET_FLAGS)]
+    pub flags: u32,
+    #[field(NFTA_SET_KEY_TYPE)]
+    pub key_type: u32,
+    #[field(NFTA_SET_KEY_LEN)]
+    pub key_len: u32,
+    #[field(NFTA_SET_ID)]
+    pub id: u32,
+    #[field(NFTA_SET_USERDATA)]
+    pub userdata: String,
 }
 
-pub struct Set<K> {
-    pub(crate) set: *mut sys::nftnl_set,
-    pub(crate) table: Rc<Table>,
-    pub(crate) family: ProtoFamily,
-    _marker: ::std::marker::PhantomData<K>,
-}
+impl NfNetlinkObject for Set {
+    const MSG_TYPE_ADD: u32 = NFT_MSG_NEWSET;
+    const MSG_TYPE_DEL: u32 = NFT_MSG_DELSET;
 
-impl<K> Set<K> {
-    pub fn new(name: &CStr, id: u32, table: Rc<Table>, family: ProtoFamily) -> Self
-    where
-        K: SetKey,
-    {
-        unsafe {
-            let set = try_alloc!(sys::nftnl_set_alloc());
-
-            sys::nftnl_set_set_u32(set, sys::NFTNL_SET_FAMILY as u16, family as u32);
-            sys::nftnl_set_set_str(set, sys::NFTNL_SET_TABLE as u16, table.get_name().as_ptr());
-            sys::nftnl_set_set_str(set, sys::NFTNL_SET_NAME as u16, name.as_ptr());
-            sys::nftnl_set_set_u32(set, sys::NFTNL_SET_ID as u16, id);
-
-            sys::nftnl_set_set_u32(
-                set,
-                sys::NFTNL_SET_FLAGS as u16,
-                (libc::NFT_SET_ANONYMOUS | libc::NFT_SET_CONSTANT) as u32,
-            );
-            sys::nftnl_set_set_u32(set, sys::NFTNL_SET_KEY_TYPE as u16, K::TYPE);
-            sys::nftnl_set_set_u32(set, sys::NFTNL_SET_KEY_LEN as u16, K::LEN);
-
-            Set {
-                set,
-                table,
-                family,
-                _marker: ::std::marker::PhantomData,
-            }
-        }
-    }
-
-    pub unsafe fn from_raw(set: *mut sys::nftnl_set, table: Rc<Table>, family: ProtoFamily) -> Self
-    where
-        K: SetKey,
-    {
-        Set {
-            set,
-            table,
-            family,
-            _marker: ::std::marker::PhantomData,
-        }
-    }
-
-    pub fn add(&mut self, key: &K)
-    where
-        K: SetKey,
-    {
-        unsafe {
-            let elem = try_alloc!(sys::nftnl_set_elem_alloc());
-
-            let data = key.data();
-            let data_len = data.len() as u32;
-            trace!("Adding key {:?} with len {}", data, data_len);
-            sys::nftnl_set_elem_set(
-                elem,
-                sys::NFTNL_SET_ELEM_KEY as u16,
-                data.as_ref() as *const _ as *const c_void,
-                data_len,
-            );
-            sys::nftnl_set_elem_add(self.set, elem);
-        }
-    }
-
-    pub fn elems_iter(&self) -> SetElemsIter<K> {
-        SetElemsIter::new(self)
-    }
-
-    #[cfg(feature = "unsafe-raw-handles")]
-    /// Returns the raw handle.
-    pub fn as_ptr(&self) -> *const sys::nftnl_set {
-        self.set as *const sys::nftnl_set
-    }
-
-    #[cfg(feature = "unsafe-raw-handles")]
-    /// Returns a mutable version of the raw handle.
-    pub fn as_mut_ptr(&self) -> *mut sys::nftnl_set {
-        self.set
-    }
-
-    pub fn get_family(&self) -> ProtoFamily {
+    fn get_family(&self) -> ProtocolFamily {
         self.family
     }
 
-    /// Returns a textual description of the set.
-    pub fn get_str(&self) -> CString {
-        let mut descr_buf = vec![0i8; 4096];
-        unsafe {
-            sys::nftnl_set_snprintf(
-                descr_buf.as_mut_ptr() as *mut c_char,
-                (descr_buf.len() - 1) as u64,
-                self.set,
-                sys::NFTNL_OUTPUT_DEFAULT,
-                0,
-            );
-            CStr::from_ptr(descr_buf.as_ptr() as *mut c_char).to_owned()
-        }
-    }
-
-    pub fn get_name(&self) -> Option<&CStr> {
-        unsafe {
-            let ptr = sys::nftnl_set_get_str(self.set, sys::NFTNL_SET_NAME as u16);
-            if !ptr.is_null() {
-                Some(CStr::from_ptr(ptr))
-            } else {
-                None
-            }
-        }
-    }
-
-    pub fn get_id(&self) -> u32 {
-        unsafe { sys::nftnl_set_get_u32(self.set, sys::NFTNL_SET_ID as u16) }
+    fn set_family(&mut self, family: ProtocolFamily) {
+        self.family = family;
     }
 }
 
-impl<K> Debug for Set<K> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{:?}", self.get_str())
+pub struct SetBuilder<K: DataType> {
+    inner: Set,
+    list: SetElementList,
+    _phantom: PhantomData<K>,
+}
+
+impl<K: DataType> SetBuilder<K> {
+    pub fn new(name: impl Into<String>, table: &Table) -> Result<Self, BuilderError> {
+        let table_name = table.get_name().ok_or(BuilderError::MissingTableName)?;
+        let set_name = name.into();
+        let set = Set::default()
+            .with_key_type(K::TYPE)
+            .with_key_len(K::LEN)
+            .with_table(table_name)
+            .with_name(&set_name);
+
+        Ok(SetBuilder {
+            inner: set,
+            list: SetElementList {
+                table: Some(table_name.clone()),
+                set: Some(set_name),
+                elements: Some(SetElementListElements::default()),
+            },
+            _phantom: PhantomData,
+        })
     }
-}
 
-unsafe impl<K> crate::NlMsg for Set<K> {
-    unsafe fn write(&self, buf: *mut c_void, seq: u32, msg_type: MsgType) {
-        let type_ = match msg_type {
-            MsgType::Add => libc::NFT_MSG_NEWSET,
-            MsgType::Del => libc::NFT_MSG_DELSET,
-        };
-        let header = sys::nftnl_nlmsg_build_hdr(
-            buf as *mut c_char,
-            type_ as u16,
-            self.table.get_family() as u16,
-            (libc::NLM_F_APPEND | libc::NLM_F_CREATE | libc::NLM_F_ACK) as u16,
-            seq,
-        );
-        sys::nftnl_set_nlmsg_build_payload(header, self.set);
-    }
-}
-
-impl<K> Drop for Set<K> {
-    fn drop(&mut self) {
-        unsafe { sys::nftnl_set_free(self.set) };
-    }
-}
-
-pub struct SetElemsIter<'a, K> {
-    set: &'a Set<K>,
-    iter: *mut sys::nftnl_set_elems_iter,
-    ret: Rc<Cell<i32>>,
-}
-
-impl<'a, K> SetElemsIter<'a, K> {
-    fn new(set: &'a Set<K>) -> Self {
-        let iter = try_alloc!(unsafe {
-            sys::nftnl_set_elems_iter_create(set.set as *const sys::nftnl_set)
+    pub fn add(&mut self, key: &K) {
+        self.list.elements.as_mut().unwrap().add_value(SetElement {
+            key: Some(NfNetlinkData::default().with_value(key.data())),
         });
-        SetElemsIter {
-            set,
-            iter,
-            ret: Rc::new(Cell::new(1)),
-        }
+    }
+
+    pub fn finish(self) -> (Set, SetElementList) {
+        (self.inner, self.list)
     }
 }
 
-impl<'a, K> Iterator for SetElemsIter<'a, K> {
-    type Item = SetElemsMsg<'a, K>;
+#[derive(Default, Debug, Clone, PartialEq, Eq)]
+#[nfnetlink_struct(nested = true, derive_deserialize = false)]
+pub struct SetElementList {
+    #[field(NFTA_SET_ELEM_LIST_TABLE)]
+    pub table: String,
+    #[field(NFTA_SET_ELEM_LIST_SET)]
+    pub set: String,
+    #[field(NFTA_SET_ELEM_LIST_ELEMENTS)]
+    pub elements: SetElementListElements,
+}
 
-    fn next(&mut self) -> Option<Self::Item> {
-        if self.ret.get() <= 0 || unsafe { sys::nftnl_set_elems_iter_cur(self.iter).is_null() } {
-            trace!("SetElemsIter iterator ending");
-            None
-        } else {
-            trace!("SetElemsIter returning new SetElemsMsg");
-            Some(SetElemsMsg {
-                set: self.set,
-                iter: self.iter,
-                ret: self.ret.clone(),
-            })
-        }
+impl NfNetlinkObject for SetElementList {
+    const MSG_TYPE_ADD: u32 = NFT_MSG_NEWSETELEM;
+    const MSG_TYPE_DEL: u32 = NFT_MSG_DELSETELEM;
+
+    fn get_family(&self) -> ProtocolFamily {
+        ProtocolFamily::Unspec
     }
 }
 
-impl<'a, K> Drop for SetElemsIter<'a, K> {
-    fn drop(&mut self) {
-        unsafe { sys::nftnl_set_elems_iter_destroy(self.iter) };
-    }
+#[derive(Default, Debug, Clone, PartialEq, Eq)]
+#[nfnetlink_struct(nested = true)]
+pub struct SetElement {
+    #[field(NFTA_SET_ELEM_KEY)]
+    pub key: NfNetlinkData,
 }
 
-pub struct SetElemsMsg<'a, K> {
-    set: &'a Set<K>,
-    iter: *mut sys::nftnl_set_elems_iter,
-    ret: Rc<Cell<i32>>,
-}
-
-unsafe impl<'a, K> crate::NlMsg for SetElemsMsg<'a, K> {
-    unsafe fn write(&self, buf: *mut c_void, seq: u32, msg_type: MsgType) {
-        trace!("Writing SetElemsMsg to NlMsg");
-        let (type_, flags) = match msg_type {
-            MsgType::Add => (
-                libc::NFT_MSG_NEWSETELEM,
-                libc::NLM_F_CREATE | libc::NLM_F_EXCL | libc::NLM_F_ACK,
-            ),
-            MsgType::Del => (libc::NFT_MSG_DELSETELEM, libc::NLM_F_ACK),
-        };
-        let header = sys::nftnl_nlmsg_build_hdr(
-            buf as *mut c_char,
-            type_ as u16,
-            self.set.get_family() as u16,
-            flags as u16,
-            seq,
-        );
-        self.ret.set(sys::nftnl_set_elems_nlmsg_build_payload_iter(
-            header, self.iter,
-        ));
-    }
-}
-
-pub trait SetKey {
-    const TYPE: u32;
-    const LEN: u32;
-
-    fn data(&self) -> Box<[u8]>;
-}
-
-impl SetKey for Ipv4Addr {
-    const TYPE: u32 = 7;
-    const LEN: u32 = 4;
-
-    fn data(&self) -> Box<[u8]> {
-        self.octets().to_vec().into_boxed_slice()
-    }
-}
-
-impl SetKey for Ipv6Addr {
-    const TYPE: u32 = 8;
-    const LEN: u32 = 16;
-
-    fn data(&self) -> Box<[u8]> {
-        self.octets().to_vec().into_boxed_slice()
-    }
-}
+type SetElementListElements = NfNetlinkList<SetElement>;

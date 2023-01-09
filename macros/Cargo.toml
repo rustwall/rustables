@@ -1,0 +1,18 @@
+[package]
+name = "rustables-macros"
+version = "0.1.0"
+authors = ["Simon Thoby"]
+license = "GPL-3.0-or-later"
+description = "Internal macros for generation netlink structures for the rustables project"
+repository = "https://gitlab.com/rustwall/rustables"
+resolver = "2"
+edition = "2021"
+
+[lib]
+proc-macro = true
+
+[dependencies]
+syn = { version = "1.0", features = ["full"] }
+quote = "1.0"
+proc-macro2 = "1.0"
+proc-macro-error = "1"
