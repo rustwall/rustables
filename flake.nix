@@ -14,11 +14,13 @@
           channel = "1.66.0";
           sha256 = "S7epLlflwt0d1GZP44u5Xosgf6dRrmr8xxC+Ml2Pq7c=";
         };
+        rust = rustChannel.rust.override {
+          targets = [ "x86_64-unknown-linux-musl" ];
+        };
       in
       {
-        inherit rustChannel;
-        rustc = rustChannel.rust;
-        cargo = rustChannel.rust;
+        rustc = rust;
+        cargo = rust;
       }
     );
     rustDevOverlay = final: prev: {
