@@ -139,9 +139,7 @@ pub trait NfNetlinkObject:
             None,
         );
         let buf = writer.add_data_zeroed(self.get_size());
-        unsafe {
-            self.write_payload(buf.as_mut_ptr());
-        }
+        self.write_payload(buf);
         writer.finalize_writing_object();
     }
 
@@ -177,6 +175,6 @@ pub trait NfNetlinkAttribute: Debug + Sized {
         size_of::<Self>()
     }
 
-    // example body: std::ptr::copy_nonoverlapping(self as *const Self as *const u8, addr, self.get_size());
-    unsafe fn write_payload(&self, addr: *mut u8);
+    // example body: std::ptr::copy_nonoverlapping(self as *const Self as *const u8, addr.as_mut_ptr(), self.get_size());
+    fn write_payload(&self, addr: &mut [u8]);
 }

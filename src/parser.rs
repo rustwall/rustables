@@ -105,14 +105,10 @@ pub fn parse_nlmsg<'a>(buf: &'a [u8]) -> Result<(nlmsghdr, NlMsg<'a>), DecodeErr
 
 /// Write the attribute, preceded by a `libc::nlattr`
 // rewrite of `mnl_attr_put`
-pub unsafe fn write_attribute<'a>(
-    ty: NetlinkType,
-    obj: &impl NfNetlinkAttribute,
-    mut buf: *mut u8,
-) {
-    let header_len = pad_netlink_object::<libc::nlattr>();
+pub fn write_attribute<'a>(ty: NetlinkType, obj: &impl NfNetlinkAttribute, mut buf: &mut [u8]) {
+    let header_len = pad_netlink_object::<nlattr>();
     // copy the header
-    *(buf as *mut nlattr) = nlattr {
+    let header = nlattr {
         // nla_len contains the header size + the unpadded attribute length
         nla_len: (header_len + obj.get_size() as usize) as u16,
         nla_type: if obj.is_nested() {
@@ -121,7 +117,12 @@ pub unsafe fn write_attribute<'a>(
             ty
         },
     };
-    buf = buf.offset(pad_netlink_object::<nlattr>() as isize);
+
+    unsafe {
+        *(buf.as_mut_ptr() as *mut nlattr) = header;
+    }
+
+    buf = &mut buf[header_len..];
     // copy the attribute data itself
     obj.write_payload(buf);
 }

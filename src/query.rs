@@ -59,7 +59,7 @@ pub(crate) fn recv_and_process<'a, T>(
             }
 
             // we cannot know when a sequence of messages will end if the messages do not end
-            // with an NlMsg::Done marker while if a maximum sequence number wasn't specified
+            // with an NlMsg::Done marker if a maximum sequence number wasn't specified
             if max_seq.is_none() && nlmsghdr.nlmsg_flags & NLM_F_MULTI as u16 == 0 {
                 return Err(QueryError::UndecidableMessageTermination);
             }
@@ -79,13 +79,7 @@ pub(crate) fn recv_and_process<'a, T>(
         // We achieve this by relocating the buffer content at the beginning of the buffer
         if end_pos >= nft_nlmsg_maxsize() as usize {
             if buf_start < end_pos {
-                unsafe {
-                    std::ptr::copy(
-                        msg_buffer[buf_start..end_pos].as_ptr(),
-                        msg_buffer.as_mut_ptr(),
-                        end_pos - buf_start,
-                    );
-                }
+                msg_buffer.copy_within(buf_start..end_pos, 0);
             }
             end_pos = end_pos - buf_start;
             buf_start = 0;
@@ -128,9 +122,7 @@ pub fn get_list_of_objects<T: NfNetlinkAttribute>(
     );
     if let Some(filter) = filter {
         let buf = writer.add_data_zeroed(filter.get_size());
-        unsafe {
-            filter.write_payload(buf.as_mut_ptr());
-        }
+        filter.write_payload(buf);
     }
     writer.finalize_writing_object();
     Ok(buffer)

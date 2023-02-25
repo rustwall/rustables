@@ -63,7 +63,7 @@ impl NfNetlinkAttribute for ChainPolicy {
         (*self as i32).get_size()
     }
 
-    unsafe fn write_payload(&self, addr: *mut u8) {
+    fn write_payload(&self, addr: &mut [u8]) {
         (*self as i32).write_payload(addr);
     }
 }
@@ -111,7 +111,7 @@ impl NfNetlinkAttribute for ChainType {
         self.as_str().len()
     }
 
-    unsafe fn write_payload(&self, addr: *mut u8) {
+    fn write_payload(&self, addr: &mut [u8]) {
         self.as_str().to_string().write_payload(addr);
     }
 }

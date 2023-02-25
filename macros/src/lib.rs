@@ -276,7 +276,7 @@ pub fn nfnetlink_struct(attrs: TokenStream, item: TokenStream) -> TokenStream {
                     {
                         let size = crate::nlmsg::pad_netlink_object::<crate::sys::nlattr>()
                             + crate::nlmsg::pad_netlink_object_with_variable_size(val.get_size());
-                        addr = addr.offset(size as isize);
+                        addr = &mut addr[size..];
                     }
                 }
             )
@@ -296,7 +296,7 @@ pub fn nfnetlink_struct(attrs: TokenStream, item: TokenStream) -> TokenStream {
                     size
                 }
 
-                unsafe fn write_payload(&self, mut addr: *mut u8) {
+                fn write_payload(&self, mut addr: &mut [u8]) {
                     use crate::nlmsg::NfNetlinkAttribute;
 
                     #(#write_entries) *
@@ -483,7 +483,7 @@ pub fn nfnetlink_enum(attrs: TokenStream, item: TokenStream) -> TokenStream {
                 (*self as #repr_type).get_size()
             }
 
-            unsafe fn write_payload(&self, addr: *mut u8) {
+            fn write_payload(&self, addr: &mut [u8]) {
                 (*self as #repr_type).write_payload(addr);
             }
         }
