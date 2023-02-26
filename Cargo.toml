@@ -1,6 +1,6 @@
 [package]
 name = "rustables"
-version = "0.8.0"
+version = "0.8.1-alpha1"
 authors = ["lafleur@boum.org", "Simon Thoby", "Mullvad VPN"]
 license = "GPL-3.0-or-later"
 description = "Safe abstraction for libnftnl. Provides low-level userspace access to the in-kernel nf_tables subsystem"
@@ -20,7 +20,7 @@ log = "0.4"
 libc = "0.2.43"
 nix = "0.23"
 ipnetwork = { version = "0.20", default-features = false }
-rustables-macros = { path = "macros" }
+rustables-macros = { path = "macros", version = "0.1.1-alpha1" }
 
 [dev-dependencies]
 env_logger = "0.9"
