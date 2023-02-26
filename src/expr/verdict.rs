@@ -4,8 +4,7 @@ use libc::{NF_ACCEPT, NF_DROP, NF_QUEUE};
 use rustables_macros::{nfnetlink_enum, nfnetlink_struct};
 
 use crate::sys::{
-    NFTA_VERDICT_CHAIN, NFTA_VERDICT_CHAIN_ID, NFTA_VERDICT_CODE, NFT_BREAK, NFT_CONTINUE,
-    NFT_GOTO, NFT_JUMP, NFT_RETURN,
+    NFTA_VERDICT_CHAIN, NFTA_VERDICT_CODE, NFT_BREAK, NFT_CONTINUE, NFT_GOTO, NFT_JUMP, NFT_RETURN,
 };
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Hash)]
@@ -21,14 +20,14 @@ pub enum VerdictType {
     Return = NFT_RETURN,
 }
 
-#[derive(Clone, PartialEq, Eq, Default, Debug)]
 #[nfnetlink_struct(nested = true)]
+#[derive(Clone, PartialEq, Eq, Default, Debug)]
 pub struct Verdict {
     #[field(NFTA_VERDICT_CODE)]
     code: VerdictType,
     #[field(NFTA_VERDICT_CHAIN)]
     chain: String,
-    #[field(NFTA_VERDICT_CHAIN_ID)]
+    #[field(optional = true, crate::sys::NFTA_VERDICT_CHAIN_ID)]
     chain_id: u32,
 }
 

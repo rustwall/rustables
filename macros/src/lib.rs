@@ -1,15 +1,55 @@
+use std::fs::File;
+use std::io::Read;
+use std::path::PathBuf;
+
 use proc_macro::TokenStream;
 use proc_macro2::{Group, Span};
-use quote::quote;
+use quote::{quote, quote_spanned};
 
 use proc_macro_error::{abort, proc_macro_error};
 use syn::parse::Parser;
 use syn::punctuated::Punctuated;
 use syn::spanned::Spanned;
 use syn::{
-    parse, parse2, Attribute, Expr, ExprCast, Ident, ItemEnum, ItemStruct, Lit, Meta, Path, Result,
-    Token, Type, TypePath, Visibility,
+    parse, parse2, Attribute, Expr, ExprCast, Ident, Item, ItemEnum, ItemStruct, Lit, Meta, Path,
+    Result, Token, Type, TypePath, Visibility,
 };
+
+use once_cell::sync::OnceCell;
+
+struct GlobalState {
+    declared_identifiers: Vec<String>,
+}
+
+static STATE: OnceCell<GlobalState> = OnceCell::new();
+
+fn get_state() -> &'static GlobalState {
+    STATE.get_or_init(|| {
+        let sys_file = {
+            // Load the header file and extract the constants defined inside.
+            // This is what determines whether optional attributes (or enum variants)
+            // will be supported or not in the resulting binary.
+            let out_path = PathBuf::from(std::env::var("OUT_DIR").unwrap()).join("sys.rs");
+            let mut sys_file = String::new();
+            File::open(out_path)
+                .expect("Error: could not open the output header file")
+                .read_to_string(&mut sys_file)
+                .expect("Could not read the header file");
+            syn::parse_file(&sys_file).expect("Could not parse the header file")
+        };
+
+        let mut declared_identifiers = Vec::new();
+        for item in sys_file.items {
+            if let Item::Const(v) = item {
+                declared_identifiers.push(v.ident.to_string());
+            }
+        }
+
+        GlobalState {
+            declared_identifiers,
+        }
+    })
+}
 
 struct Field<'a> {
     name: &'a Ident,
@@ -24,6 +64,7 @@ struct Field<'a> {
 struct FieldArgs {
     netlink_type: Option<Path>,
     override_function_name: Option<String>,
+    optional: bool,
 }
 
 fn parse_field_args(input: proc_macro2::TokenStream) -> Result<FieldArgs> {
@@ -57,7 +98,14 @@ fn parse_field_args(input: proc_macro2::TokenStream) -> Result<FieldArgs> {
                             abort!(&namevalue.lit.span(), "Expected a string literal");
                         }
                     }
-                    _ => abort!(key.span(), "Unsupported macro parameter"),
+                    "optional" => {
+                        if let Lit::Bool(boolean) = &namevalue.lit {
+                            args.optional = boolean.value;
+                        } else {
+                            abort!(&namevalue.lit.span(), "Expected a boolean");
+                        }
+                    }
+                    _ => abort!(arg.span(), "Unsupported macro parameter"),
                 }
             }
             _ => abort!(arg.span(), "Unrecognized argument"),
@@ -115,7 +163,7 @@ fn parse_struct_args(input: TokenStream) -> Result<StructArgs> {
                         abort!(&namevalue.lit.span(), "Expected a boolean");
                     }
                 }
-                _ => abort!(key.span(), "Unsupported macro parameter"),
+                _ => abort!(arg.span(), "Unsupported macro parameter"),
             }
         } else {
             abort!(arg.span(), "Unrecognized argument");
@@ -135,6 +183,8 @@ pub fn nfnetlink_struct(attrs: TokenStream, item: TokenStream) -> TokenStream {
         Err(_) => abort!(Span::call_site(), "Could not parse the macro arguments"),
     };
 
+    let state = get_state();
+
     let mut fields = Vec::with_capacity(ast.fields.len());
     let mut identical_fields = Vec::new();
 
@@ -149,6 +199,21 @@ pub fn nfnetlink_struct(attrs: TokenStream, item: TokenStream) -> TokenStream {
                         }
                     };
                     if let Some(netlink_type) = field_args.netlink_type.clone() {
+                        // optional fields are not generated when the kernel version you have on
+                        // the system does not support that field
+                        if field_args.optional {
+                            let netlink_type_ident = netlink_type
+                                .segments
+                                .last()
+                                .expect("empty path?")
+                                .ident
+                                .to_string();
+                            if !state.declared_identifiers.contains(&netlink_type_ident) {
+                                // reject the optional identifier
+                                continue 'out;
+                            }
+                        }
+
                         fields.push(Field {
                             name: field.ident.as_ref().expect("Should be a names struct"),
                             ty: &field.ty,
@@ -312,7 +377,7 @@ pub fn nfnetlink_struct(attrs: TokenStream, item: TokenStream) -> TokenStream {
         let ty = field.ty;
         let attrs = &field.attrs;
         let vis = &field.vis;
-        quote!( #(#attrs) * #vis #name: Option<#ty>, )
+        quote_spanned!(name.span() => #(#attrs) * #vis #name: Option<#ty>, )
     });
     let nfnetlinkdeserialize_impl = if args.derive_deserialize {
         quote!(
@@ -382,7 +447,7 @@ fn parse_enum_args(input: TokenStream) -> Result<EnumArgs> {
                             abort!(&namevalue.lit.span(), "Expected a boolean");
                         }
                     }
-                    _ => abort!(key.span(), "Unsupported macro parameter"),
+                    _ => abort!(arg.span(), "Unsupported macro parameter"),
                 }
             }
             _ => abort!(arg.span(), "Unrecognized argument"),
