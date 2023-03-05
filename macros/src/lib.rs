@@ -1,3 +1,5 @@
+#![allow(rustdoc::broken_intra_doc_links)]
+
 use std::fs::File;
 use std::io::Read;
 use std::path::PathBuf;
@@ -172,6 +174,66 @@ fn parse_struct_args(input: TokenStream) -> Result<StructArgs> {
     Ok(args)
 }
 
+/// `nfnetlink_struct` is a macro wrapping structures that describe nftables objects.
+/// It allows serializing and deserializing these objects to the corresponding nfnetlink
+/// attributes.
+///
+/// It automatically generates getter and setter functions for each netlink properties.
+///
+/// # Parameters
+/// The macro have multiple parameters:
+/// - `nested` (defaults to `false`): the structure is nested (in the netlink sense)
+///   inside its parent structure. This is the case of most structures outside
+///   of the main nftables objects (batches, sets, rules, chains and tables), which are
+///   the outermost structures, and as such cannot be nested.
+/// - `derive_decoder` (defaults to `true`): derive a [`rustables::nlmsg::AttributeDecoder`]
+///   implementation for the structure
+/// - `derive_deserialize` (defaults to `true`): derive a [`rustables::nlmsg::NfNetlinkDeserializable`]
+///   implementation for the structure
+///
+/// # Example use
+/// ```
+/// #[nfnetlink_struct(derive_deserialize = false)]
+/// #[derive(PartialEq, Eq, Default, Debug)]
+/// pub struct Chain {
+///     family: ProtocolFamily,
+///     #[field(NFTA_CHAIN_TABLE)]
+///     table: String,
+///     #[field(NFTA_CHAIN_TYPE, name_in_functions = "type")]
+///     chain_type: ChainType,
+///     #[field(optional = true, crate::sys::NFTA_CHAIN_USERDATA)]
+///     userdata: Vec<u8>,
+///     ...
+/// }
+/// ```
+///
+/// # Type of fields
+/// This contrived example show the two possible type of fields:
+/// - A field that is not converted to a netlink attribute (`family`) because it is not
+///   annotated in `#[field]` attribute.
+///   When deserialized, this field will take the value it is given in the Default implementation
+///   of the struct.
+/// - A field that is annotated with the `#[field]` attribute.
+///   That attribute takes parameters (there are none here), and the netlink attribute type.
+///   When annotated with that attribute, the macro will generate `get_<name>`, `set_<name>` and
+///   `with_<name>` methods to manipulate the attribute (e.g. `get_table`, `set_table` and
+///   `with_table`).
+///   It will also replace the field type (here `String`) with an Option (`Option<String>`)
+///   so the struct may represent objects where that attribute is not set.
+///
+/// # `#[field]` parameters
+/// The `#[field]` attribute can be parametrized through two options:
+/// - `optional` (defaults to `false`): if the netlink attribute type (here `NFTA_CHAIN_USERDATA`)
+///   does not exist, do not generate methods and ignore this attribute if encountered
+///   while deserializing a nftables object.
+///   This is useful for attributes added recently to the kernel, which may not be supported on
+///   older kernels.
+///   Support for an attribute is detected according to the existence of that attribute in the kernel
+///   headers.
+/// - `name_in_functions` (not defined by default): overwrite the `<name`> in the name of the methods
+///   `get_<name>`, `set_<name>` and `with_<name>`.
+///   Here, this means that even though the field is called `chain_type`, users can query it with
+///   the method `get_type` instead of `get_chain_type`.
 #[proc_macro_error]
 #[proc_macro_attribute]
 pub fn nfnetlink_struct(attrs: TokenStream, item: TokenStream) -> TokenStream {
