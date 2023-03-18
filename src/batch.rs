@@ -33,6 +33,7 @@ impl Batch {
     pub fn new() -> Self {
         // TODO: use a pinned Box ?
         let mut buf = Box::new(Vec::with_capacity(default_batch_page_size() as usize));
+        // Safe because we hold onto the buffer for as long as `writer` exists
         let mut writer = NfNetlinkWriter::new(unsafe {
             std::mem::transmute(Box::as_mut(&mut buf) as *mut Vec<u8>)
         });

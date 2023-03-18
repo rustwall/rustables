@@ -111,9 +111,6 @@ pub enum DecodeError {
 
     #[error("Invalid value for a protocol family")]
     UnknownProtocolFamily(i32),
-
-    #[error("A custom error occured")]
-    Custom(Box<dyn std::error::Error + 'static>),
 }
 
 #[derive(thiserror::Error, Debug)]
@@ -156,9 +153,6 @@ pub enum QueryError {
 
     #[error("Error received from the kernel")]
     NetlinkError(nlmsgerr),
-
-    #[error("Custom error when customizing the query")]
-    InitError(#[from] Box<dyn std::error::Error + Send + 'static>),
 
     #[error("Couldn't allocate a netlink object, out of memory ?")]
     NetlinkAllocationFailed,

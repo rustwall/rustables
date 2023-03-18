@@ -5,8 +5,7 @@ use crate::error::{DecodeError, QueryError};
 use crate::nlmsg::{NfNetlinkAttribute, NfNetlinkDeserializable, NfNetlinkObject};
 use crate::sys::{
     NFTA_CHAIN_FLAGS, NFTA_CHAIN_HOOK, NFTA_CHAIN_NAME, NFTA_CHAIN_POLICY, NFTA_CHAIN_TABLE,
-    NFTA_CHAIN_TYPE, NFTA_CHAIN_USERDATA, NFTA_HOOK_HOOKNUM, NFTA_HOOK_PRIORITY, NFT_MSG_DELCHAIN,
-    NFT_MSG_NEWCHAIN,
+    NFTA_CHAIN_TYPE, NFTA_HOOK_HOOKNUM, NFTA_HOOK_PRIORITY, NFT_MSG_DELCHAIN, NFT_MSG_NEWCHAIN,
 };
 use crate::{Batch, ProtocolFamily, Table};
 use std::fmt::Debug;
@@ -63,7 +62,7 @@ impl NfNetlinkAttribute for ChainPolicy {
         (*self as i32).get_size()
     }
 
-    unsafe fn write_payload(&self, addr: *mut u8) {
+    fn write_payload(&self, addr: &mut [u8]) {
         (*self as i32).write_payload(addr);
     }
 }
@@ -111,7 +110,7 @@ impl NfNetlinkAttribute for ChainType {
         self.as_str().len()
     }
 
-    unsafe fn write_payload(&self, addr: *mut u8) {
+    fn write_payload(&self, addr: &mut [u8]) {
         self.as_str().to_string().write_payload(addr);
     }
 }
@@ -135,8 +134,8 @@ impl NfNetlinkDeserializable for ChainType {
 ///
 /// [`Table`]: struct.Table.html
 /// [`Rule`]: struct.Rule.html
-#[derive(PartialEq, Eq, Default, Debug)]
 #[nfnetlink_struct(derive_deserialize = false)]
+#[derive(PartialEq, Eq, Default, Debug)]
 pub struct Chain {
     family: ProtocolFamily,
     #[field(NFTA_CHAIN_TABLE)]
@@ -151,7 +150,7 @@ pub struct Chain {
     chain_type: ChainType,
     #[field(NFTA_CHAIN_FLAGS)]
     flags: u32,
-    #[field(NFTA_CHAIN_USERDATA)]
+    #[field(optional = true, crate::sys::NFTA_CHAIN_USERDATA)]
     userdata: Vec<u8>,
 }
 

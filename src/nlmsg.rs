@@ -39,6 +39,8 @@ pub fn get_operation_from_nlmsghdr_type(x: u16) -> u8 {
 
 pub struct NfNetlinkWriter<'a> {
     buf: &'a mut Vec<u8>,
+    // hold the position of the nlmsghdr and nfgenmsg structures for the object currently being
+    // written
     headers: Option<(usize, usize)>,
 }
 
@@ -52,6 +54,7 @@ impl<'a> NfNetlinkWriter<'a> {
         let start = self.buf.len();
         self.buf.resize(start + padded_size, 0);
 
+        // if we are *inside* an object begin written, extend the netlink object size
         if let Some((msghdr_idx, _nfgenmsg_idx)) = self.headers {
             let mut hdr: &mut nlmsghdr = unsafe {
                 std::mem::transmute(self.buf[msghdr_idx..].as_mut_ptr() as *mut nlmsghdr)
@@ -78,6 +81,7 @@ impl<'a> NfNetlinkWriter<'a> {
         let nlmsghdr_len = pad_netlink_object::<nlmsghdr>();
         let nfgenmsg_len = pad_netlink_object::<nfgenmsg>();
 
+        // serialize the nlmsghdr
         let nlmsghdr_buf = self.add_data_zeroed(nlmsghdr_len);
         let mut hdr: &mut nlmsghdr =
             unsafe { std::mem::transmute(nlmsghdr_buf.as_mut_ptr() as *mut nlmsghdr) };
@@ -90,6 +94,7 @@ impl<'a> NfNetlinkWriter<'a> {
         hdr.nlmsg_flags = libc::NLM_F_REQUEST as u16 | flags;
         hdr.nlmsg_seq = seq;
 
+        // serialize the nfgenmsg
         let nfgenmsg_buf = self.add_data_zeroed(nfgenmsg_len);
         let mut nfgenmsg: &mut nfgenmsg =
             unsafe { std::mem::transmute(nfgenmsg_buf.as_mut_ptr() as *mut nfgenmsg) };
@@ -108,8 +113,10 @@ impl<'a> NfNetlinkWriter<'a> {
     }
 }
 
+pub type NetlinkType = u16;
+
 pub trait AttributeDecoder {
-    fn decode_attribute(&mut self, attr_type: u16, buf: &[u8]) -> Result<(), DecodeError>;
+    fn decode_attribute(&mut self, attr_type: NetlinkType, buf: &[u8]) -> Result<(), DecodeError>;
 }
 
 pub trait NfNetlinkDeserializable: Sized {
@@ -139,9 +146,7 @@ pub trait NfNetlinkObject:
             None,
         );
         let buf = writer.add_data_zeroed(self.get_size());
-        unsafe {
-            self.write_payload(buf.as_mut_ptr());
-        }
+        self.write_payload(buf);
         writer.finalize_writing_object();
     }
 
@@ -165,8 +170,6 @@ pub trait NfNetlinkObject:
     }
 }
 
-pub type NetlinkType = u16;
-
 pub trait NfNetlinkAttribute: Debug + Sized {
     // is it a nested argument that must be marked with a NLA_F_NESTED flag?
     fn is_nested(&self) -> bool {
@@ -177,6 +180,6 @@ pub trait NfNetlinkAttribute: Debug + Sized {
         size_of::<Self>()
     }
 
-    // example body: std::ptr::copy_nonoverlapping(self as *const Self as *const u8, addr, self.get_size());
-    unsafe fn write_payload(&self, addr: *mut u8);
+    // example body: std::ptr::copy_nonoverlapping(self as *const Self as *const u8, addr.as_mut_ptr(), self.get_size());
+    fn write_payload(&self, addr: &mut [u8]);
 }

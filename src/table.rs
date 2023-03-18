@@ -5,7 +5,7 @@ use rustables_macros::nfnetlink_struct;
 use crate::error::QueryError;
 use crate::nlmsg::NfNetlinkObject;
 use crate::sys::{
-    NFTA_TABLE_FLAGS, NFTA_TABLE_NAME, NFTA_TABLE_USERDATA, NFT_MSG_DELTABLE, NFT_MSG_GETTABLE,
+    NFTA_TABLE_FLAGS, NFTA_TABLE_NAME, NFT_MSG_DELTABLE, NFT_MSG_GETTABLE,
     NFT_MSG_NEWTABLE,
 };
 use crate::{Batch, ProtocolFamily};
@@ -14,15 +14,15 @@ use crate::{Batch, ProtocolFamily};
 /// family and contains [`Chain`]s that in turn hold the rules.
 ///
 /// [`Chain`]: struct.Chain.html
-#[derive(Default, PartialEq, Eq, Debug)]
 #[nfnetlink_struct(derive_deserialize = false)]
+#[derive(Default, PartialEq, Eq, Debug)]
 pub struct Table {
     family: ProtocolFamily,
     #[field(NFTA_TABLE_NAME)]
     name: String,
     #[field(NFTA_TABLE_FLAGS)]
     flags: u32,
-    #[field(NFTA_TABLE_USERDATA)]
+    #[field(optional = true, crate::sys::NFTA_TABLE_USERDATA)]
     userdata: Vec<u8>,
 }
 

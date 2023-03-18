@@ -1,4 +1,7 @@
-use std::{fmt::Debug, mem::transmute};
+use std::{
+    fmt::Debug,
+    mem::{size_of, transmute},
+};
 
 use rustables_macros::nfnetlink_struct;
 
@@ -6,17 +9,17 @@ use crate::{
     error::DecodeError,
     expr::Verdict,
     nlmsg::{
-        pad_netlink_object, pad_netlink_object_with_variable_size, NfNetlinkAttribute,
-        NfNetlinkDeserializable, NfNetlinkObject,
+        pad_netlink_object, pad_netlink_object_with_variable_size, AttributeDecoder,
+        NfNetlinkAttribute, NfNetlinkDeserializable, NfNetlinkObject,
     },
-    parser::{write_attribute, Parsable},
+    parser::{parse_object, write_attribute},
     sys::{nlattr, NFTA_DATA_VALUE, NFTA_DATA_VERDICT, NFTA_LIST_ELEM, NLA_TYPE_MASK},
     ProtocolFamily,
 };
 
 impl NfNetlinkAttribute for u8 {
-    unsafe fn write_payload(&self, addr: *mut u8) {
-        *addr = *self;
+    fn write_payload(&self, addr: &mut [u8]) {
+        addr[0] = *self;
     }
 }
 
@@ -27,8 +30,8 @@ impl NfNetlinkDeserializable for u8 {
 }
 
 impl NfNetlinkAttribute for u16 {
-    unsafe fn write_payload(&self, addr: *mut u8) {
-        *(addr as *mut Self) = self.to_be();
+    fn write_payload(&self, addr: &mut [u8]) {
+        addr[0..size_of::<Self>()].copy_from_slice(&self.to_be_bytes());
     }
 }
 
@@ -39,8 +42,8 @@ impl NfNetlinkDeserializable for u16 {
 }
 
 impl NfNetlinkAttribute for i32 {
-    unsafe fn write_payload(&self, addr: *mut u8) {
-        *(addr as *mut Self) = self.to_be();
+    fn write_payload(&self, addr: &mut [u8]) {
+        addr[0..size_of::<Self>()].copy_from_slice(&self.to_be_bytes());
     }
 }
 
@@ -54,8 +57,8 @@ impl NfNetlinkDeserializable for i32 {
 }
 
 impl NfNetlinkAttribute for u32 {
-    unsafe fn write_payload(&self, addr: *mut u8) {
-        *(addr as *mut Self) = self.to_be();
+    fn write_payload(&self, addr: &mut [u8]) {
+        addr[0..size_of::<Self>()].copy_from_slice(&self.to_be_bytes());
     }
 }
 
@@ -69,8 +72,8 @@ impl NfNetlinkDeserializable for u32 {
 }
 
 impl NfNetlinkAttribute for u64 {
-    unsafe fn write_payload(&self, addr: *mut u8) {
-        *(addr as *mut Self) = self.to_be();
+    fn write_payload(&self, addr: &mut [u8]) {
+        addr[0..size_of::<Self>()].copy_from_slice(&self.to_be_bytes());
     }
 }
 
@@ -90,8 +93,8 @@ impl NfNetlinkAttribute for String {
         self.len()
     }
 
-    unsafe fn write_payload(&self, addr: *mut u8) {
-        std::ptr::copy_nonoverlapping(self.as_bytes().as_ptr(), addr, self.len());
+    fn write_payload(&self, addr: &mut [u8]) {
+        addr[0..self.len()].copy_from_slice(&self.as_bytes());
     }
 }
 
@@ -110,8 +113,8 @@ impl NfNetlinkAttribute for Vec<u8> {
         self.len()
     }
 
-    unsafe fn write_payload(&self, addr: *mut u8) {
-        std::ptr::copy_nonoverlapping(self.as_ptr(), addr, self.len());
+    fn write_payload(&self, addr: &mut [u8]) {
+        addr[0..self.len()].copy_from_slice(&self.as_slice());
     }
 }
 
@@ -170,10 +173,11 @@ where
         })
     }
 
-    unsafe fn write_payload(&self, mut addr: *mut u8) {
+    fn write_payload(&self, mut addr: &mut [u8]) {
         for item in &self.objs {
             write_attribute(NFTA_LIST_ELEM, item, addr);
-            addr = addr.offset((pad_netlink_object::<nlattr>() + item.get_size()) as isize);
+            let offset = pad_netlink_object::<nlattr>() + item.get_size();
+            addr = &mut addr[offset..];
         }
     }
 }
@@ -228,10 +232,10 @@ where
 
 impl<T> NfNetlinkDeserializable for T
 where
-    T: NfNetlinkObject + Parsable,
+    T: NfNetlinkObject + AttributeDecoder + Default + Sized,
 {
-    fn deserialize(buf: &[u8]) -> Result<(Self, &[u8]), DecodeError> {
-        let (mut obj, nfgenmsg, remaining_data) = Self::parse_object(
+    fn deserialize(buf: &[u8]) -> Result<(T, &[u8]), DecodeError> {
+        let (mut obj, nfgenmsg, remaining_data) = parse_object::<T>(
             buf,
             <T as NfNetlinkObject>::MSG_TYPE_ADD,
             <T as NfNetlinkObject>::MSG_TYPE_DEL,

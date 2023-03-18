@@ -101,7 +101,7 @@ macro_rules! create_expr_variant {
                 }
             }
 
-            unsafe fn write_payload(&self, addr: *mut u8) {
+            fn write_payload(&self, addr: &mut [u8]) {
                 match self {
                     $(
                         $enum::$name(val) => val.write_payload(addr),
@@ -194,7 +194,7 @@ impl NfNetlinkAttribute for ExpressionRaw {
         self.0.get_size()
     }
 
-    unsafe fn write_payload(&self, addr: *mut u8) {
+    fn write_payload(&self, addr: &mut [u8]) {
         self.0.write_payload(addr);
     }
 }

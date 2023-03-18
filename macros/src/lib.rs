@@ -1,15 +1,57 @@
+#![allow(rustdoc::broken_intra_doc_links)]
+
+use std::fs::File;
+use std::io::Read;
+use std::path::PathBuf;
+
 use proc_macro::TokenStream;
 use proc_macro2::{Group, Span};
-use quote::quote;
+use quote::{quote, quote_spanned};
 
 use proc_macro_error::{abort, proc_macro_error};
 use syn::parse::Parser;
 use syn::punctuated::Punctuated;
 use syn::spanned::Spanned;
 use syn::{
-    parse, parse2, Attribute, Expr, ExprCast, Ident, ItemEnum, ItemStruct, Lit, Meta, Path, Result,
-    Token, Type, TypePath, Visibility,
+    parse, parse2, Attribute, Expr, ExprCast, Ident, Item, ItemEnum, ItemStruct, Lit, Meta, Path,
+    Result, Token, Type, TypePath, Visibility,
 };
+
+use once_cell::sync::OnceCell;
+
+struct GlobalState {
+    declared_identifiers: Vec<String>,
+}
+
+static STATE: OnceCell<GlobalState> = OnceCell::new();
+
+fn get_state() -> &'static GlobalState {
+    STATE.get_or_init(|| {
+        let sys_file = {
+            // Load the header file and extract the constants defined inside.
+            // This is what determines whether optional attributes (or enum variants)
+            // will be supported or not in the resulting binary.
+            let out_path = PathBuf::from(std::env::var("OUT_DIR").unwrap()).join("sys.rs");
+            let mut sys_file = String::new();
+            File::open(out_path)
+                .expect("Error: could not open the output header file")
+                .read_to_string(&mut sys_file)
+                .expect("Could not read the header file");
+            syn::parse_file(&sys_file).expect("Could not parse the header file")
+        };
+
+        let mut declared_identifiers = Vec::new();
+        for item in sys_file.items {
+            if let Item::Const(v) = item {
+                declared_identifiers.push(v.ident.to_string());
+            }
+        }
+
+        GlobalState {
+            declared_identifiers,
+        }
+    })
+}
 
 struct Field<'a> {
     name: &'a Ident,
@@ -24,6 +66,7 @@ struct Field<'a> {
 struct FieldArgs {
     netlink_type: Option<Path>,
     override_function_name: Option<String>,
+    optional: bool,
 }
 
 fn parse_field_args(input: proc_macro2::TokenStream) -> Result<FieldArgs> {
@@ -57,7 +100,14 @@ fn parse_field_args(input: proc_macro2::TokenStream) -> Result<FieldArgs> {
                             abort!(&namevalue.lit.span(), "Expected a string literal");
                         }
                     }
-                    _ => abort!(key.span(), "Unsupported macro parameter"),
+                    "optional" => {
+                        if let Lit::Bool(boolean) = &namevalue.lit {
+                            args.optional = boolean.value;
+                        } else {
+                            abort!(&namevalue.lit.span(), "Expected a boolean");
+                        }
+                    }
+                    _ => abort!(arg.span(), "Unsupported macro parameter"),
                 }
             }
             _ => abort!(arg.span(), "Unrecognized argument"),
@@ -115,7 +165,7 @@ fn parse_struct_args(input: TokenStream) -> Result<StructArgs> {
                         abort!(&namevalue.lit.span(), "Expected a boolean");
                     }
                 }
-                _ => abort!(key.span(), "Unsupported macro parameter"),
+                _ => abort!(arg.span(), "Unsupported macro parameter"),
             }
         } else {
             abort!(arg.span(), "Unrecognized argument");
@@ -124,6 +174,66 @@ fn parse_struct_args(input: TokenStream) -> Result<StructArgs> {
     Ok(args)
 }
 
+/// `nfnetlink_struct` is a macro wrapping structures that describe nftables objects.
+/// It allows serializing and deserializing these objects to the corresponding nfnetlink
+/// attributes.
+///
+/// It automatically generates getter and setter functions for each netlink properties.
+///
+/// # Parameters
+/// The macro have multiple parameters:
+/// - `nested` (defaults to `false`): the structure is nested (in the netlink sense)
+///   inside its parent structure. This is the case of most structures outside
+///   of the main nftables objects (batches, sets, rules, chains and tables), which are
+///   the outermost structures, and as such cannot be nested.
+/// - `derive_decoder` (defaults to `true`): derive a [`rustables::nlmsg::AttributeDecoder`]
+///   implementation for the structure
+/// - `derive_deserialize` (defaults to `true`): derive a [`rustables::nlmsg::NfNetlinkDeserializable`]
+///   implementation for the structure
+///
+/// # Example use
+/// ```
+/// #[nfnetlink_struct(derive_deserialize = false)]
+/// #[derive(PartialEq, Eq, Default, Debug)]
+/// pub struct Chain {
+///     family: ProtocolFamily,
+///     #[field(NFTA_CHAIN_TABLE)]
+///     table: String,
+///     #[field(NFTA_CHAIN_TYPE, name_in_functions = "type")]
+///     chain_type: ChainType,
+///     #[field(optional = true, crate::sys::NFTA_CHAIN_USERDATA)]
+///     userdata: Vec<u8>,
+///     ...
+/// }
+/// ```
+///
+/// # Type of fields
+/// This contrived example show the two possible type of fields:
+/// - A field that is not converted to a netlink attribute (`family`) because it is not
+///   annotated in `#[field]` attribute.
+///   When deserialized, this field will take the value it is given in the Default implementation
+///   of the struct.
+/// - A field that is annotated with the `#[field]` attribute.
+///   That attribute takes parameters (there are none here), and the netlink attribute type.
+///   When annotated with that attribute, the macro will generate `get_<name>`, `set_<name>` and
+///   `with_<name>` methods to manipulate the attribute (e.g. `get_table`, `set_table` and
+///   `with_table`).
+///   It will also replace the field type (here `String`) with an Option (`Option<String>`)
+///   so the struct may represent objects where that attribute is not set.
+///
+/// # `#[field]` parameters
+/// The `#[field]` attribute can be parametrized through two options:
+/// - `optional` (defaults to `false`): if the netlink attribute type (here `NFTA_CHAIN_USERDATA`)
+///   does not exist, do not generate methods and ignore this attribute if encountered
+///   while deserializing a nftables object.
+///   This is useful for attributes added recently to the kernel, which may not be supported on
+///   older kernels.
+///   Support for an attribute is detected according to the existence of that attribute in the kernel
+///   headers.
+/// - `name_in_functions` (not defined by default): overwrite the `<name`> in the name of the methods
+///   `get_<name>`, `set_<name>` and `with_<name>`.
+///   Here, this means that even though the field is called `chain_type`, users can query it with
+///   the method `get_type` instead of `get_chain_type`.
 #[proc_macro_error]
 #[proc_macro_attribute]
 pub fn nfnetlink_struct(attrs: TokenStream, item: TokenStream) -> TokenStream {
@@ -134,6 +244,8 @@ pub fn nfnetlink_struct(attrs: TokenStream, item: TokenStream) -> TokenStream {
         Ok(x) => x,
         Err(_) => abort!(Span::call_site(), "Could not parse the macro arguments"),
     };
+
+    let state = get_state();
 
     let mut fields = Vec::with_capacity(ast.fields.len());
     let mut identical_fields = Vec::new();
@@ -149,6 +261,21 @@ pub fn nfnetlink_struct(attrs: TokenStream, item: TokenStream) -> TokenStream {
                         }
                     };
                     if let Some(netlink_type) = field_args.netlink_type.clone() {
+                        // optional fields are not generated when the kernel version you have on
+                        // the system does not support that field
+                        if field_args.optional {
+                            let netlink_type_ident = netlink_type
+                                .segments
+                                .last()
+                                .expect("empty path?")
+                                .ident
+                                .to_string();
+                            if !state.declared_identifiers.contains(&netlink_type_ident) {
+                                // reject the optional identifier
+                                continue 'out;
+                            }
+                        }
+
                         fields.push(Field {
                             name: field.ident.as_ref().expect("Should be a names struct"),
                             ty: &field.ty,
@@ -276,7 +403,7 @@ pub fn nfnetlink_struct(attrs: TokenStream, item: TokenStream) -> TokenStream {
                     {
                         let size = crate::nlmsg::pad_netlink_object::<crate::sys::nlattr>()
                             + crate::nlmsg::pad_netlink_object_with_variable_size(val.get_size());
-                        addr = addr.offset(size as isize);
+                        addr = &mut addr[size..];
                     }
                 }
             )
@@ -296,7 +423,7 @@ pub fn nfnetlink_struct(attrs: TokenStream, item: TokenStream) -> TokenStream {
                     size
                 }
 
-                unsafe fn write_payload(&self, mut addr: *mut u8) {
+                fn write_payload(&self, mut addr: &mut [u8]) {
                     use crate::nlmsg::NfNetlinkAttribute;
 
                     #(#write_entries) *
@@ -312,7 +439,7 @@ pub fn nfnetlink_struct(attrs: TokenStream, item: TokenStream) -> TokenStream {
         let ty = field.ty;
         let attrs = &field.attrs;
         let vis = &field.vis;
-        quote!( #(#attrs) * #vis #name: Option<#ty>, )
+        quote_spanned!(name.span() => #(#attrs) * #vis #name: Option<#ty>, )
     });
     let nfnetlinkdeserialize_impl = if args.derive_deserialize {
         quote!(
@@ -382,7 +509,7 @@ fn parse_enum_args(input: TokenStream) -> Result<EnumArgs> {
                             abort!(&namevalue.lit.span(), "Expected a boolean");
                         }
                     }
-                    _ => abort!(key.span(), "Unsupported macro parameter"),
+                    _ => abort!(arg.span(), "Unsupported macro parameter"),
                 }
             }
             _ => abort!(arg.span(), "Unrecognized argument"),
@@ -483,7 +610,7 @@ pub fn nfnetlink_enum(attrs: TokenStream, item: TokenStream) -> TokenStream {
                 (*self as #repr_type).get_size()
             }
 
-            unsafe fn write_payload(&self, addr: *mut u8) {
+            fn write_payload(&self, addr: &mut [u8]) {
                 (*self as #repr_type).write_payload(addr);
             }
         }
