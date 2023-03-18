@@ -1,6 +1,6 @@
 [package]
 name = "rustables"
-version = "0.8.1-alpha1"
+version = "0.8.1"
 authors = ["lafleur@boum.org", "Simon Thoby", "Mullvad VPN"]
 license = "GPL-3.0-or-later"
 description = "Safe abstraction for libnftnl. Provides low-level userspace access to the in-kernel nf_tables subsystem"

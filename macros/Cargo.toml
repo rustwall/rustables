@@ -1,6 +1,6 @@
 [package]
 name = "rustables-macros"
-version = "0.1.1-alpha1"
+version = "0.1.1"
 authors = ["lafleur@boum.org", "Simon Thoby"]
 license = "GPL-3.0-or-later"
 description = "Internal macros for generation netlink structures for the rustables project"
