@@ -9,10 +9,10 @@ use crate::{
     error::DecodeError,
     expr::Verdict,
     nlmsg::{
-        pad_netlink_object, pad_netlink_object_with_variable_size, NfNetlinkAttribute,
-        NfNetlinkDeserializable, NfNetlinkObject,
+        pad_netlink_object, pad_netlink_object_with_variable_size, AttributeDecoder,
+        NfNetlinkAttribute, NfNetlinkDeserializable, NfNetlinkObject,
     },
-    parser::{write_attribute, Parsable},
+    parser::{parse_object, write_attribute},
     sys::{nlattr, NFTA_DATA_VALUE, NFTA_DATA_VERDICT, NFTA_LIST_ELEM, NLA_TYPE_MASK},
     ProtocolFamily,
 };
@@ -232,10 +232,10 @@ where
 
 impl<T> NfNetlinkDeserializable for T
 where
-    T: NfNetlinkObject + Parsable,
+    T: NfNetlinkObject + AttributeDecoder + Default + Sized,
 {
-    fn deserialize(buf: &[u8]) -> Result<(Self, &[u8]), DecodeError> {
-        let (mut obj, nfgenmsg, remaining_data) = Self::parse_object(
+    fn deserialize(buf: &[u8]) -> Result<(T, &[u8]), DecodeError> {
+        let (mut obj, nfgenmsg, remaining_data) = parse_object::<T>(
             buf,
             <T as NfNetlinkObject>::MSG_TYPE_ADD,
             <T as NfNetlinkObject>::MSG_TYPE_DEL,

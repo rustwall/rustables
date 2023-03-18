@@ -170,48 +170,30 @@ pub trait InnerFormat {
     ) -> Result<DebugStruct<'a, 'b>, std::fmt::Error>;
 }
 
-pub trait Parsable
-where
-    Self: Sized,
-{
-    fn parse_object(
-        buf: &[u8],
-        add_obj: u32,
-        del_obj: u32,
-    ) -> Result<(Self, nfgenmsg, &[u8]), DecodeError>;
-}
+pub(crate) fn parse_object<T: AttributeDecoder + Default + Sized>(
+    buf: &[u8],
+    add_obj: u32,
+    del_obj: u32,
+) -> Result<(T, nfgenmsg, &[u8]), DecodeError> {
+    debug!("parse_object() started");
+    let (hdr, msg) = parse_nlmsg(buf)?;
 
-impl<T> Parsable for T
-where
-    T: AttributeDecoder + Default + Sized,
-{
-    fn parse_object(
-        buf: &[u8],
-        add_obj: u32,
-        del_obj: u32,
-    ) -> Result<(Self, nfgenmsg, &[u8]), DecodeError> {
-        debug!("parse_object() started");
-        let (hdr, msg) = parse_nlmsg(buf)?;
+    let op = get_operation_from_nlmsghdr_type(hdr.nlmsg_type) as u32;
 
-        let op = get_operation_from_nlmsghdr_type(hdr.nlmsg_type) as u32;
-
-        if op != add_obj && op != del_obj {
-            return Err(DecodeError::UnexpectedType(hdr.nlmsg_type));
-        }
-
-        let obj_size = hdr.nlmsg_len as usize
-            - pad_netlink_object_with_variable_size(size_of::<nlmsghdr>() + size_of::<nfgenmsg>());
-
-        let remaining_data_offset = pad_netlink_object_with_variable_size(hdr.nlmsg_len as usize);
-        let remaining_data = &buf[remaining_data_offset..];
-
-        let (nfgenmsg, res) = match msg {
-            NlMsg::NfGenMsg(nfgenmsg, content) => {
-                (nfgenmsg, read_attributes(&content[..obj_size])?)
-            }
-            _ => return Err(DecodeError::UnexpectedType(hdr.nlmsg_type)),
-        };
-
-        Ok((res, nfgenmsg, remaining_data))
+    if op != add_obj && op != del_obj {
+        return Err(DecodeError::UnexpectedType(hdr.nlmsg_type));
     }
+
+    let obj_size = hdr.nlmsg_len as usize
+        - pad_netlink_object_with_variable_size(size_of::<nlmsghdr>() + size_of::<nfgenmsg>());
+
+    let remaining_data_offset = pad_netlink_object_with_variable_size(hdr.nlmsg_len as usize);
+    let remaining_data = &buf[remaining_data_offset..];
+
+    let (nfgenmsg, res) = match msg {
+        NlMsg::NfGenMsg(nfgenmsg, content) => (nfgenmsg, read_attributes(&content[..obj_size])?),
+        _ => return Err(DecodeError::UnexpectedType(hdr.nlmsg_type)),
+    };
+
+    Ok((res, nfgenmsg, remaining_data))
 }
