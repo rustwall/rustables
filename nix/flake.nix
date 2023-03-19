@@ -51,17 +51,18 @@
         buildRustCrateForPkgs = customBuildCrate;
         release = false;
       };
+      devShell = pkgs.mkShell {
+        name = "rustables";
+        nativeBuildInputs = nativeBuildInputs;
+        buildInputs = buildInputs;
+        LIBCLANG_PATH = LIBCLANG_PATH;
+        packages = with pkgs; [ rust-analyzer rustc-with-src ];
+      };
       in {
         defaultPackage = cargoNix.rootCrate.build;
+        devShells.default = devShell;
         packages = {
           rustables = cargoNix.rootCrate.build;
-        };
-        devShell = pkgs.mkShell {
-          name = "rustables";
-          nativeBuildInputs = nativeBuildInputs;
-          buildInputs = buildInputs;
-          LIBCLANG_PATH = LIBCLANG_PATH;
-          packages = with pkgs; [ rust-analyzer rustc-with-src ];
         };
       }
     );

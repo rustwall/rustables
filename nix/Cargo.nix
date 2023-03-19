@@ -7,7 +7,11 @@
 , pkgs ? import nixpkgs { config = {}; }
 , lib ? pkgs.lib
 , stdenv ? pkgs.stdenv
-, buildRustCrateForPkgs ? pkgs: pkgs.buildRustCrate
+, buildRustCrateForPkgs ? if buildRustCrate != null
+    then lib.warn "crate2nix: Passing `buildRustCrate` as argument to Cargo.nix is deprecated. If you don't customize `buildRustCrate`, replace `callPackage ./Cargo.nix {}` by `import ./Cargo.nix { inherit pkgs; }`, and if you need to customize `buildRustCrate`, use `buildRustCrateForPkgs` instead." (_: buildRustCrate)
+    else pkgs: pkgs.buildRustCrate
+  # Deprecated
+, buildRustCrate ? null
   # This is used as the `crateOverrides` argument for `buildRustCrate`.
 , defaultCrateOverrides ? pkgs.defaultCrateOverrides
   # The features to enable for the root_crate or the workspace_members.
@@ -295,10 +299,10 @@ rec {
       };
       "cc" = rec {
         crateName = "cc";
-        version = "1.0.78";
+        version = "1.0.79";
         edition = "2018";
         crateBin = [];
-        sha256 = "0gcch8g41jsjs4zk8fy7k4jhc33sfqdab4nxsrcsds2w6gi080d2";
+        sha256 = "07x93b8zbf3xc2dggdd460xlk1wg8lxm6yflwddxj8b15030klsh";
         authors = [
           "Alex Crichton <alex@alexcrichton.com>"
         ];
@@ -649,9 +653,9 @@ rec {
       };
       "libc" = rec {
         crateName = "libc";
-        version = "0.2.139";
+        version = "0.2.140";
         edition = "2015";
-        sha256 = "0yaz3z56c72p2nfgv2y2zdi8bzi7x3kdq2hzgishgw0da8ky6790";
+        sha256 = "037qjmhfv8iyzfv6zqapxxvf6p1ydg6dzgzhkjbimbhzj8s768lr";
         authors = [
           "The Rust Project Developers"
         ];
@@ -819,6 +823,27 @@ rec {
         };
         resolvedDefaultFeatures = [ "alloc" "std" ];
       };
+      "once_cell" = rec {
+        crateName = "once_cell";
+        version = "1.17.1";
+        edition = "2021";
+        sha256 = "1lrsy9c5ikf2iwxr4iwgd3rlq9mg8alh0np1g8abnvp1k4151rdp";
+        authors = [
+          "Aleksey Kladov <aleksey.kladov@gmail.com>"
+        ];
+        features = {
+          "alloc" = [ "race" ];
+          "atomic-polyfill" = [ "critical-section" ];
+          "atomic_polyfill" = [ "dep:atomic_polyfill" ];
+          "critical-section" = [ "critical_section" "atomic_polyfill" ];
+          "critical_section" = [ "dep:critical_section" ];
+          "default" = [ "std" ];
+          "parking_lot" = [ "parking_lot_core" ];
+          "parking_lot_core" = [ "dep:parking_lot_core" ];
+          "std" = [ "alloc" ];
+        };
+        resolvedDefaultFeatures = [ "alloc" "default" "race" "std" ];
+      };
       "peeking_take_while" = rec {
         crateName = "peeking_take_while";
         version = "0.1.2";
@@ -852,7 +877,7 @@ rec {
           }
           {
             name = "syn";
-            packageId = "syn";
+            packageId = "syn 1.0.109";
             optional = true;
             usesDefaultFeatures = false;
           }
@@ -899,9 +924,9 @@ rec {
       };
       "proc-macro2" = rec {
         crateName = "proc-macro2";
-        version = "1.0.49";
+        version = "1.0.52";
         edition = "2018";
-        sha256 = "19b3xdfmnay9mchza82lhb3n8qjrfzkxwd23f50xxzy4z6lyra2p";
+        sha256 = "0922fkhi689x134yh6l97lnpwgarhbv0vnv3vpnkpk1nx3lil3hx";
         authors = [
           "David Tolnay <dtolnay@gmail.com>"
           "Alex Crichton <alex@alexcrichton.com>"
@@ -930,9 +955,9 @@ rec {
       };
       "quote" = rec {
         crateName = "quote";
-        version = "1.0.23";
+        version = "1.0.26";
         edition = "2018";
-        sha256 = "0ywwzw5xfwwgq62ihp4fbjbfdjb3ilss2vh3fka18ai59lvdhml8";
+        sha256 = "1z521piwggwzs0rj4wjx4ma6af1g6f1h5dkp382y5akqyx5sy924";
         authors = [
           "David Tolnay <dtolnay@gmail.com>"
         ];
@@ -1009,13 +1034,9 @@ rec {
       };
       "rustables" = rec {
         crateName = "rustables";
-        version = "0.8.0";
+        version = "0.8.1";
         edition = "2021";
-        # We can't filter paths with references in Nix 2.4
-        # See https://github.com/NixOS/nix/issues/5410
-        src = if (lib.versionOlder builtins.nixVersion "2.4pre20211007")
-          then lib.cleanSourceWith { filter = sourceFilter;  src = ./.; }
-          else ./.;
+        src = lib.cleanSourceWith { filter = sourceFilter;  src = ../.; };
         authors = [
           "lafleur@boum.org"
           "Simon Thoby"
@@ -1072,14 +1093,19 @@ rec {
       };
       "rustables-macros" = rec {
         crateName = "rustables-macros";
-        version = "0.1.0";
+        version = "0.1.1";
         edition = "2021";
-        sha256 = "093ygmvwd4w69qiry4p99xvyzm2g4ywf8zx0hxrqhyrwy1fldqxm";
+        src = lib.cleanSourceWith { filter = sourceFilter;  src = ../macros; };
         procMacro = true;
         authors = [
+          "lafleur@boum.org"
           "Simon Thoby"
         ];
         dependencies = [
+          {
+            name = "once_cell";
+            packageId = "once_cell";
+          }
           {
             name = "proc-macro-error";
             packageId = "proc-macro-error";
@@ -1094,7 +1120,7 @@ rec {
           }
           {
             name = "syn";
-            packageId = "syn";
+            packageId = "syn 1.0.109";
             features = [ "full" ];
           }
         ];
@@ -1133,11 +1159,11 @@ rec {
         ];
 
       };
-      "syn" = rec {
+      "syn 1.0.109" = rec {
         crateName = "syn";
-        version = "1.0.107";
+        version = "1.0.109";
         edition = "2018";
-        sha256 = "1xg3315vx8civ8y0l5zxq5mkx07qskaqwnjak18aw0vfn6sn8h0z";
+        sha256 = "0ds2if4600bd59wsv7jjgfkayfzy3hnazs394kz6zdkmna8l3dkj";
         authors = [
           "David Tolnay <dtolnay@gmail.com>"
         ];
@@ -1167,11 +1193,45 @@ rec {
         };
         resolvedDefaultFeatures = [ "clone-impls" "default" "derive" "full" "parsing" "printing" "proc-macro" "quote" ];
       };
+      "syn 2.0.2" = rec {
+        crateName = "syn";
+        version = "2.0.2";
+        edition = "2021";
+        sha256 = "0idhj68il6kghbjacchj0pdy4nrb2ysnjyci28vc780zxrm2glsr";
+        authors = [
+          "David Tolnay <dtolnay@gmail.com>"
+        ];
+        dependencies = [
+          {
+            name = "proc-macro2";
+            packageId = "proc-macro2";
+            usesDefaultFeatures = false;
+          }
+          {
+            name = "quote";
+            packageId = "quote";
+            optional = true;
+            usesDefaultFeatures = false;
+          }
+          {
+            name = "unicode-ident";
+            packageId = "unicode-ident";
+          }
+        ];
+        features = {
+          "default" = [ "derive" "parsing" "printing" "clone-impls" "proc-macro" ];
+          "printing" = [ "quote" ];
+          "proc-macro" = [ "proc-macro2/proc-macro" "quote/proc-macro" ];
+          "quote" = [ "dep:quote" ];
+          "test" = [ "syn-test-suite/all-features" ];
+        };
+        resolvedDefaultFeatures = [ "clone-impls" "default" "derive" "parsing" "printing" "proc-macro" "quote" ];
+      };
       "termcolor" = rec {
         crateName = "termcolor";
-        version = "1.1.3";
+        version = "1.2.0";
         edition = "2018";
-        sha256 = "0mbpflskhnz3jf312k50vn0hqbql8ga2rk0k79pkgchip4q4vcms";
+        sha256 = "1dmrbsljxpfng905qkaxljlwjhv8h0i3969cbiv5rb7y8a4wymdy";
         authors = [
           "Andrew Gallant <jamslam@gmail.com>"
         ];
@@ -1205,9 +1265,9 @@ rec {
       };
       "thiserror" = rec {
         crateName = "thiserror";
-        version = "1.0.38";
+        version = "1.0.40";
         edition = "2018";
-        sha256 = "1l7yh18iqcr2jnl6qjx3ywvhny98cvda3biwc334ap3xm65d373a";
+        sha256 = "1b7bdhriasdsr99y39d50jz995xaz9sw3hsbb6z9kp6q9cqrm34p";
         authors = [
           "David Tolnay <dtolnay@gmail.com>"
         ];
@@ -1221,9 +1281,9 @@ rec {
       };
       "thiserror-impl" = rec {
         crateName = "thiserror-impl";
-        version = "1.0.38";
+        version = "1.0.40";
         edition = "2018";
-        sha256 = "0vzkcjqkzzgrwwby92xvnbp11a8d70b1gkybm0zx1r458spjgcqz";
+        sha256 = "17sn41kyimc6s983aypkk6a45pcyrkbkvrw6rp407n5hqm16ligr";
         procMacro = true;
         authors = [
           "David Tolnay <dtolnay@gmail.com>"
@@ -1239,16 +1299,16 @@ rec {
           }
           {
             name = "syn";
-            packageId = "syn";
+            packageId = "syn 2.0.2";
           }
         ];
 
       };
       "unicode-ident" = rec {
         crateName = "unicode-ident";
-        version = "1.0.6";
+        version = "1.0.8";
         edition = "2018";
-        sha256 = "1g2fdsw5sv9l1m73whm99za3lxq3nw4gzx5kvi562h4b46gjp8l4";
+        sha256 = "1x4v4v95fv9gn5zbpm23sa9awjvmclap1wh1lmikmw9rna3llip5";
         authors = [
           "David Tolnay <dtolnay@gmail.com>"
         ];
@@ -1350,12 +1410,12 @@ rec {
           {
             name = "winapi-i686-pc-windows-gnu";
             packageId = "winapi-i686-pc-windows-gnu";
-            target = { target, features }: (pkgs.rust.lib.toRustTarget stdenv.hostPlatform == "i686-pc-windows-gnu");
+            target = { target, features }: (stdenv.hostPlatform.config == "i686-pc-windows-gnu");
           }
           {
             name = "winapi-x86_64-pc-windows-gnu";
             packageId = "winapi-x86_64-pc-windows-gnu";
-            target = { target, features }: (pkgs.rust.lib.toRustTarget stdenv.hostPlatform == "x86_64-pc-windows-gnu");
+            target = { target, features }: (stdenv.hostPlatform.config == "x86_64-pc-windows-gnu");
           }
         ];
         features = {
@@ -1410,25 +1470,26 @@ rec {
   /* Target (platform) data for conditional dependencies.
     This corresponds roughly to what buildRustCrate is setting.
   */
-  makeDefaultTarget = platform: {
-    unix = platform.isUnix;
-    windows = platform.isWindows;
+  defaultTarget = {
+    unix = true;
+    windows = false;
     fuchsia = true;
     test = false;
 
-    /* We are choosing an arbitrary rust version to grab `lib` from,
-      which is unfortunate, but `lib` has been version-agnostic the
-      whole time so this is good enough for now.
-    */
-    os = pkgs.rust.lib.toTargetOs platform;
-    arch = pkgs.rust.lib.toTargetArch platform;
+    # This doesn't appear to be officially documented anywhere yet.
+    # See https://github.com/rust-lang-nursery/rust-forge/issues/101.
+    os =
+      if stdenv.hostPlatform.isDarwin
+      then "macos"
+      else stdenv.hostPlatform.parsed.kernel.name;
+    arch = stdenv.hostPlatform.parsed.cpu.name;
     family = "unix";
     env = "gnu";
     endian =
-      if platform.parsed.cpu.significantByte.name == "littleEndian"
+      if stdenv.hostPlatform.parsed.cpu.significantByte.name == "littleEndian"
       then "little" else "big";
-    pointer_width = toString platform.parsed.cpu.bits;
-    vendor = platform.parsed.vendor.name;
+    pointer_width = toString stdenv.hostPlatform.parsed.cpu.bits;
+    vendor = stdenv.hostPlatform.parsed.vendor.name;
     debug_assertions = false;
   };
 
@@ -1631,12 +1692,12 @@ rec {
     , crateConfigs ? crates
     , buildRustCrateForPkgsFunc
     , runTests
-    , makeTarget ? makeDefaultTarget
+    , target ? defaultTarget
     } @ args:
       assert (builtins.isAttrs crateConfigs);
       assert (builtins.isString packageId);
       assert (builtins.isList features);
-      assert (builtins.isAttrs (makeTarget stdenv.hostPlatform));
+      assert (builtins.isAttrs target);
       assert (builtins.isBool runTests);
       let
         rootPackageId = packageId;
@@ -1644,7 +1705,7 @@ rec {
           (
             args // {
               inherit rootPackageId;
-              target = makeTarget stdenv.hostPlatform // { test = runTests; };
+              target = target // { test = runTests; };
             }
           );
         # Memoize built packages so that reappearing packages are only built once.
@@ -1653,7 +1714,6 @@ rec {
           let
             self = {
               crates = lib.mapAttrs (packageId: value: buildByPackageIdForPkgsImpl self pkgs packageId) crateConfigs;
-              target = makeTarget pkgs.stdenv.hostPlatform;
               build = mkBuiltByPackageIdByPkgs pkgs.buildPackages;
             };
           in
@@ -1670,8 +1730,7 @@ rec {
                 (crateConfig'.devDependencies or [ ]);
             dependencies =
               dependencyDerivations {
-                inherit features;
-                inherit (self) target;
+                inherit features target;
                 buildByPackageId = depPackageId:
                   # proc_macro crates must be compiled for the build architecture
                   if crateConfigs.${depPackageId}.procMacro or false
@@ -1683,26 +1742,24 @@ rec {
               };
             buildDependencies =
               dependencyDerivations {
-                inherit features;
-                inherit (self.build) target;
+                inherit features target;
                 buildByPackageId = depPackageId:
                   self.build.crates.${depPackageId};
                 dependencies = crateConfig.buildDependencies or [ ];
               };
+            filterEnabledDependenciesForThis = dependencies: filterEnabledDependencies {
+              inherit dependencies features target;
+            };
             dependenciesWithRenames =
-              let
-                buildDeps = filterEnabledDependencies {
-                  inherit features;
-                  inherit (self) target;
-                  dependencies = crateConfig.dependencies or [ ] ++ devDependencies;
-                };
-                hostDeps = filterEnabledDependencies {
-                  inherit features;
-                  inherit (self.build) target;
-                  dependencies = crateConfig.buildDependencies or [ ];
-                };
-              in
-              lib.filter (d: d ? "rename") (hostDeps ++ buildDeps);
+              lib.filter (d: d ? "rename")
+                (
+                  filterEnabledDependenciesForThis
+                    (
+                      (crateConfig.buildDependencies or [ ])
+                      ++ (crateConfig.dependencies or [ ])
+                      ++ devDependencies
+                    )
+                );
             # Crate renames have the form:
             #
             # {
@@ -1777,7 +1834,7 @@ rec {
     else val;
 
   /* Returns various tools to debug a crate. */
-  debugCrate = { packageId, target ? makeDefaultTarget stdenv.hostPlatform }:
+  debugCrate = { packageId, target ? defaultTarget }:
     assert (builtins.isString packageId);
     let
       debug = rec {
@@ -1953,14 +2010,15 @@ rec {
       dependencies;
 
   /* Returns whether the given feature should enable the given dependency. */
-  doesFeatureEnableDependency = dependency: feature:
+  doesFeatureEnableDependency = { name, rename ? null, ... }: feature:
     let
-      name = dependency.rename or dependency.name;
       prefix = "${name}/";
       len = builtins.stringLength prefix;
       startsWithPrefix = builtins.substring 0 len feature == prefix;
     in
-    feature == name || feature == "dep:" + name || startsWithPrefix;
+    (rename == null && feature == name)
+    || (rename != null && rename == feature)
+    || startsWithPrefix;
 
   /* Returns the expanded features for the given inputFeatures by applying the
     rules in featureMap.
@@ -1995,9 +2053,7 @@ rec {
             let
               enabled = builtins.any (doesFeatureEnableDependency dependency) features;
             in
-            if (dependency.optional or false) && enabled
-            then [ (dependency.rename or dependency.name) ]
-            else [ ]
+            if (dependency.optional or false) && enabled then [ dependency.name ] else [ ]
         )
         dependencies;
     in
