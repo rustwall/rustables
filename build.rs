@@ -25,6 +25,7 @@ fn generate_sys() {
         .prepend_enum_name(false)
         .layout_tests(false)
         .derive_partialeq(true)
+        .translate_enum_integer_types(true)
         // Tell cargo to invalidate the built crate whenever any of the
         // included header files changed.
         .parse_callbacks(Box::new(bindgen::CargoCallbacks))
