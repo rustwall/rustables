@@ -1,5 +1,11 @@
 # rustables
 
+[![Crates.io](https://img.shields.io/crates/v/rustables.svg)](https://crates.io/crates/rustables)
+[![Documentation](https://img.shields.io/docsrs/rustables/latest)](https://docs.rs/rustables)
+[![CI pipeline status](https://img.shields.io/gitlab/pipeline-status/rustwall%2Frustables?branch=master)](https://gitlab.com/rustwall/rustables/-/pipelines)
+[![License](https://img.shields.io/gitlab/license/rustwall%2Frustables)](https://gitlab.com/rustwall/rustables/-/blob/master/LICENSE)
+
+
 Safe abstraction for userspace access to the in-kernel nf_tables subsystem.
 Can be used to create and remove tables, chains, sets and rules from the nftables
 firewall, the successor to iptables.
