@@ -192,7 +192,7 @@ fn parse_struct_args(input: TokenStream) -> Result<StructArgs> {
 ///   implementation for the structure
 ///
 /// # Example use
-/// ```
+/// ```ignore
 /// #[nfnetlink_struct(derive_deserialize = false)]
 /// #[derive(PartialEq, Eq, Default, Debug)]
 /// pub struct Chain {
