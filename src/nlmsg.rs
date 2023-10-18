@@ -56,7 +56,7 @@ impl<'a> NfNetlinkWriter<'a> {
 
         // if we are *inside* an object begin written, extend the netlink object size
         if let Some((msghdr_idx, _nfgenmsg_idx)) = self.headers {
-            let mut hdr: &mut nlmsghdr = unsafe {
+            let hdr: &mut nlmsghdr = unsafe {
                 std::mem::transmute(self.buf[msghdr_idx..].as_mut_ptr() as *mut nlmsghdr)
             };
             hdr.nlmsg_len += padded_size as u32;
@@ -83,7 +83,7 @@ impl<'a> NfNetlinkWriter<'a> {
 
         // serialize the nlmsghdr
         let nlmsghdr_buf = self.add_data_zeroed(nlmsghdr_len);
-        let mut hdr: &mut nlmsghdr =
+        let hdr: &mut nlmsghdr =
             unsafe { std::mem::transmute(nlmsghdr_buf.as_mut_ptr() as *mut nlmsghdr) };
         hdr.nlmsg_len = (nlmsghdr_len + nfgenmsg_len) as u32;
         hdr.nlmsg_type = msg_type;
@@ -96,7 +96,7 @@ impl<'a> NfNetlinkWriter<'a> {
 
         // serialize the nfgenmsg
         let nfgenmsg_buf = self.add_data_zeroed(nfgenmsg_len);
-        let mut nfgenmsg: &mut nfgenmsg =
+        let nfgenmsg: &mut nfgenmsg =
             unsafe { std::mem::transmute(nfgenmsg_buf.as_mut_ptr() as *mut nfgenmsg) };
         nfgenmsg.nfgen_family = family as u8;
         nfgenmsg.version = NFNETLINK_V0 as u8;

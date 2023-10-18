@@ -585,7 +585,7 @@ pub fn nfnetlink_enum(attrs: TokenStream, item: TokenStream) -> TokenStream {
     let attrs = ast.attrs;
     let original_variants = variants.into_iter().map(|x| {
         let mut inner = x.inner.clone();
-        let mut discriminant = inner.discriminant.as_mut().unwrap();
+        let discriminant = inner.discriminant.as_mut().unwrap();
         let cur_value = discriminant.1.clone();
         let cast_value = Expr::Cast(ExprCast {
             attrs: vec![],
