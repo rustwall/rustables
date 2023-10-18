@@ -30,19 +30,7 @@ rec {
   # "public" attributes that we attempt to keep stable with new versions of crate2nix.
   #
 
-  rootCrate = rec {
-    packageId = "rustables";
 
-    # Use this attribute to refer to the derivation building your root crate package.
-    # You can override the features with rootCrate.build.override { features = [ "default" "feature1" ... ]; }.
-    build = internal.buildRustCrateWithFeatures {
-      inherit packageId;
-    };
-
-    # Debug support which might change between releases.
-    # File a bug if you depend on any for non-debug work!
-    debug = internal.debugCrate { inherit packageId; };
-  };
   # Refer your crate build derivation by name here.
   # You can override the features with
   # workspaceMembers."${crateName}".build.override { features = [ "default" "feature1" ... ]; }.
@@ -51,6 +39,16 @@ rec {
       packageId = "rustables";
       build = internal.buildRustCrateWithFeatures {
         packageId = "rustables";
+      };
+
+      # Debug support which might change between releases.
+      # File a bug if you depend on any for non-debug work!
+      debug = internal.debugCrate { inherit packageId; };
+    };
+    "rustables-macros" = rec {
+      packageId = "rustables-macros";
+      build = internal.buildRustCrateWithFeatures {
+        packageId = "rustables-macros";
       };
 
       # Debug support which might change between releases.
@@ -278,12 +276,20 @@ rec {
       };
       "cc" = rec {
         crateName = "cc";
-        version = "1.0.79";
+        version = "1.0.83";
         edition = "2018";
         crateBin = [];
-        sha256 = "07x93b8zbf3xc2dggdd460xlk1wg8lxm6yflwddxj8b15030klsh";
+        sha256 = "1l643zidlb5iy1dskc5ggqs4wqa29a02f44piczqc8zcnsq4y5zi";
         authors = [
           "Alex Crichton <alex@alexcrichton.com>"
+        ];
+        dependencies = [
+          {
+            name = "libc";
+            packageId = "libc";
+            usesDefaultFeatures = false;
+            target = { target, features }: (target."unix" or false);
+          }
         ];
         features = {
           "jobserver" = [ "dep:jobserver" ];
@@ -638,25 +644,20 @@ rec {
       };
       "log" = rec {
         crateName = "log";
-        version = "0.4.17";
+        version = "0.4.20";
         edition = "2015";
-        sha256 = "0biqlaaw1lsr8bpnmbcc0fvgjj34yy79ghqzyi0ali7vgil2xcdb";
+        sha256 = "13rf7wphnwd61vazpxr7fiycin6cb1g8fmvgqg18i464p0y1drmm";
         authors = [
           "The Rust Project Developers"
-        ];
-        dependencies = [
-          {
-            name = "cfg-if";
-            packageId = "cfg-if";
-          }
         ];
         features = {
           "kv_unstable" = [ "value-bag" ];
           "kv_unstable_serde" = [ "kv_unstable_std" "value-bag/serde" "serde" ];
           "kv_unstable_std" = [ "std" "kv_unstable" "value-bag/error" ];
-          "kv_unstable_sval" = [ "kv_unstable" "value-bag/sval" "sval" ];
+          "kv_unstable_sval" = [ "kv_unstable" "value-bag/sval" "sval" "sval_ref" ];
           "serde" = [ "dep:serde" ];
           "sval" = [ "dep:sval" ];
+          "sval_ref" = [ "dep:sval_ref" ];
           "value-bag" = [ "dep:value-bag" ];
         };
         resolvedDefaultFeatures = [ "std" ];
@@ -777,21 +778,18 @@ rec {
       };
       "once_cell" = rec {
         crateName = "once_cell";
-        version = "1.17.1";
+        version = "1.18.0";
         edition = "2021";
-        sha256 = "1lrsy9c5ikf2iwxr4iwgd3rlq9mg8alh0np1g8abnvp1k4151rdp";
+        sha256 = "0vapcd5ambwck95wyz3ymlim35jirgnqn9a0qmi19msymv95v2yx";
         authors = [
           "Aleksey Kladov <aleksey.kladov@gmail.com>"
         ];
         features = {
           "alloc" = [ "race" ];
           "atomic-polyfill" = [ "critical-section" ];
-          "atomic_polyfill" = [ "dep:atomic_polyfill" ];
-          "critical-section" = [ "critical_section" "atomic_polyfill" ];
-          "critical_section" = [ "dep:critical_section" ];
+          "critical-section" = [ "dep:critical-section" "dep:atomic-polyfill" ];
           "default" = [ "std" ];
-          "parking_lot" = [ "parking_lot_core" ];
-          "parking_lot_core" = [ "dep:parking_lot_core" ];
+          "parking_lot" = [ "dep:parking_lot_core" ];
           "std" = [ "alloc" ];
         };
         resolvedDefaultFeatures = [ "alloc" "default" "race" "std" ];
@@ -1088,8 +1086,8 @@ rec {
         # We can't filter paths with references in Nix 2.4
         # See https://github.com/NixOS/nix/issues/5410
         src = if ((lib.versionOlder builtins.nixVersion "2.4pre20211007") || (lib.versionOlder "2.5" builtins.nixVersion ))
-          then lib.cleanSourceWith { filter = sourceFilter;  src = ../.; }
-          else ../.;
+          then lib.cleanSourceWith { filter = sourceFilter;  src = ../rustables; }
+          else ../rustables;
         authors = [
           "lafleur@boum.org"
           "Simon Thoby"
@@ -1151,12 +1149,13 @@ rec {
         # We can't filter paths with references in Nix 2.4
         # See https://github.com/NixOS/nix/issues/5410
         src = if ((lib.versionOlder builtins.nixVersion "2.4pre20211007") || (lib.versionOlder "2.5" builtins.nixVersion ))
-          then lib.cleanSourceWith { filter = sourceFilter;  src = ../macros; }
-          else ../macros;
+          then lib.cleanSourceWith { filter = sourceFilter;  src = ../rustables-macros; }
+          else ../rustables-macros;
         procMacro = true;
         authors = [
           "lafleur@boum.org"
           "Simon Thoby"
+          "Mullvad VPN"
         ];
         dependencies = [
           {
@@ -1389,9 +1388,9 @@ rec {
       };
       "termcolor" = rec {
         crateName = "termcolor";
-        version = "1.2.0";
+        version = "1.3.0";
         edition = "2018";
-        sha256 = "1dmrbsljxpfng905qkaxljlwjhv8h0i3969cbiv5rb7y8a4wymdy";
+        sha256 = "0r1byqaq6f97qd0wc7k09lza190apvj9301s2afsp6m6gp9vm4v0";
         authors = [
           "Andrew Gallant <jamslam@gmail.com>"
         ];
@@ -1406,9 +1405,9 @@ rec {
       };
       "thiserror" = rec {
         crateName = "thiserror";
-        version = "1.0.40";
-        edition = "2018";
-        sha256 = "1b7bdhriasdsr99y39d50jz995xaz9sw3hsbb6z9kp6q9cqrm34p";
+        version = "1.0.49";
+        edition = "2021";
+        sha256 = "1m3yalbcx89bx397igc1ckypw8hiwq9jbzc56pgazrzdsz3fhxqi";
         authors = [
           "David Tolnay <dtolnay@gmail.com>"
         ];
@@ -1422,9 +1421,9 @@ rec {
       };
       "thiserror-impl" = rec {
         crateName = "thiserror-impl";
-        version = "1.0.40";
-        edition = "2018";
-        sha256 = "17sn41kyimc6s983aypkk6a45pcyrkbkvrw6rp407n5hqm16ligr";
+        version = "1.0.49";
+        edition = "2021";
+        sha256 = "1k643ga9sbqpcb873n299n3zjzc4srfakyv98xwqi4ly0412yw8h";
         procMacro = true;
         authors = [
           "David Tolnay <dtolnay@gmail.com>"
@@ -1447,9 +1446,9 @@ rec {
       };
       "unicode-ident" = rec {
         crateName = "unicode-ident";
-        version = "1.0.8";
+        version = "1.0.12";
         edition = "2018";
-        sha256 = "1x4v4v95fv9gn5zbpm23sa9awjvmclap1wh1lmikmw9rna3llip5";
+        sha256 = "0jzf1znfpb2gx8nr8mvmyqs1crnv79l57nxnbiszc7xf7ynbjm1k";
         authors = [
           "David Tolnay <dtolnay@gmail.com>"
         ];
@@ -1522,7 +1521,7 @@ rec {
         features = {
           "debug" = [ "impl-debug" ];
         };
-        resolvedDefaultFeatures = [ "consoleapi" "errhandlingapi" "fileapi" "libloaderapi" "minwinbase" "minwindef" "processenv" "std" "winbase" "wincon" "winerror" "winnt" ];
+        resolvedDefaultFeatures = [ "consoleapi" "errhandlingapi" "fileapi" "libloaderapi" "minwinbase" "minwindef" "processenv" "std" "sysinfoapi" "winbase" "wincon" "winerror" "winnt" ];
       };
       "winapi-i686-pc-windows-gnu" = rec {
         crateName = "winapi-i686-pc-windows-gnu";
@@ -1536,9 +1535,9 @@ rec {
       };
       "winapi-util" = rec {
         crateName = "winapi-util";
-        version = "0.1.5";
-        edition = "2018";
-        sha256 = "0y71bp7f6d536czj40dhqk0d55wfbbwqfp2ymqf1an5ibgl6rv3h";
+        version = "0.1.6";
+        edition = "2021";
+        sha256 = "15i5lm39wd44004i9d5qspry2cynkrpvwzghr6s2c3dsk28nz7pj";
         authors = [
           "Andrew Gallant <jamslam@gmail.com>"
         ];
@@ -1547,7 +1546,7 @@ rec {
             name = "winapi";
             packageId = "winapi";
             target = { target, features }: (target."windows" or false);
-            features = [ "std" "consoleapi" "errhandlingapi" "fileapi" "minwindef" "processenv" "winbase" "wincon" "winerror" "winnt" ];
+            features = [ "std" "consoleapi" "errhandlingapi" "fileapi" "minwindef" "processenv" "sysinfoapi" "winbase" "wincon" "winerror" "winnt" ];
           }
         ];
 

@@ -1,0 +1,30 @@
+[package]
+name = "rustables"
+version = "0.8.2"
+description = "Safe abstraction for libnftnl. Provides low-level userspace access to the in-kernel nf_tables subsystem"
+readme = "../README.md"
+
+authors.workspace = true
+keywords.workspace = true
+categories.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[features]
+
+[dependencies]
+bitflags = "1.0"
+thiserror = "1.0"
+log = "0.4"
+libc = "0.2.43"
+nix = "0.23"
+ipnetwork = { version = "0.20", default-features = false }
+rustables-macros = { path = "../rustables-macros" }
+
+[dev-dependencies]
+env_logger = "0.9"
+
+[build-dependencies]
+bindgen = "0.68"
+regex = "1.10"

@@ -59,10 +59,10 @@
         packages = with pkgs; [ rust-analyzer rustc-with-src ];
       };
       in {
-        defaultPackage = cargoNix.rootCrate.build;
+        defaultPackage = cargoNix.workspaceMembers.rustables.build;
         devShells.default = devShell;
         packages = {
-          rustables = cargoNix.rootCrate.build;
+          rustables = cargoNix.workspaceMembers.rustables.build;
         };
       }
     );
