@@ -32,7 +32,7 @@ pub struct Set {
     #[field(NFTA_SET_ID)]
     pub id: u32,
     #[field(NFTA_SET_USERDATA)]
-    pub userdata: String,
+    pub userdata: Vec<u8>,
 }
 
 impl NfNetlinkObject for Set {

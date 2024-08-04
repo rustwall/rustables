@@ -127,7 +127,9 @@ pub fn write_attribute<'a>(ty: NetlinkType, obj: &impl NfNetlinkAttribute, mut b
     obj.write_payload(buf);
 }
 
-pub(crate) fn read_attributes<T: AttributeDecoder + Default>(buf: &[u8]) -> Result<T, DecodeError> {
+pub(crate) fn read_attributes<T: AttributeDecoder + Debug + Default>(
+    buf: &[u8],
+) -> Result<T, DecodeError> {
     debug!(
         "Calling <{} as NfNetlinkDeserialize>::deserialize()",
         std::any::type_name::<T>()
@@ -135,7 +137,7 @@ pub(crate) fn read_attributes<T: AttributeDecoder + Default>(buf: &[u8]) -> Resu
     let mut remaining_size = buf.len();
     let mut pos = 0;
     let mut res = T::default();
-    while remaining_size > pad_netlink_object::<nlattr>() {
+    while remaining_size >= pad_netlink_object::<nlattr>() {
         let nlattr = unsafe { *transmute::<*const u8, *const nlattr>(buf[pos..].as_ptr()) };
         // ignore the byteorder and nested attributes
         let nla_type = nlattr.nla_type & NLA_TYPE_MASK as u16;
@@ -163,7 +165,7 @@ pub(crate) fn read_attributes<T: AttributeDecoder + Default>(buf: &[u8]) -> Resu
     }
 }
 
-pub(crate) fn parse_object<T: AttributeDecoder + Default + Sized>(
+pub(crate) fn parse_object<T: AttributeDecoder + Debug + Default + Sized>(
     buf: &[u8],
     add_obj: u32,
     del_obj: u32,

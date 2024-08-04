@@ -2,7 +2,8 @@ use std::net::{Ipv4Addr, Ipv6Addr};
 
 use crate::{
     data_type::DataType,
-    nlmsg::get_operation_from_nlmsghdr_type,
+    error::DecodeError,
+    nlmsg::{get_operation_from_nlmsghdr_type, NfNetlinkDeserializable},
     set::SetBuilder,
     sys::{
         NFTA_DATA_VALUE, NFTA_LIST_ELEM, NFTA_SET_ELEM_KEY, NFTA_SET_ELEM_LIST_ELEMENTS,
@@ -10,7 +11,7 @@ use crate::{
         NFTA_SET_NAME, NFTA_SET_TABLE, NFTA_SET_USERDATA, NFT_MSG_DELSET, NFT_MSG_NEWSET,
         NFT_MSG_NEWSETELEM,
     },
-    MsgType,
+    MsgType, Set,
 };
 
 use super::{
@@ -41,6 +42,21 @@ fn new_empty_set() {
         ])
         .to_raw()
     );
+}
+
+// non-regression test for https://gitlab.com/rustwall/rustables/-/issues/8
+#[test]
+fn set_with_empty_userdata() -> Result<(), DecodeError> {
+    let mut set = get_test_set::<Ipv4Addr>().with_userdata(&[]);
+
+    let mut buf = Vec::new();
+    get_test_nlmsg(&mut buf, &mut set);
+
+    let (orig_set, _) = Set::deserialize(&buf)?;
+
+    assert_eq!(orig_set.userdata, Some([].to_vec()));
+
+    Ok(())
 }
 
 #[test]
