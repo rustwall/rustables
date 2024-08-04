@@ -181,6 +181,7 @@ fn main() -> Result<(), Error> {
     Ok(batch.send()?)
 }
 
+#[allow(dead_code)]
 #[derive(Debug)]
 struct Error(String);
 

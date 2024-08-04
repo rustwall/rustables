@@ -1,5 +1,5 @@
 use std::{
-    fmt::{Debug, DebugStruct},
+    fmt::Debug,
     mem::{size_of, transmute},
 };
 
@@ -161,13 +161,6 @@ pub(crate) fn read_attributes<T: AttributeDecoder + Default>(buf: &[u8]) -> Resu
     } else {
         Ok(res)
     }
-}
-
-pub trait InnerFormat {
-    fn inner_format_struct<'a, 'b: 'a>(
-        &'a self,
-        s: DebugStruct<'a, 'b>,
-    ) -> Result<DebugStruct<'a, 'b>, std::fmt::Error>;
 }
 
 pub(crate) fn parse_object<T: AttributeDecoder + Default + Sized>(
