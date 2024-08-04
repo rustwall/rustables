@@ -152,15 +152,25 @@ impl Rule {
         self.add_expr(Cmp::new(CmpOp::Neq, 0u32.to_be_bytes()));
         Ok(self)
     }
-    /// Matches packets entering through `iface_index`. Interface indexes can be queried with
+    /// Deprecated. Please use [Rule::iiface_id] instead, which has the same interface.
+    #[deprecated = "Replaced by `iiface_id`"]
+    pub fn iface_id(self, iface_index: libc::c_uint) -> Self {
+        self.iiface_id(iface_index)
+    }
+    /// Matches packets received through `iface_index`. Interface indexes can be queried with
     /// `iface_index()`.
-    pub fn iface_id(mut self, iface_index: libc::c_uint) -> Self {
+    pub fn iiface_id(mut self, iface_index: libc::c_uint) -> Self {
         self.add_expr(Meta::new(MetaType::Iif));
         self.add_expr(Cmp::new(CmpOp::Eq, iface_index.to_be_bytes()));
         self
     }
-    /// Matches packets entering through `iface_name`, an interface name, as in "wlan0" or "lo"
-    pub fn iface(mut self, iface_name: &str) -> Result<Self, BuilderError> {
+    /// Deprecated. Please use [Rule::iiface] instead, which has the same interface.
+    #[deprecated = "Replaced by `iiface`"]
+    pub fn iface(self, iface_name: &str) -> Result<Self, BuilderError> {
+        self.iiface(iface_name)
+    }
+    /// Matches packets received through `iface_name` (an interface name, as in "wlan0" or "lo").
+    pub fn iiface(mut self, iface_name: &str) -> Result<Self, BuilderError> {
         if iface_name.len() >= libc::IFNAMSIZ {
             return Err(BuilderError::InterfaceNameTooLong);
         }
@@ -172,14 +182,14 @@ impl Rule {
         self.add_expr(Cmp::new(CmpOp::Eq, iface_vec));
         Ok(self)
     }
-    /// Matches packets leaving through `iface_index`. Interface indexes can be queried with
+    /// Matches packets sent through `iface_index`. Interface indexes can be queried with
     /// `iface_index()`.
     pub fn oiface_id(mut self, iface_index: libc::c_uint) -> Self {
         self.add_expr(Meta::new(MetaType::Oif));
         self.add_expr(Cmp::new(CmpOp::Eq, iface_index.to_be_bytes()));
         self
     }
-    /// Matches packets leaving through `iface_name`, an interface name, as in "wlan0" or "lo"
+    /// Matches packets sent through `iface_name` (an interface name, as in "wlan0" or "lo").
     pub fn oiface(mut self, iface_name: &str) -> Result<Self, BuilderError> {
         if iface_name.len() >= libc::IFNAMSIZ {
             return Err(BuilderError::InterfaceNameTooLong);

@@ -77,7 +77,7 @@ impl Firewall {
             .add_to_batch(&mut self.batch);
         // Allow all traffic on the loopback interface.
         Rule::new(&self.inbound)?
-            .iface("lo")?
+            .iiface("lo")?
             .accept()
             .add_to_batch(&mut self.batch);
         // Allow ssh from anywhere, and log to dmesg with a prefix.
