@@ -123,7 +123,7 @@ impl Rule {
     }
     /// Matches packets from source `port` and `protocol`.
     pub fn sport(self, port: u16, protocol: Protocol) -> Self {
-        self.match_port(port, protocol, false)
+        self.match_port(port, protocol, true)
     }
     /// Matches packets to destination `port` and `protocol`.
     pub fn dport(self, port: u16, protocol: Protocol) -> Self {
