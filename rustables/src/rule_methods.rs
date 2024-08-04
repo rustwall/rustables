@@ -152,14 +152,14 @@ impl Rule {
         self.add_expr(Cmp::new(CmpOp::Neq, 0u32.to_be_bytes()));
         Ok(self)
     }
-    /// Matches packets going through `iface_index`. Interface indexes can be queried with
+    /// Matches packets entering through `iface_index`. Interface indexes can be queried with
     /// `iface_index()`.
     pub fn iface_id(mut self, iface_index: libc::c_uint) -> Self {
         self.add_expr(Meta::new(MetaType::Iif));
         self.add_expr(Cmp::new(CmpOp::Eq, iface_index.to_be_bytes()));
         self
     }
-    /// Matches packets going through `iface_name`, an interface name, as in "wlan0" or "lo"
+    /// Matches packets entering through `iface_name`, an interface name, as in "wlan0" or "lo"
     pub fn iface(mut self, iface_name: &str) -> Result<Self, BuilderError> {
         if iface_name.len() >= libc::IFNAMSIZ {
             return Err(BuilderError::InterfaceNameTooLong);
@@ -169,6 +169,26 @@ impl Rule {
         iface_vec.push(0u8);
 
         self.add_expr(Meta::new(MetaType::IifName));
+        self.add_expr(Cmp::new(CmpOp::Eq, iface_vec));
+        Ok(self)
+    }
+    /// Matches packets leaving through `iface_index`. Interface indexes can be queried with
+    /// `iface_index()`.
+    pub fn oiface_id(mut self, iface_index: libc::c_uint) -> Self {
+        self.add_expr(Meta::new(MetaType::Oif));
+        self.add_expr(Cmp::new(CmpOp::Eq, iface_index.to_be_bytes()));
+        self
+    }
+    /// Matches packets leaving through `iface_name`, an interface name, as in "wlan0" or "lo"
+    pub fn oiface(mut self, iface_name: &str) -> Result<Self, BuilderError> {
+        if iface_name.len() >= libc::IFNAMSIZ {
+            return Err(BuilderError::InterfaceNameTooLong);
+        }
+        let mut iface_vec = iface_name.as_bytes().to_vec();
+        // null terminator
+        iface_vec.push(0u8);
+
+        self.add_expr(Meta::new(MetaType::OifName));
         self.add_expr(Cmp::new(CmpOp::Eq, iface_vec));
         Ok(self)
     }
