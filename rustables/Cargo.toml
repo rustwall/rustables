@@ -1,6 +1,6 @@
 [package]
 name = "rustables"
-version = "0.8.3"
+version = "0.8.4"
 description = "Safe abstraction for libnftnl. Provides low-level userspace access to the in-kernel nf_tables subsystem"
 readme = "../README.md"
 
