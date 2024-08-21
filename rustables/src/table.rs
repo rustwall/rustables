@@ -5,8 +5,7 @@ use rustables_macros::nfnetlink_struct;
 use crate::error::QueryError;
 use crate::nlmsg::NfNetlinkObject;
 use crate::sys::{
-    NFTA_TABLE_FLAGS, NFTA_TABLE_NAME, NFT_MSG_DELTABLE, NFT_MSG_GETTABLE,
-    NFT_MSG_NEWTABLE,
+    NFTA_TABLE_FLAGS, NFTA_TABLE_NAME, NFT_MSG_DELTABLE, NFT_MSG_GETTABLE, NFT_MSG_NEWTABLE,
 };
 use crate::{Batch, ProtocolFamily};
 
