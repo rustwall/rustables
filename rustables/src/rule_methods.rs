@@ -7,8 +7,8 @@ use crate::data_type::ip_to_vec;
 use crate::error::BuilderError;
 use crate::expr::ct::{ConnTrackState, Conntrack, ConntrackKey};
 use crate::expr::{
-    Bitwise, Cmp, CmpOp, HighLevelPayload, IPv4HeaderField, IPv6HeaderField, Immediate, Meta,
-    MetaType, NetworkHeaderField, TCPHeaderField, TransportHeaderField, UDPHeaderField,
+    Bitwise, Cmp, CmpOp, HighLevelPayload, IPv4HeaderField, IPv6HeaderField, Immediate, Masquerade,
+    Meta, MetaType, NetworkHeaderField, TCPHeaderField, TransportHeaderField, UDPHeaderField,
     VerdictKind,
 };
 use crate::Rule;
@@ -226,6 +226,15 @@ impl Rule {
     /// Adds the `Drop` verdict to the rule. The packet will be dropped.
     pub fn drop(mut self) -> Self {
         self.add_expr(Immediate::new_verdict(VerdictKind::Drop));
+        self
+    }
+    /// Forwards the packet to its destination by replacing its source IP address
+    /// with that of the output interface and creating a NAT binding.
+    /// Note that masquerade operations only make sense in the `postrouting` chain
+    /// of a NAT table. See more information on masquerading at
+    /// [https://wiki.nftables.org/wiki-nftables/index.php/Performing_Network_Address_Translation_(NAT)](https://wiki.nftables.org/wiki-nftables/index.php/Performing_Network_Address_Translation_(NAT))
+    pub fn masquerade(mut self) -> Self {
+        self.add_expr(Masquerade {});
         self
     }
 }
