@@ -105,7 +105,7 @@ impl Batch {
         let addr = SockAddr::Netlink(NetlinkAddr::new(0, 0));
         // while this bind() is not strictly necessary, strace have trouble decoding the messages
         // if we don't
-        socket::bind(sock, &addr).expect("bind");
+        socket::bind(sock, &addr).map_err(|_| QueryError::BindFailed)?;
 
         let to_send = self.finalize();
         let mut sent = 0;

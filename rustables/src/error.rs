@@ -171,4 +171,7 @@ pub enum QueryError {
 
     #[error("Couldn't close the socket")]
     CloseFailed(#[source] Errno),
+
+    #[error("Couldn't bind the socket")]
+    BindFailed,
 }

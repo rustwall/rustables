@@ -156,6 +156,10 @@ where
     pub fn iter<'a>(&'a self) -> impl Iterator<Item = &'a T> {
         self.objs.iter()
     }
+
+    pub fn iter_mut<'a>(&'a mut self) -> impl Iterator<Item = &'a mut T> {
+        self.objs.iter_mut()
+    }
 }
 
 impl<T> NfNetlinkAttribute for NfNetlinkList<T>
