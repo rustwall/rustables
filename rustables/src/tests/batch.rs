@@ -5,7 +5,7 @@ use nix::libc::NFNL_MSG_BATCH_END;
 
 use crate::nlmsg::{pad_netlink_object_with_variable_size, NfNetlinkDeserializable};
 use crate::parser::{parse_nlmsg, NlMsg};
-use crate::sys::{nfgenmsg, nlmsghdr, NFNETLINK_V0, NFNL_SUBSYS_NFTABLES};
+use crate::sys::{nfgenmsg, nlmsghdr, NFNETLINK_V0, NFNL_SUBSYS_NFTABLES, NLM_F_ACK};
 use crate::{Batch, MsgType, Table};
 
 use super::get_test_table;
@@ -15,7 +15,7 @@ const HEADER_SIZE: u32 =
 
 const DEFAULT_BATCH_BEGIN_HDR: nlmsghdr = nlmsghdr {
     nlmsg_len: HEADER_SIZE,
-    nlmsg_flags: NLM_F_REQUEST as u16,
+    nlmsg_flags: NLM_F_REQUEST as u16 | NLM_F_ACK as u16,
     nlmsg_type: NFNL_MSG_BATCH_BEGIN as u16,
     nlmsg_seq: 0,
     nlmsg_pid: 0,
