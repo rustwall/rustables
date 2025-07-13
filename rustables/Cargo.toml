@@ -14,17 +14,17 @@ repository.workspace = true
 [features]
 
 [dependencies]
-bitflags = "1.0"
-thiserror = "1.0"
+bitflags = "2.9"
+thiserror = "2.0"
 log = "0.4"
 libc = "0.2.43"
-nix = "0.23"
-ipnetwork = { version = "0.20", default-features = false }
+nix = { version = "0.30", features = ["socket"] }
+ipnetwork = { version = "0.21", default-features = false }
 rustables-macros = { version = "0.1.2", path = "../rustables-macros" }
 
 [dev-dependencies]
-env_logger = "0.9"
+env_logger = "0.11"
 
 [build-dependencies]
-bindgen = "0.68"
+bindgen = "0.72"
 regex = "1.10"

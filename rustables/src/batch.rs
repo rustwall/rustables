@@ -1,3 +1,5 @@
+use std::os::fd::AsRawFd;
+
 use libc;
 
 use thiserror::Error;
@@ -8,7 +10,7 @@ use crate::sys::{NFNL_SUBSYS_NFTABLES, NLM_F_ACK};
 use crate::{MsgType, ProtocolFamily};
 
 use nix::sys::socket::{
-    self, AddressFamily, MsgFlags, NetlinkAddr, SockAddr, SockFlag, SockProtocol, SockType,
+    self, AddressFamily, MsgFlags, NetlinkAddr, SockFlag, SockProtocol, SockType,
 };
 
 /// Error while communicating with netlink.
@@ -102,19 +104,19 @@ impl Batch {
 
         let max_seq = self.seq - 1;
 
-        let addr = SockAddr::Netlink(NetlinkAddr::new(0, 0));
+        let addr = NetlinkAddr::new(0, 0);
         // while this bind() is not strictly necessary, strace have trouble decoding the messages
         // if we don't
-        socket::bind(sock, &addr).map_err(|_| QueryError::BindFailed)?;
+        socket::bind(sock.as_raw_fd(), &addr).map_err(|_| QueryError::BindFailed)?;
 
         let to_send = self.finalize();
         let mut sent = 0;
         while sent != to_send.len() {
-            sent += socket::send(sock, &to_send[sent..], MsgFlags::empty())
+            sent += socket::send(sock.as_raw_fd(), &to_send[sent..], MsgFlags::empty())
                 .map_err(QueryError::NetlinkSendError)?;
         }
 
-        Ok(socket_close_wrapper(sock, move |sock| {
+        Ok(socket_close_wrapper(sock.as_raw_fd(), move |sock| {
             recv_and_process(sock, Some(max_seq), None, &mut ())
         })?)
     }
