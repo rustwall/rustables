@@ -6,7 +6,7 @@
     CARGO_HOME: $CI_PROJECT_DIR/cargo
   before_script:
     - apt-get -y update
-    - apt-get -y install libclang-19-dev llvm-19-dev
+    - apt-get -y install iproute2 libclang-19-dev llvm-19-dev
 
 lint:clippy:
   <<: *base
@@ -22,19 +22,23 @@ test:alpine:
   variables:
     # Let rust create dynamically linked builds under musl libc - see [this rust
     # issue](https://github.com/rust-lang/compiler-team/issues/422)
-    RUSTFLAGS: "-C target-feature=-crt-static"     
+    RUSTFLAGS: "-C target-feature=-crt-static"
     # Same consideration for doc tests - see [this rust
     # issue](https://github.com/rust-lang/cargo/issues/6650)
-    RUSTDOCFLAGS: "-C target-feature=-crt-static"  
+    RUSTDOCFLAGS: "-C target-feature=-crt-static"
   before_script:
     - apk update
-    - apk add build-base clang-dev llvm-dev
+    - apk add bash iproute2 build-base clang-dev llvm-dev
   script:
     - rustc --version && cargo --version
     - cargo test --workspace --verbose --release
+    - mkdir -p /var/run/netns
+    - bash -x ./ci/test.sh
 
 test:debian-stable:
   <<: *base
   script:
     - rustc --version && cargo --version
     - cargo test --workspace --verbose --release
+    - mkdir -p /var/run/netns
+    - bash -x ./ci/test.sh
