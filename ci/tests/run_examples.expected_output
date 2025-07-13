@@ -1,0 +1,58 @@
+Calling example filter-ethernet
+table inet example-filter-ethernet {
+	chain chain-for-outgoing-packets {
+		type filter hook output priority filter + 3; policy accept;
+		ether daddr 01:02:03:04:05:06 drop
+		counter packets 0 bytes 0 meta random > 2147483647 counter packets 0 bytes 0
+	}
+}
+Example filter-ethernet done
+Calling example atomic-replace
+Found table example-table
+Found chain chain-for-incoming-packets
+Found rule 2
+Editing rule with handle 2
+table inet example-table {
+	chain chain-for-incoming-packets {
+		type filter hook input priority filter; policy drop;
+		tcp dport 1234 log
+	}
+}
+Example atomic-replace done
+Calling example firewall
+table main-table commited
+table inet main-table {
+	chain in-chain {
+		type filter hook input priority filter; policy drop;
+		ct state established accept
+		iifname "lo" accept
+		tcp dport 22 accept log prefix "allow ssh connection:"
+		tcp dport 80 ip saddr 192.168.1.0/24 accept
+		meta l4proto icmp accept
+		meta l4proto igmp drop
+		log group 1
+	}
+
+	chain out-chain {
+		type filter hook output priority filter; policy accept;
+	}
+
+	chain forward-chain {
+		type filter hook forward priority filter; policy accept;
+	}
+}
+Example firewall done
+Calling example add-rules
+table inet example-table {
+	chain chain-for-outgoing-packets {
+		type filter hook output priority filter; policy accept;
+		ip daddr 10.1.0.0/24 counter packets 0 bytes 0 accept
+		icmpv6 type nd-router-solicit icmpv6 code 0 accept
+	}
+
+	chain chain-for-incoming-packets {
+		type filter hook input priority filter; policy accept;
+		iif "lo" accept
+	}
+}
+Example add-rules done

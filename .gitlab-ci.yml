@@ -9,27 +9,30 @@ test:alpine:
     CARGO_HOME: $CI_PROJECT_DIR/cargo
     # Let rust create dynamically linked builds under musl libc - see [this rust
     # issue](https://github.com/rust-lang/compiler-team/issues/422)
-    RUSTFLAGS: "-C target-feature=-crt-static"     
+    RUSTFLAGS: "-C target-feature=-crt-static"
     # Same consideration for doc tests - see [this rust
     # issue](https://github.com/rust-lang/cargo/issues/6650)
-    RUSTDOCFLAGS: "-C target-feature=-crt-static"  
+    RUSTDOCFLAGS: "-C target-feature=-crt-static"
   before_script:
     - apk update
-    - apk add build-base clang-dev llvm-dev
+    - apk add iproute2 build-base clang-dev llvm-dev
   script:
     - mkdir -p target cargo
     - rustc --version && cargo --version
     - cargo test --workspace --verbose --release
+    - mkdir -p /var/run/netns
+    - bash -x ./ci/test.sh
 
 test:debian-stable:
-  # Test on debian stable - uses libnftnl11 1.1.9-1
   image: "rust:slim-bullseye"
   variables:
     CARGO_HOME: $CI_PROJECT_DIR/cargo
   before_script:
     - apt-get -y update
-    - apt-get -y install libclang-13-dev llvm-13-dev
+    - apt-get -y install iproute2 libclang-13-dev llvm-13-dev
   script:
     - mkdir -p target cargo
     - rustc --version && cargo --version
     - cargo test --workspace --verbose --release
+    - mkdir -p /var/run/netns
+    - bash -x ./ci/test.sh
