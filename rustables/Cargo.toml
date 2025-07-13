@@ -1,6 +1,6 @@
 [package]
 name = "rustables"
-version = "0.8.6"
+version = "0.8.7"
 description = "Safe abstraction for nftables manipulation on Linux"
 readme = "../README.md"
 
