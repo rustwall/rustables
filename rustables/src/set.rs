@@ -68,6 +68,7 @@ impl<K: DataType> SetBuilder<K> {
             inner: set,
             list: SetElementList {
                 table: Some(table_name.clone()),
+                family: table.get_family(),
                 set: Some(set_name),
                 elements: Some(SetElementListElements::default()),
             },
@@ -89,6 +90,7 @@ impl<K: DataType> SetBuilder<K> {
 #[derive(Default, Debug, Clone, PartialEq, Eq)]
 #[nfnetlink_struct(nested = true, derive_deserialize = false)]
 pub struct SetElementList {
+    pub family: ProtocolFamily,
     #[field(NFTA_SET_ELEM_LIST_TABLE)]
     pub table: String,
     #[field(NFTA_SET_ELEM_LIST_SET)]
@@ -102,7 +104,11 @@ impl NfNetlinkObject for SetElementList {
     const MSG_TYPE_DEL: u32 = NFT_MSG_DELSETELEM;
 
     fn get_family(&self) -> ProtocolFamily {
-        ProtocolFamily::Unspec
+        self.family
+    }
+
+    fn set_family(&mut self, family: ProtocolFamily) {
+        self.family = family;
     }
 }
 
