@@ -87,22 +87,6 @@ pub(crate) fn recv_and_process<'a, T>(
     }
 }
 
-pub(crate) fn socket_close_wrapper<E>(
-    sock: RawFd,
-    cb: impl FnOnce(RawFd) -> Result<(), E>,
-) -> Result<(), QueryError>
-where
-    QueryError: From<E>,
-{
-    let ret = cb(sock);
-
-    // we don't need to shutdown the socket (in fact, Linux doesn't support that operation;
-    // and return EOPNOTSUPP if we try)
-    nix::unistd::close(sock).map_err(QueryError::CloseFailed)?;
-
-    Ok(ret?)
-}
-
 /// Returns a buffer containing a netlink message which requests a list of all the netfilter
 /// matching objects (e.g. tables, chains, rules, ...).
 /// Supply the type of objects to retrieve (e.g. libc::NFT_MSG_GETTABLE), and a search filter.
@@ -156,16 +140,14 @@ where
     socket::send(sock.as_raw_fd(), &chains_buf, MsgFlags::empty())
         .map_err(QueryError::NetlinkSendError)?;
 
-    socket_close_wrapper(sock.as_raw_fd(), move |sock| {
-        // the kernel should return NLM_F_MULTI objects
-        recv_and_process(
-            sock,
-            None,
-            Some(&|buf: &[u8], working_data: &mut Accumulator| {
-                debug!("Calling Object::deserialize()");
-                cb(Object::deserialize(buf)?.0, working_data)
-            }),
-            working_data,
-        )
-    })
+    // the kernel should return NLM_F_MULTI objects
+    recv_and_process(
+        sock.as_raw_fd(),
+        None,
+        Some(&|buf: &[u8], working_data: &mut Accumulator| {
+            debug!("Calling Object::deserialize()");
+            cb(Object::deserialize(buf)?.0, working_data)
+        }),
+        working_data,
+    )
 }

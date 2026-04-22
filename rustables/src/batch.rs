@@ -92,7 +92,7 @@ impl Batch {
     }
 
     pub fn send(self) -> Result<(), QueryError> {
-        use crate::query::{recv_and_process, socket_close_wrapper};
+        use crate::query::recv_and_process;
 
         let sock = socket::socket(
             AddressFamily::Netlink,
@@ -116,9 +116,12 @@ impl Batch {
                 .map_err(QueryError::NetlinkSendError)?;
         }
 
-        Ok(socket_close_wrapper(sock.as_raw_fd(), move |sock| {
-            recv_and_process(sock, Some(max_seq), None, &mut ())
-        })?)
+        Ok(recv_and_process(
+            sock.as_raw_fd(),
+            Some(max_seq),
+            None,
+            &mut (),
+        )?)
     }
 }
 
