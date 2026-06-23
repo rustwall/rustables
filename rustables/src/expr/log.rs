@@ -25,7 +25,7 @@ impl Log {
         if let Some(prefix) = prefix {
             let prefix = prefix.into();
 
-            if prefix.bytes().count() > 127 {
+            if prefix.len() > 127 {
                 return Err(BuilderError::TooLongLogPrefix);
             }
             res.set_prefix(prefix);

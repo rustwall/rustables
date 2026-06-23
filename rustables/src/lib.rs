@@ -45,19 +45,17 @@
 #[macro_use]
 extern crate log;
 
-use libc;
-
 use rustables_macros::nfnetlink_enum;
 use std::convert::TryFrom;
 
 mod batch;
-pub use batch::{default_batch_page_size, Batch};
+pub use batch::{Batch, default_batch_page_size};
 
 pub mod data_type;
 
 mod table;
-pub use table::list_tables;
 pub use table::Table;
+pub use table::list_tables;
 
 mod chain;
 pub use chain::list_chains_for_table;
@@ -72,13 +70,13 @@ pub(crate) mod parser;
 pub(crate) mod parser_impls;
 
 mod rule;
-pub use rule::list_rules_for_chain;
 pub use rule::Rule;
+pub use rule::list_rules_for_chain;
 
 pub mod expr;
 
 mod rule_methods;
-pub use rule_methods::{iface_index, Protocol};
+pub use rule_methods::{Protocol, iface_index};
 
 pub mod set;
 pub use set::Set;
@@ -106,9 +104,10 @@ pub enum MsgType {
 }
 
 /// Denotes a protocol. Used to specify which protocol a table or set belongs to.
-#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+#[derive(Default, Debug, Copy, Clone, PartialEq, Eq)]
 #[nfnetlink_enum(i32)]
 pub enum ProtocolFamily {
+    #[default]
     Unspec = libc::NFPROTO_UNSPEC,
     /// Inet - Means both IPv4 and IPv6
     Inet = libc::NFPROTO_INET,
@@ -118,10 +117,4 @@ pub enum ProtocolFamily {
     Bridge = libc::NFPROTO_BRIDGE,
     Ipv6 = libc::NFPROTO_IPV6,
     DecNet = libc::NFPROTO_DECNET,
-}
-
-impl Default for ProtocolFamily {
-    fn default() -> Self {
-        ProtocolFamily::Unspec
-    }
 }

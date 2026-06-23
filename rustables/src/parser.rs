@@ -6,13 +6,14 @@ use std::{
 use crate::{
     error::DecodeError,
     nlmsg::{
-        get_operation_from_nlmsghdr_type, get_subsystem_from_nlmsghdr_type, pad_netlink_object,
-        pad_netlink_object_with_variable_size, AttributeDecoder, NetlinkType, NfNetlinkAttribute,
+        AttributeDecoder, NetlinkType, NfNetlinkAttribute, get_operation_from_nlmsghdr_type,
+        get_subsystem_from_nlmsghdr_type, pad_netlink_object,
+        pad_netlink_object_with_variable_size,
     },
     sys::{
-        nfgenmsg, nlattr, nlmsgerr, nlmsghdr, NFNETLINK_V0, NFNL_MSG_BATCH_BEGIN,
-        NFNL_MSG_BATCH_END, NFNL_SUBSYS_NFTABLES, NLA_F_NESTED, NLA_TYPE_MASK, NLMSG_DONE,
-        NLMSG_ERROR, NLMSG_MIN_TYPE, NLMSG_NOOP, NLM_F_DUMP_INTR,
+        NFNETLINK_V0, NFNL_MSG_BATCH_BEGIN, NFNL_MSG_BATCH_END, NFNL_SUBSYS_NFTABLES, NLA_F_NESTED,
+        NLA_TYPE_MASK, NLM_F_DUMP_INTR, NLMSG_DONE, NLMSG_ERROR, NLMSG_MIN_TYPE, NLMSG_NOOP,
+        nfgenmsg, nlattr, nlmsgerr, nlmsghdr,
     },
 };
 
@@ -105,12 +106,12 @@ pub fn parse_nlmsg<'a>(buf: &'a [u8]) -> Result<(nlmsghdr, NlMsg<'a>), DecodeErr
 
 /// Write the attribute, preceded by a `libc::nlattr`
 // rewrite of `mnl_attr_put`
-pub fn write_attribute<'a>(ty: NetlinkType, obj: &impl NfNetlinkAttribute, mut buf: &mut [u8]) {
+pub fn write_attribute(ty: NetlinkType, obj: &impl NfNetlinkAttribute, mut buf: &mut [u8]) {
     let header_len = pad_netlink_object::<nlattr>();
     // copy the header
     let header = nlattr {
         // nla_len contains the header size + the unpadded attribute length
-        nla_len: (header_len + obj.get_size() as usize) as u16,
+        nla_len: (header_len + obj.get_size()) as u16,
         nla_type: if obj.is_nested() {
             ty | NLA_F_NESTED as u16
         } else {

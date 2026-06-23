@@ -4,8 +4,8 @@ use rustables_macros::nfnetlink_struct;
 use crate::error::{DecodeError, QueryError};
 use crate::nlmsg::{NfNetlinkAttribute, NfNetlinkDeserializable, NfNetlinkObject};
 use crate::sys::{
-    NFTA_CHAIN_FLAGS, NFTA_CHAIN_HOOK, NFTA_CHAIN_NAME, NFTA_CHAIN_POLICY, NFTA_CHAIN_TABLE,
-    NFTA_CHAIN_TYPE, NFTA_HOOK_HOOKNUM, NFTA_HOOK_PRIORITY, NFT_MSG_DELCHAIN, NFT_MSG_NEWCHAIN,
+    NFT_MSG_DELCHAIN, NFT_MSG_NEWCHAIN, NFTA_CHAIN_FLAGS, NFTA_CHAIN_HOOK, NFTA_CHAIN_NAME,
+    NFTA_CHAIN_POLICY, NFTA_CHAIN_TABLE, NFTA_CHAIN_TYPE, NFTA_HOOK_HOOKNUM, NFTA_HOOK_PRIORITY,
 };
 use crate::{Batch, ProtocolFamily, Table};
 use std::fmt::Debug;
@@ -159,8 +159,10 @@ impl Chain {
     ///
     /// [`Table`]: struct.Table.html
     pub fn new(table: &Table) -> Chain {
-        let mut chain = Chain::default();
-        chain.family = table.get_family();
+        let mut chain = Chain {
+            family: table.get_family(),
+            ..Chain::default()
+        };
 
         if let Some(table_name) = table.get_name() {
             chain.set_table(table_name);
@@ -206,7 +208,7 @@ pub fn list_chains_for_table(table: &Table) -> Result<Vec<Chain>, QueryError> {
             Ok(())
         },
         None,
-        &mut (&table, &mut result),
+        &mut (table, &mut result),
     )?;
     Ok(result)
 }

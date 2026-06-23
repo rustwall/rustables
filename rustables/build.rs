@@ -1,6 +1,5 @@
 //! This build script leverages `bindgen` to generate rust sys files.
 
-use bindgen;
 use regex::{Captures, Regex};
 use std::borrow::Cow;
 use std::env;
@@ -42,7 +41,7 @@ fn generate_sys() {
     let out_path = PathBuf::from(env::var("OUT_DIR").unwrap()).join("sys.rs");
     File::create(out_path)
         .expect("Error: could not create rust header file.")
-        .write_all(&s.as_bytes())
+        .write_all(s.as_bytes())
         .expect("Error: could not write to the rust header file.");
 }
 

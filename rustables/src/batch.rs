@@ -1,7 +1,5 @@
 use std::os::fd::AsRawFd;
 
-use libc;
-
 use crate::error::QueryError;
 use crate::nlmsg::{NfNetlinkObject, NfNetlinkWriter};
 use crate::sys::{NFNL_SUBSYS_NFTABLES, NLM_F_ACK};
@@ -13,6 +11,7 @@ use nix::sys::socket::{
 
 /// A batch of netfilter messages to be performed in one atomic operation.
 pub struct Batch {
+    #[allow(clippy::box_collection)]
     buf: Box<Vec<u8>>,
     // the 'static lifetime here is a cheat, as the writer can only be used as long
     // as `self.buf` exists. This is why this member must never be exposed directly to
@@ -21,17 +20,18 @@ pub struct Batch {
     seq: u32,
 }
 
+#[allow(clippy::new_without_default)]
 impl Batch {
     /// Creates a new nftnl batch with the [default page size].
     ///
     /// [default page size]: fn.default_batch_page_size.html
     pub fn new() -> Self {
         // TODO: use a pinned Box ?
-        let mut buf = Box::new(Vec::with_capacity(default_batch_page_size() as usize));
+        let size = default_batch_page_size() as usize;
+        let mut buf = Box::new(Vec::with_capacity(size));
         // Safe because we hold onto the buffer for as long as `writer` exists
-        let mut writer = NfNetlinkWriter::new(unsafe {
-            std::mem::transmute(Box::as_mut(&mut buf) as *mut Vec<u8>)
-        });
+        let mut writer =
+            NfNetlinkWriter::new(unsafe { &mut *(Box::as_mut(&mut buf) as *mut Vec<u8>) });
         let seq = 0;
         writer.write_header(
             libc::NFNL_MSG_BATCH_BEGIN as u16,
@@ -109,12 +109,7 @@ impl Batch {
                 .map_err(QueryError::NetlinkSendError)?;
         }
 
-        Ok(recv_and_process(
-            sock.as_raw_fd(),
-            Some(max_seq),
-            None,
-            &mut (),
-        )?)
+        recv_and_process(sock.as_raw_fd(), Some(max_seq), None, &mut ())
     }
 }
 

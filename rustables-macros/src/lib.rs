@@ -13,8 +13,8 @@ use syn::parse::Parser;
 use syn::punctuated::Punctuated;
 use syn::spanned::Spanned;
 use syn::{
-    parse, Attribute, Expr, ExprCast, ExprLit, Ident, Item, ItemEnum, ItemStruct, Lit, Meta, Path,
-    Token, Type, TypePath, Visibility,
+    Attribute, Expr, ExprCast, ExprLit, Ident, Item, ItemEnum, ItemStruct, Lit, Meta, Path, Token,
+    Type, TypePath, Visibility, parse,
 };
 
 use once_cell::sync::OnceCell;
@@ -186,10 +186,7 @@ fn nfnetlink_struct_inner(
     let ast: ItemStruct = parse(item).unwrap();
     let name = ast.ident;
 
-    let args = match parse_struct_args(attrs) {
-        Ok(x) => x,
-        Err(e) => return Err(e),
-    };
+    let args = parse_struct_args(attrs)?;
 
     let state = get_state();
 
@@ -198,55 +195,55 @@ fn nfnetlink_struct_inner(
 
     'out: for field in ast.fields.iter() {
         for attr in field.attrs.iter() {
-            if let Some(id) = attr.path().get_ident() {
-                if id == "field" {
-                    let field_args = match &attr.meta {
-                        Meta::List(l) => l,
-                        _ => {
-                            return Err(attr.span().error("Invalid attributes"));
-                        }
-                    };
-
-                    let field_args = match parse_field_args(field_args.tokens.clone()) {
-                        Ok(x) => x,
-                        Err(_) => {
-                            return Err(attr.span().error("Could not parse the field attributes"));
-                        }
-                    };
-                    if let Some(netlink_type) = field_args.netlink_type.clone() {
-                        // optional fields are not generated when the kernel version you have on
-                        // the system does not support that field
-                        if field_args.optional {
-                            let netlink_type_ident = netlink_type
-                                .segments
-                                .last()
-                                .expect("empty path?")
-                                .ident
-                                .to_string();
-                            if !state.declared_identifiers.contains(&netlink_type_ident) {
-                                // reject the optional identifier
-                                continue 'out;
-                            }
-                        }
-
-                        fields.push(Field {
-                            name: field.ident.as_ref().expect("Should be a names struct"),
-                            ty: &field.ty,
-                            args: field_args,
-                            netlink_type,
-                            vis: &field.vis,
-                            // drop the "field" attribute
-                            attrs: field
-                                .attrs
-                                .iter()
-                                .filter(|x| x.path().get_ident() != attr.path().get_ident())
-                                .collect(),
-                        });
-                    } else {
-                        return Err(attr.span().error("Missing Netlink Type in field"));
+            if let Some(id) = attr.path().get_ident()
+                && id == "field"
+            {
+                let field_args = match &attr.meta {
+                    Meta::List(l) => l,
+                    _ => {
+                        return Err(attr.span().error("Invalid attributes"));
                     }
-                    continue 'out;
+                };
+
+                let field_args = match parse_field_args(field_args.tokens.clone()) {
+                    Ok(x) => x,
+                    Err(_) => {
+                        return Err(attr.span().error("Could not parse the field attributes"));
+                    }
+                };
+                if let Some(netlink_type) = field_args.netlink_type.clone() {
+                    // optional fields are not generated when the kernel version you have on
+                    // the system does not support that field
+                    if field_args.optional {
+                        let netlink_type_ident = netlink_type
+                            .segments
+                            .last()
+                            .expect("empty path?")
+                            .ident
+                            .to_string();
+                        if !state.declared_identifiers.contains(&netlink_type_ident) {
+                            // reject the optional identifier
+                            continue 'out;
+                        }
+                    }
+
+                    fields.push(Field {
+                        name: field.ident.as_ref().expect("Should be a names struct"),
+                        ty: &field.ty,
+                        args: field_args,
+                        netlink_type,
+                        vis: &field.vis,
+                        // drop the "field" attribute
+                        attrs: field
+                            .attrs
+                            .iter()
+                            .filter(|x| x.path().get_ident() != attr.path().get_ident())
+                            .collect(),
+                    });
+                } else {
+                    return Err(attr.span().error("Missing Netlink Type in field"));
                 }
+                continue 'out;
             }
         }
         identical_fields.push(field);
@@ -259,8 +256,7 @@ fn nfnetlink_struct_inner(
         let field_str = field
             .args
             .override_function_name
-            .as_ref()
-            .map(|x| x.as_str())
+            .as_deref()
             .unwrap_or(field_str.as_str());
         let field_type = field.ty;
 
@@ -486,7 +482,7 @@ fn nfnetlink_struct_inner(
 #[proc_macro_attribute]
 pub fn nfnetlink_struct(attrs: TokenStream, item: TokenStream) -> TokenStream {
     match nfnetlink_struct_inner(attrs, item) {
-        Ok(tokens) => tokens.into(),
+        Ok(tokens) => tokens,
         Err(diag) => diag.emit_as_item_tokens().into(),
     }
 }
@@ -584,11 +580,13 @@ fn nfnetlink_enum_inner(attrs: TokenStream, item: TokenStream) -> Result<TokenSt
         let variant_value = &variant.value;
         quote!( x if x == (#variant_value as #repr_type) => Ok(Self::#variant_name), )
     });
+    #[allow(clippy::to_string_in_format_args)]
     let unknown_type_ident = Ident::new(&format!("Unknown{}", name.to_string()), name.span());
     let tryfrom_impl = quote!(
         impl ::core::convert::TryFrom<#repr_type> for #name {
             type Error = crate::error::DecodeError;
 
+            #[allow(clippy::unnecessary_cast)]
             fn try_from(val: #repr_type) -> Result<Self, Self::Error> {
                     match val {
                         #(#match_entries) *
@@ -625,6 +623,7 @@ fn nfnetlink_enum_inner(attrs: TokenStream, item: TokenStream) -> Result<TokenSt
     });
     let res = quote! {
         #[repr(#repr_type)]
+        #[allow(clippy::unnecessary_cast)]
         #(#attrs) * #vis enum #name {
             #(#original_variants),*
         }
@@ -650,7 +649,7 @@ fn nfnetlink_enum_inner(attrs: TokenStream, item: TokenStream) -> Result<TokenSt
 #[proc_macro_attribute]
 pub fn nfnetlink_enum(attrs: TokenStream, item: TokenStream) -> TokenStream {
     match nfnetlink_enum_inner(attrs, item) {
-        Ok(tokens) => tokens.into(),
+        Ok(tokens) => tokens,
         Err(diag) => diag.emit_as_item_tokens().into(),
     }
 }

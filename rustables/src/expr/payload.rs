@@ -88,6 +88,7 @@ impl PayloadType {
     }
 }
 
+#[allow(clippy::len_without_is_empty)]
 pub trait HeaderField {
     fn offset(&self) -> u32;
     fn len(&self) -> u32;
