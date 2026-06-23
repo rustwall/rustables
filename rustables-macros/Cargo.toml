@@ -1,6 +1,6 @@
 [package]
 name = "rustables-macros"
-version = "0.1.2"
+version = "0.1.3"
 description = "Internal macros for generation netlink structures for the rustables project"
 
 authors.workspace = true
