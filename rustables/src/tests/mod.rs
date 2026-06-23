@@ -22,10 +22,6 @@ pub const SET_USERDATA: &'static str = "mocksetdata";
 
 type NetLinkType = u16;
 
-#[derive(Debug, thiserror::Error)]
-#[error("empty data")]
-pub struct EmptyDataError;
-
 #[derive(Debug, Clone, Eq, Ord)]
 pub enum NetlinkExpr {
     Nested(NetLinkType, Vec<NetlinkExpr>),

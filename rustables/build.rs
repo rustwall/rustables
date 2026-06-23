@@ -47,7 +47,7 @@ fn generate_sys() {
 }
 
 /// Recast nft_*_attributes from u32 to u16 in header string `header`.
-fn reformat_units(header: &str) -> Cow<str> {
+fn reformat_units<'a>(header: &'a str) -> Cow<'a, str> {
     let re = Regex::new(r"(pub type nft[a-zA-Z_]*_attributes) = u32;").unwrap();
     re.replace_all(header, |captures: &Captures| {
         format!("{} = u16;", &captures[1])

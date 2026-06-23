@@ -1,12 +1,12 @@
 [workspace]
 members = [ "rustables", "rustables-macros" ]
 default-members = [ "rustables" ]
-resolver = "2"
+resolver = "3"
 
 [workspace.package]
 authors = ["lafleur@boum.org", "Simon Thoby", "Mullvad VPN"]
 keywords = ["nftables", "nft", "firewall", "iptables", "netfilter"]
 categories = ["network-programming", "os::unix-apis", "api-bindings"]
-edition = "2021"
 license = "GPL-3.0-or-later"
+edition = "2024"
 repository = "https://gitlab.com/rustwall/rustables"

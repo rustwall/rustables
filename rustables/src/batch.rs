@@ -2,8 +2,6 @@ use std::os::fd::AsRawFd;
 
 use libc;
 
-use thiserror::Error;
-
 use crate::error::QueryError;
 use crate::nlmsg::{NfNetlinkObject, NfNetlinkWriter};
 use crate::sys::{NFNL_SUBSYS_NFTABLES, NLM_F_ACK};
@@ -12,11 +10,6 @@ use crate::{MsgType, ProtocolFamily};
 use nix::sys::socket::{
     self, AddressFamily, MsgFlags, NetlinkAddr, SockFlag, SockProtocol, SockType,
 };
-
-/// Error while communicating with netlink.
-#[derive(Error, Debug)]
-#[error("Error while communicating with netlink")]
-pub struct NetlinkError(());
 
 /// A batch of netfilter messages to be performed in one atomic operation.
 pub struct Batch {

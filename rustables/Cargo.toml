@@ -18,7 +18,7 @@ bitflags = "2.9"
 thiserror = "2.0"
 log = "0.4"
 libc = "0.2.43"
-nix = { version = "0.30", features = ["socket"] }
+nix = { version = "0.31", features = ["socket"] }
 ipnetwork = { version = "0.21", default-features = false }
 rustables-macros = { version = "0.1.2", path = "../rustables-macros" }
 
