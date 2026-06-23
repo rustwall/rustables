@@ -3,16 +3,17 @@ use std::os::{fd::AsRawFd, unix::prelude::RawFd};
 use nix::sys::socket::{self, AddressFamily, MsgFlags, SockFlag, SockProtocol, SockType};
 
 use crate::{
+    ProtocolFamily,
     error::QueryError,
     nlmsg::{
-        nft_nlmsg_maxsize, pad_netlink_object_with_variable_size, NfNetlinkAttribute,
-        NfNetlinkObject, NfNetlinkWriter,
+        NfNetlinkAttribute, NfNetlinkObject, NfNetlinkWriter, nft_nlmsg_maxsize,
+        pad_netlink_object_with_variable_size,
     },
-    parser::{parse_nlmsg, NlMsg},
+    parser::{NlMsg, parse_nlmsg},
     sys::{NLM_F_DUMP, NLM_F_MULTI},
-    ProtocolFamily,
 };
 
+#[allow(clippy::type_complexity)]
 pub(crate) fn recv_and_process<'a, T>(
     sock: RawFd,
     max_seq: Option<u32>,
@@ -26,19 +27,19 @@ pub(crate) fn recv_and_process<'a, T>(
     loop {
         let nb_recv = socket::recv(sock, &mut msg_buffer[end_pos..], MsgFlags::empty())
             .map_err(QueryError::NetlinkRecvError)?;
-        if nb_recv <= 0 {
+        if nb_recv == 0 {
             return Ok(());
         }
         end_pos += nb_recv;
         loop {
             let buf = &msg_buffer.as_slice()[buf_start..end_pos];
             // exit the loop and try to receive further messages when we consumed all the buffer
-            if buf.len() == 0 {
+            if buf.is_empty() {
                 break;
             }
 
             debug!("Calling parse_nlmsg");
-            let (nlmsghdr, msg) = parse_nlmsg(&buf)?;
+            let (nlmsghdr, msg) = parse_nlmsg(buf)?;
             debug!("Got a valid netlink message: {:?} {:?}", nlmsghdr, msg);
 
             match msg {
@@ -65,10 +66,10 @@ pub(crate) fn recv_and_process<'a, T>(
             }
 
             // retrieve the next message
-            if let Some(max_seq) = max_seq {
-                if nlmsghdr.nlmsg_seq >= max_seq {
-                    return Ok(());
-                }
+            if let Some(max_seq) = max_seq
+                && nlmsghdr.nlmsg_seq >= max_seq
+            {
+                return Ok(());
             }
 
             // netlink messages are 4bytes aligned
@@ -81,7 +82,7 @@ pub(crate) fn recv_and_process<'a, T>(
             if buf_start < end_pos {
                 msg_buffer.copy_within(buf_start..end_pos, 0);
             }
-            end_pos = end_pos - buf_start;
+            end_pos -= buf_start;
             buf_start = 0;
         }
     }

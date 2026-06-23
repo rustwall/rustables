@@ -6,15 +6,15 @@ use std::{
 use rustables_macros::nfnetlink_struct;
 
 use crate::{
+    ProtocolFamily,
     error::DecodeError,
     expr::Verdict,
     nlmsg::{
-        pad_netlink_object, pad_netlink_object_with_variable_size, AttributeDecoder,
-        NfNetlinkAttribute, NfNetlinkDeserializable, NfNetlinkObject,
+        AttributeDecoder, NfNetlinkAttribute, NfNetlinkDeserializable, NfNetlinkObject,
+        pad_netlink_object, pad_netlink_object_with_variable_size,
     },
     parser::{parse_object, write_attribute},
-    sys::{nlattr, NFTA_DATA_VALUE, NFTA_DATA_VERDICT, NFTA_LIST_ELEM, NLA_TYPE_MASK},
-    ProtocolFamily,
+    sys::{NFTA_DATA_VALUE, NFTA_DATA_VERDICT, NFTA_LIST_ELEM, NLA_TYPE_MASK, nlattr},
 };
 
 impl NfNetlinkAttribute for u8 {
@@ -94,14 +94,14 @@ impl NfNetlinkAttribute for String {
     }
 
     fn write_payload(&self, addr: &mut [u8]) {
-        addr[0..self.len()].copy_from_slice(&self.as_bytes());
+        addr[0..self.len()].copy_from_slice(self.as_bytes());
     }
 }
 
 impl NfNetlinkDeserializable for String {
     fn deserialize(mut buf: &[u8]) -> Result<(Self, &[u8]), DecodeError> {
         // ignore the NULL byte terminator, if any
-        if buf.len() > 0 && buf[buf.len() - 1] == 0 {
+        if !buf.is_empty() && buf[buf.len() - 1] == 0 {
             buf = &buf[..buf.len() - 1];
         }
         Ok((String::from_utf8(buf.to_vec())?, &[]))
@@ -114,7 +114,7 @@ impl NfNetlinkAttribute for Vec<u8> {
     }
 
     fn write_payload(&self, addr: &mut [u8]) {
-        addr[0..self.len()].copy_from_slice(&self.as_slice());
+        addr[0..self.len()].copy_from_slice(self.as_slice());
     }
 }
 
@@ -153,11 +153,11 @@ where
         self
     }
 
-    pub fn iter<'a>(&'a self) -> impl Iterator<Item = &'a T> {
+    pub fn iter(&self) -> impl Iterator<Item = &T> {
         self.objs.iter()
     }
 
-    pub fn iter_mut<'a>(&'a mut self) -> impl Iterator<Item = &'a mut T> {
+    pub fn iter_mut(&mut self) -> impl Iterator<Item = &mut T> {
         self.objs.iter_mut()
     }
 }
@@ -206,7 +206,7 @@ where
             let (obj, remaining) = T::deserialize(
                 &buf[pos + pad_netlink_object::<nlattr>()..pos + nlattr.nla_len as usize],
             )?;
-            if remaining.len() != 0 {
+            if !remaining.is_empty() {
                 return Err(DecodeError::InvalidDataSize);
             }
             objs.push(obj);

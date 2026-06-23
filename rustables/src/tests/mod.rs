@@ -1,8 +1,8 @@
 use crate::data_type::DataType;
 use crate::nlmsg::{NfNetlinkObject, NfNetlinkWriter};
-use crate::parser::{parse_nlmsg, NlMsg};
+use crate::parser::{NlMsg, parse_nlmsg};
 use crate::set::{Set, SetBuilder};
-use crate::{sys::*, Chain, MsgType, ProtocolFamily, Rule, Table};
+use crate::{Chain, MsgType, ProtocolFamily, Rule, Table, sys::*};
 
 mod batch;
 mod chain;

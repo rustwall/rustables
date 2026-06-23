@@ -1,12 +1,12 @@
 use std::{fmt::Debug, mem::size_of};
 
 use crate::{
+    MsgType, ProtocolFamily,
     error::DecodeError,
     sys::{
-        nfgenmsg, nlmsghdr, NFNETLINK_V0, NFNL_MSG_BATCH_BEGIN, NFNL_MSG_BATCH_END,
-        NFNL_SUBSYS_NFTABLES, NLMSG_ALIGNTO, NLM_F_ACK, NLM_F_CREATE,
+        NFNETLINK_V0, NFNL_MSG_BATCH_BEGIN, NFNL_MSG_BATCH_END, NFNL_SUBSYS_NFTABLES, NLM_F_ACK,
+        NLM_F_CREATE, NLMSG_ALIGNTO, nfgenmsg, nlmsghdr,
     },
-    MsgType, ProtocolFamily,
 };
 ///
 /// The largest nf_tables netlink message is the set element message, which contains the
@@ -14,7 +14,7 @@ use crate::{
 /// elements. Given that the netlink attribute length (nla_len) is 16 bits, the largest message is
 /// a bit larger than 64 KBytes.
 pub fn nft_nlmsg_maxsize() -> u32 {
-    u32::from(::std::u16::MAX) + unsafe { libc::sysconf(libc::_SC_PAGESIZE) } as u32
+    u32::from(u16::MAX) + unsafe { libc::sysconf(libc::_SC_PAGESIZE) } as u32
 }
 
 #[inline]
@@ -49,16 +49,15 @@ impl<'a> NfNetlinkWriter<'a> {
         NfNetlinkWriter { buf, headers: None }
     }
 
-    pub fn add_data_zeroed<'b>(&'b mut self, size: usize) -> &'b mut [u8] {
+    pub fn add_data_zeroed(&mut self, size: usize) -> &mut [u8] {
         let padded_size = pad_netlink_object_with_variable_size(size);
         let start = self.buf.len();
         self.buf.resize(start + padded_size, 0);
 
         // if we are *inside* an object begin written, extend the netlink object size
         if let Some((msghdr_idx, _nfgenmsg_idx)) = self.headers {
-            let hdr: &mut nlmsghdr = unsafe {
-                std::mem::transmute(self.buf[msghdr_idx..].as_mut_ptr() as *mut nlmsghdr)
-            };
+            let hdr: &mut nlmsghdr =
+                unsafe { &mut *(self.buf[msghdr_idx..].as_mut_ptr() as *mut nlmsghdr) };
             hdr.nlmsg_len += padded_size as u32;
         }
 
@@ -83,8 +82,7 @@ impl<'a> NfNetlinkWriter<'a> {
 
         // serialize the nlmsghdr
         let nlmsghdr_buf = self.add_data_zeroed(nlmsghdr_len);
-        let hdr: &mut nlmsghdr =
-            unsafe { std::mem::transmute(nlmsghdr_buf.as_mut_ptr() as *mut nlmsghdr) };
+        let hdr: &mut nlmsghdr = unsafe { &mut *(nlmsghdr_buf.as_mut_ptr() as *mut nlmsghdr) };
         hdr.nlmsg_len = (nlmsghdr_len + nfgenmsg_len) as u32;
         hdr.nlmsg_type = msg_type;
         // batch messages are not specific to the nftables subsystem
@@ -96,8 +94,7 @@ impl<'a> NfNetlinkWriter<'a> {
 
         // serialize the nfgenmsg
         let nfgenmsg_buf = self.add_data_zeroed(nfgenmsg_len);
-        let nfgenmsg: &mut nfgenmsg =
-            unsafe { std::mem::transmute(nfgenmsg_buf.as_mut_ptr() as *mut nfgenmsg) };
+        let nfgenmsg: &mut nfgenmsg = unsafe { &mut *(nfgenmsg_buf.as_mut_ptr() as *mut nfgenmsg) };
         nfgenmsg.nfgen_family = family as u8;
         nfgenmsg.version = NFNETLINK_V0 as u8;
         nfgenmsg.res_id = ressource_id.unwrap_or(0);
