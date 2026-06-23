@@ -1,38 +1,15 @@
 {
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixpkgs-unstable";
-    nixpkgs-mozilla = { url = "github:mozilla/nixpkgs-mozilla"; flake = false; };
     crate2nix = { url = "github:kolloch/crate2nix/master"; flake = false; };
-    utils.url = "github:numtide/flake-utils";
+    flake-parts.url = "github:hercules-ci/flake-parts";
   };
 
-  outputs = { self, nixpkgs, nixpkgs-mozilla, crate2nix, utils } @ inputs :
-    let
-    rustOverlay = (final: prev:
-      let
-        rustChannel = prev.rustChannelOf {
-          channel = "1.66.0";
-          sha256 = "S7epLlflwt0d1GZP44u5Xosgf6dRrmr8xxC+Ml2Pq7c=";
-        };
-        rust = rustChannel.rust.override {
-          targets = [ "x86_64-unknown-linux-musl" ];
-        };
-      in
-      {
-        rustc = rust;
-        cargo = rust;
-      }
-    );
-    rustDevOverlay = final: prev: {
-      # rust-analyzer needs core source
-      rustc-with-src = prev.rustc.override { extensions = [ "rust-src" ]; };
-    };
-    in
-    utils.lib.eachDefaultSystem (system:
+  outputs = { self, nixpkgs,  crate2nix, flake-parts } @ inputs : flake-parts.lib.mkFlake { inherit inputs; } {
+    perSystem = { config, self', inputs', pkgs, system, ... }:
       let
       pkgs = import nixpkgs {
         inherit system;
-        overlays = [ (import "${nixpkgs-mozilla}/rust-overlay.nix") rustOverlay rustDevOverlay ];
       };
       nativeBuildInputs = with pkgs; [ pkg-config ];
       buildInputs = with pkgs; [ clang linuxHeaders ];
@@ -56,14 +33,16 @@
         nativeBuildInputs = nativeBuildInputs;
         buildInputs = buildInputs;
         LIBCLANG_PATH = LIBCLANG_PATH;
-        packages = with pkgs; [ rust-analyzer rustc-with-src ];
+        packages = with pkgs; [ rust-analyzer cargo rustc ];
       };
       in {
-        defaultPackage = cargoNix.workspaceMembers.rustables.build;
         devShells.default = devShell;
         packages = {
+          default = cargoNix.workspaceMembers.rustables.build;
           rustables = cargoNix.workspaceMembers.rustables.build;
         };
-      }
-    );
+      };
+
+      systems = [ "x86_64-linux" "aarch64-linux" ];
+  };
 }
